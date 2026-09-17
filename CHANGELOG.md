@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0 – 2026-09-17
+- API level 5: moderation for moderators and managers – `Pending` (records with pending changes), `Accept`,
+  `Reject` (one record, or the whole tree without `xref`); `Info.trees[]` gains `canModerate` and `pending`.
+- `Info.maxUpload`: the largest upload this server accepts (PHP `upload_max_filesize` / `post_max_size`), so that
+  clients can shrink photos to fit.
+
 ## 0.5.0 – 2026-09-17
 - API level 4: `Anniversaries` (births, marriages and deaths of the next days), `DeleteRecord` (hands over to
   webtrees' own delete logic, including removing links and empty families), `Unlink` (remove a person from a

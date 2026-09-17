@@ -88,12 +88,13 @@ Image addresses (`thumb`, `file`) are webtrees' signed media routes and need the
 
 | Action | Tree | Parameters | Content |
 | - | - | - | - |
-| `Info` | – | – | versions, `api` level, user, visible trees with role, rights and number of individuals, CSRF token |
+| `Info` | – | – | versions, `api` level, user, visible trees with role, rights, number of individuals and (for moderators) of records with pending changes, `maxUpload` in bytes, CSRF token |
 | `Individuals` | yes | `q`, `page` | people by sort name, 50 per page, `nextPage` |
 | `Individual` | yes | `xref`, `relativeTo?` | person, facts (`known: false` marks vendor tags webtrees has no definition for), parent and spouse families, media, `relationship` to `relativeTo` (default: the user's own record), e.g. “great-grandmother” |
 | `Family` | yes | `xref` | family with facts, children, media |
 | `Pedigree` | yes | `xref`, `generations` (1–6) | ancestors with ahnentafel number `n`; `hasParents` tells a client that the branch can be expanded further |
 | `Descendants` | yes | `xref`, `generations` (1–4) | descendants as a tree |
+| `Pending` | yes | – | moderators only: records with pending changes (`new`, `changed`, `deleted`), who changed them and when |
 | `Anniversaries` | yes | `days` (1–60, default 14) | births, marriages and deaths whose anniversary falls into the next days, with the number of years |
 | `MediaList` | yes | `page` | all media objects of the tree, newest first, 60 per page, each with up to three linked people |
 | `Tags` | yes | `type` (`INDI`/`FAM`) | labelled list of facts a client can offer for adding |
@@ -108,6 +109,7 @@ Header `X-CSRF-TOKEN: <csrf from Info>`, JSON body. Answer: `{"ok":true,"xref":"
 | `Fact` | `xref` | `{factId?, tag, value?, date?, place?, note?}` or `{factId?, gedcom}` – with `factId` the fact is changed; sub-lines that are not mentioned (sources, media, coordinates) are kept |
 | `DeleteFact` | `xref` | `{factId}` |
 | `AddIndividual` | – | `{relation: child\|spouse\|father\|mother\|none, relativeTo?, family?, given, surname, sex, birthDate?, birthPlace?, dead?, deathDate?, deathPlace?, marriageDate?, marriagePlace?}` |
+| `Accept`, `Reject` | `xref?` | – moderators only: accept or reject the pending changes of one record, or of the whole tree when `xref` is omitted; answer `{ok, pending}` |
 | `DeleteRecord` | `xref` | – deletes the record with webtrees' own logic: links from other records are removed, a family left with one member and no events is deleted too |
 | `Unlink` | – | `{family, individual}` – removes the person from the family; both records stay |
 | `Media` | `xref` | `multipart/form-data`: `file`, `title?`, `note?`, `folder?` – uploads and links |

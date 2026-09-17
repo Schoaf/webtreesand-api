@@ -50,6 +50,7 @@ use function count;
 use function explode;
 use function html_entity_decode;
 use function in_array;
+use function ini_get;
 use function is_array;
 use function is_string;
 use function json_decode;
@@ -94,10 +95,11 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     use ModuleCustomTrait;
 
     public const string MODULE_NAME = '_webtreesand-api_';
+    // 5: Info.maxUpload, Moderation (Pending, Accept, Reject), trees[].canModerate/pending
     // 4: Anniversaries, DeleteRecord, Unlink; Ortskoordinaten auch aus der webtrees-Ortstabelle
     // 3: ?lang=<Sprache> fuer Beschriftungen und Datumsangaben der Antwort
     // 2: MediaList, Individual.relationship (relativeTo), Info.trees[].individuals, Pedigree.ancestors[].hasParents
-    public const int    API_VERSION = 4;
+    public const int    API_VERSION = 5;
 
     private const string DESCRIPTION = 'JSON-Schnittstelle für die native Android-App „webtreesAnd“ – liest und schreibt mit den Rechten des angemeldeten Benutzers.';
 
@@ -164,7 +166,7 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
 
     public function customModuleVersion(): string
     {
-        return '0.5.0';
+        return '0.6.0';
     }
 
     public function customModuleLatestVersionUrl(): string
@@ -244,6 +246,9 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
                 'role'        => $this->role($tree, $user),
                 'canEdit'     => Auth::isEditor($tree, $user),
                 'canUpload'   => Auth::canUploadMedia($tree, $user),
+                'canModerate' => Auth::isModerator($tree, $user),
+                // Anzahl der Datensaetze mit ausstehenden Aenderungen - nur fuer die, die sie freigeben duerfen
+                'pending'     => Auth::isModerator($tree, $user) ? Registry::container()->get(PendingChangesService::class)->pendingXrefs($tree)->count() : 0,
                 'autoAccept'  => $user->getPreference(UserInterface::PREF_AUTO_ACCEPT_EDITS) === '1',
                 'userXref'    => $tree->getUserPreference($user, UserInterface::PREF_TREE_ACCOUNT_XREF),
                 'defaultXref' => $tree->getUserPreference($user, UserInterface::PREF_TREE_DEFAULT_XREF),
@@ -257,6 +262,9 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
             'baseUrl'     => Validator::attributes($request)->string('base_url'),
             'rewriteUrls' => Validator::attributes($request)->boolean('rewrite_urls', false),
             'csrf'        => Session::getCsrfToken(),
+            // Groesste Datei, die dieser Server beim Hochladen annimmt (PHP: upload_max_filesize / post_max_size).
+            // Clients verkleinern Fotos so weit, dass sie hineinpassen.
+            'maxUpload'   => $this->maxUploadBytes(),
             'user'        => [
                 'loggedIn' => Auth::check(),
                 'userName' => $user->userName(),
@@ -554,6 +562,94 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
             'generations' => $generations,
             'tree'        => $this->descendantsJson($root, $generations),
         ]);
+    }
+
+    // ───────────────────────────── Moderation ─────────────────────────────
+
+    /**
+     * Datensaetze mit ausstehenden Aenderungen - nur fuer Moderatoren und Verwalter.
+     */
+    public function getPendingAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree = Validator::attributes($request)->tree();
+
+        if (!Auth::isModerator($tree)) {
+            return $this->error(403, 'not-moderator');
+        }
+
+        $rows = DB::table('change')
+            ->join('user', 'user.user_id', '=', 'change.user_id')
+            ->where('gedcom_id', '=', $tree->id())
+            ->where('status', '=', 'pending')
+            ->orderBy('change_id')
+            ->select(['xref', 'real_name', 'change_time', 'old_gedcom', 'new_gedcom'])
+            ->get()
+            ->groupBy('xref');
+
+        $data = [];
+
+        foreach ($rows as $xref => $changes) {
+            $record = Registry::gedcomRecordFactory()->make((string) $xref, $tree);
+
+            if ($record === null) {
+                continue;
+            }
+
+            $data[] = [
+                'xref'    => (string) $xref,
+                'type'    => $record->tag(),
+                'name'    => $this->plain($record->fullName()),
+                // neu: vor der ersten Aenderung gab es den Datensatz nicht; geloescht: nach der letzten gibt es ihn nicht mehr
+                'kind'    => $changes->first()->old_gedcom === '' ? 'new' : ($changes->last()->new_gedcom === '' ? 'deleted' : 'changed'),
+                'changes' => $changes->count(),
+                'users'   => $changes->pluck('real_name')->unique()->values()->all(),
+                'time'    => (string) $changes->last()->change_time,
+            ];
+        }
+
+        return response(['data' => $data]);
+    }
+
+    /**
+     * Ausstehende Aenderungen annehmen: ?xref=I123 - oder ohne xref alle des Baums.
+     */
+    public function postAcceptAction(ServerRequestInterface $request): ResponseInterface
+    {
+        return $this->moderate($request, true);
+    }
+
+    /**
+     * Ausstehende Aenderungen verwerfen: ?xref=I123 - oder ohne xref alle des Baums.
+     */
+    public function postRejectAction(ServerRequestInterface $request): ResponseInterface
+    {
+        return $this->moderate($request, false);
+    }
+
+    private function moderate(ServerRequestInterface $request, bool $accept): ResponseInterface
+    {
+        $tree = Validator::attributes($request)->tree();
+
+        if (!Auth::isModerator($tree)) {
+            return $this->error(403, 'not-moderator');
+        }
+
+        $service = Registry::container()->get(PendingChangesService::class);
+        $xref    = Validator::queryParams($request)->string('xref', '');
+
+        if ($xref === '') {
+            $accept ? $service->acceptTree($tree, 10000) : $service->rejectTree($tree);
+        } else {
+            $record = Registry::gedcomRecordFactory()->make($xref, $tree);
+
+            if ($record === null) {
+                return $this->error(404, 'not-found');
+            }
+
+            $accept ? $service->acceptRecord($record) : $service->rejectRecord($record);
+        }
+
+        return response(['ok' => true, 'pending' => $service->pendingXrefs($tree)->count()]);
     }
 
     // ───────────────────────────── Schreiben ─────────────────────────────
@@ -1298,6 +1394,30 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     }
 
     // ───────────────────────────── Schreib-Hilfen ─────────────────────────────
+
+    /**
+     * Kleinster der PHP-Werte upload_max_filesize und post_max_size in Bytes ("2M" -> 2097152). 0 = unbekannt.
+     */
+    private function maxUploadBytes(): int
+    {
+        $limits = [];
+
+        foreach (['upload_max_filesize', 'post_max_size'] as $setting) {
+            $value = trim((string) ini_get($setting));
+
+            if ($value === '' || $value === '0' || $value === '-1') {
+                continue;
+            }
+
+            $number = (float) $value;
+            $unit   = strtoupper(substr($value, -1));
+            $factor = ['K' => 1024, 'M' => 1024 ** 2, 'G' => 1024 ** 3][$unit] ?? 1;
+
+            $limits[] = (int) ($number * $factor);
+        }
+
+        return $limits === [] ? 0 : min($limits);
+    }
 
     /**
      * Neues Ereignis bauen oder ein bestehendes gezielt aendern.
