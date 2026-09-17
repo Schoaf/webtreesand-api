@@ -125,7 +125,7 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     private const string SUPPORT_URL        = 'https://github.com/thobgg/webtreesand-api';
 
     // Hier liegt die App zum Herunterladen (Seite "App" in webtrees).
-    private const string APP_DOWNLOAD_URL   = 'https://github.com/thobgg/webtreesand/releases/latest';
+    private const string APP_DOWNLOAD_URL   = 'https://github.com/thobgg/webtreesAnd/releases/latest';
 
     // Koppeln: der Einmal-Code gilt so viele Sekunden und genau einmal. Gespeichert wird nur sein Hash.
     private const int    PAIR_SECONDS       = 600;
