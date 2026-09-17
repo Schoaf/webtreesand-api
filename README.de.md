@@ -2,7 +2,7 @@
 
 [English](README.md) · **Deutsch**
 
-Ein Modul für [webtrees](https://webtrees.net/), das der nativen Android-App *webtreesAnd* eine
+Ein Modul für [webtrees](https://webtrees.net/), das der nativen Android-App **[webtreesAnd](https://github.com/thobgg/WebtreesAnd)** eine
 JSON-Schnittstelle gibt – zum Lesen **und** Schreiben. Es ist ein gewöhnliches Zusatzmodul: Es liegt
 in `modules_v4/`, der webtrees-Kern wird nicht verändert.
 
