@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0 – 2026-09-17
+- New page **“App”** (menu entry for signed-in users): install the app (link + QR code) and **connect it to your
+  account with one tap** – no address, no password to type. The QR codes are generated on the server (TCPDF /
+  tc-lib-barcode, both shipped with webtrees).
+- API level 6: `Pair` redeems the one-time code (valid for 10 minutes, once, only over https; only its hash is stored).
+
 ## 0.6.0 – 2026-09-17
 - API level 5: moderation for moderators and managers – `Pending` (records with pending changes), `Accept`,
   `Reject` (one record, or the whole tree without `xref`); `Info.trees[]` gains `canModerate` and `pending`.

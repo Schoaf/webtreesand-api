@@ -1,0 +1,26 @@
+<?php
+
+declare(strict_types=1);
+
+use Fisharebest\Webtrees\I18N;
+
+/**
+ * @var string $title
+ * @var string $deep_link
+ * @var string $download_url
+ */
+
+?>
+
+<h2 class="wt-page-title"><?= e($title) ?></h2>
+
+<p><a class="btn btn-primary btn-lg" id="webtreesand-open" href="<?= e($deep_link) ?>"><?= I18N::translate('webtreesAnd öffnen') ?></a></p>
+
+<p class="text-muted"><?= I18N::translate('Nichts passiert? Dann ist die App noch nicht installiert oder der Code ist abgelaufen – öffne in webtrees die Seite „App“ erneut.') ?></p>
+
+<p><?= I18N::translate('Die App ist noch nicht installiert?') ?> <a href="<?= e($download_url) ?>"><?= I18N::translate('App herunterladen') ?></a></p>
+
+<script>
+  // Gleich weiterreichen - der Knopf bleibt fuer Browser, die das nicht von selbst duerfen.
+  window.setTimeout(function () { window.location.href = document.getElementById('webtreesand-open').href; }, 400);
+</script>

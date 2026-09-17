@@ -22,6 +22,17 @@ a JSON interface – for reading **and** writing. It is an ordinary custom modul
 To update, replace the folder. To uninstall, delete it. The module creates no database tables and
 stores no settings.
 
+## For family members: the “App” page
+
+Signed-in users find a menu entry **App**. The page offers two steps:
+
+1. **Install the app** – a button and a QR code leading to the download.
+2. **Connect your account** – one tap (or a QR code when sitting at a computer) hands the server address, the tree and
+   a one-time code to the app. There is nothing to type, and the password never reaches the phone.
+
+The one-time code is shown only to the signed-in user, is valid for 10 minutes and exactly once, and is only offered over
+https. Only its hash is stored. Managers can move or hide the menu entry under *Control panel → Modules → Menus*.
+
 ## Privacy and permissions
 
 The module has no login and no permission system of its own – on purpose:

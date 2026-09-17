@@ -1,0 +1,58 @@
+<?php
+
+declare(strict_types=1);
+
+use Fisharebest\Webtrees\I18N;
+
+/**
+ * @var string $title
+ * @var bool   $logged_in
+ * @var bool   $secure
+ * @var string $download_url
+ * @var string $download_qr
+ * @var string $connect_url
+ * @var string $connect_qr
+ * @var string $deep_link
+ * @var int    $minutes
+ */
+
+?>
+
+<h2 class="wt-page-title"><?= e($title) ?></h2>
+
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h3 class="card-title h5"><?= I18N::translate('1. App installieren') ?></h3>
+                <p><?= I18N::translate('Lade die App auf dein Android-Handy oder -Tablet. Beim ersten Mal fragt Android, ob dein Browser Apps installieren darf – das einmal erlauben.') ?></p>
+                <p><a class="btn btn-primary" href="<?= e($download_url) ?>"><?= I18N::translate('App herunterladen') ?></a></p>
+                <?php if ($download_qr !== '') : ?>
+                    <p class="text-muted small mb-1"><?= I18N::translate('Am Computer? Dann diesen Code mit der Handy-Kamera scannen:') ?></p>
+                    <div style="max-width: 11rem; background: #fff; padding: .5rem;"><?= $download_qr ?></div>
+                <?php endif ?>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h3 class="card-title h5"><?= I18N::translate('2. Mit deinem Konto verbinden') ?></h3>
+                <?php if (!$logged_in) : ?>
+                    <p><?= I18N::translate('Melde dich an, um die App mit deinem Konto zu verbinden.') ?></p>
+                <?php elseif (!$secure) : ?>
+                    <p><?= I18N::translate('Das Verbinden per Code ist nur über eine verschlüsselte Verbindung (https) möglich. In der App kannst du dich stattdessen mit Adresse, Benutzername und Passwort anmelden.') ?></p>
+                <?php else : ?>
+                    <p><?= I18N::translate('Ein Tipp genügt – Adresse und Passwort musst du in der App nicht eintippen.') ?></p>
+                    <p><a class="btn btn-primary" href="<?= e($deep_link) ?>"><?= I18N::translate('Jetzt verbinden') ?></a></p>
+                    <?php if ($connect_qr !== '') : ?>
+                        <p class="text-muted small mb-1"><?= I18N::translate('Am Computer? Dann diesen Code mit der Handy-Kamera scannen:') ?></p>
+                        <div style="max-width: 13rem; background: #fff; padding: .5rem;"><?= $connect_qr ?></div>
+                    <?php endif ?>
+                    <p class="text-muted small mt-2"><?= I18N::translate('Der Code gilt %s Minuten und nur ein einziges Mal. Er verbindet die App mit deinem Konto – gib ihn nicht weiter.', I18N::number($minutes)) ?></p>
+                <?php endif ?>
+            </div>
+        </div>
+    </div>
+</div>

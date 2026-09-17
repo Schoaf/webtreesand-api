@@ -22,6 +22,18 @@ in `modules_v4/`, der webtrees-Kern wird nicht verändert.
 Aktualisieren: Ordner ersetzen. Entfernen: Ordner löschen. Das Modul legt keine Datenbanktabellen an
 und speichert keine Einstellungen.
 
+## Für Familienmitglieder: die Seite „App"
+
+Angemeldete Benutzer finden im Menü den Eintrag **App**. Die Seite bietet zwei Schritte:
+
+1. **App installieren** – ein Knopf und ein QR-Code führen zum Download.
+2. **Mit dem eigenen Konto verbinden** – ein Tipp (oder ein QR-Code, wenn man am Computer sitzt) übergibt der App
+   Serveradresse, Stammbaum und einen Einmal-Code. Es gibt nichts einzutippen, und das Passwort erreicht das Handy nie.
+
+Der Einmal-Code wird nur dem angemeldeten Benutzer gezeigt, gilt 10 Minuten und genau einmal und wird nur über https
+angeboten. Gespeichert wird nur sein Hash. Verwalter können den Menüpunkt unter *Verwaltung → Module → Menüs*
+verschieben oder abschalten.
+
 ## Datenschutz und Rechte
 
 Das Modul hat bewusst keine eigene Anmeldung und keine eigene Rechteverwaltung:

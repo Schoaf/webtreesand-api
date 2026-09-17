@@ -14,12 +14,17 @@ use Fisharebest\Webtrees\FlashMessages;
 use Fisharebest\Webtrees\Family;
 use Fisharebest\Webtrees\Gedcom;
 use Fisharebest\Webtrees\GedcomRecord;
+use Fisharebest\Webtrees\Http\RequestHandlers\ModuleAction;
 use Fisharebest\Webtrees\I18N;
 use Fisharebest\Webtrees\Individual;
+use Fisharebest\Webtrees\Log;
 use Fisharebest\Webtrees\Media;
+use Fisharebest\Webtrees\Menu;
 use Fisharebest\Webtrees\Module\AbstractModule;
 use Fisharebest\Webtrees\Module\ModuleCustomInterface;
 use Fisharebest\Webtrees\Module\ModuleCustomTrait;
+use Fisharebest\Webtrees\Module\ModuleMenuInterface;
+use Fisharebest\Webtrees\Module\ModuleMenuTrait;
 use Fisharebest\Webtrees\Note;
 use Fisharebest\Webtrees\Place;
 use Fisharebest\Webtrees\PlaceLocation;
@@ -31,9 +36,11 @@ use Fisharebest\Webtrees\Services\PendingChangesService;
 use Fisharebest\Webtrees\Services\RelationshipService;
 use Fisharebest\Webtrees\Services\SearchService;
 use Fisharebest\Webtrees\Services\TreeService;
+use Fisharebest\Webtrees\Services\UserService;
 use Fisharebest\Webtrees\Session;
 use Fisharebest\Webtrees\Tree;
 use Fisharebest\Webtrees\Validator;
+use Fisharebest\Webtrees\View;
 use Fisharebest\Webtrees\Webtrees;
 use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Collection;
@@ -45,27 +52,34 @@ use Throwable;
 
 use function array_key_exists;
 use function array_map;
+use function bin2hex;
 use function class_exists;
 use function count;
 use function explode;
+use function hash;
+use function http_build_query;
 use function html_entity_decode;
 use function in_array;
 use function ini_get;
+use function intdiv;
 use function is_array;
 use function is_string;
 use function json_decode;
 use function max;
 use function min;
+use function parse_url;
 use function preg_match;
 use function preg_match_all;
 use function preg_quote;
 use function preg_replace;
 use function preg_split;
+use function random_bytes;
 use function response;
 use function str_replace;
 use function str_starts_with;
 use function strtolower;
 use function strtoupper;
+use function time;
 use function strip_tags;
 use function strlen;
 use function strrpos;
@@ -75,6 +89,7 @@ use function usort;
 
 use const ENT_HTML5;
 use const ENT_QUOTES;
+use const PHP_URL_HOST;
 use const PREG_SPLIT_NO_EMPTY;
 
 /**
@@ -90,22 +105,31 @@ use const PREG_SPLIT_NO_EMPTY;
  * (canShow(), facts(), children() ...). Damit gelten dieselben Regeln wie
  * auf den HTML-Seiten, fuer Gaeste wie fuer angemeldete Benutzer.
  */
-class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterface, MiddlewareInterface
+class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterface, ModuleMenuInterface, MiddlewareInterface
 {
     use ModuleCustomTrait;
+    use ModuleMenuTrait;
 
     public const string MODULE_NAME = '_webtreesand-api_';
+    // 6: Koppeln per Einmal-Code (Seiten App/Connect, Aktion Pair)
     // 5: Info.maxUpload, Moderation (Pending, Accept, Reject), trees[].canModerate/pending
     // 4: Anniversaries, DeleteRecord, Unlink; Ortskoordinaten auch aus der webtrees-Ortstabelle
     // 3: ?lang=<Sprache> fuer Beschriftungen und Datumsangaben der Antwort
     // 2: MediaList, Individual.relationship (relativeTo), Info.trees[].individuals, Pedigree.ancestors[].hasParents
-    public const int    API_VERSION = 5;
+    public const int    API_VERSION = 6;
 
     private const string DESCRIPTION = 'JSON-Schnittstelle für die native Android-App „webtreesAnd“ – liest und schreibt mit den Rechten des angemeldeten Benutzers.';
 
     // Eine Textdatei mit der neuesten Versionsnummer; webtrees zeigt damit in der Modulverwaltung einen Update-Hinweis.
     private const string LATEST_VERSION_URL = 'https://raw.githubusercontent.com/thobgg/webtreesand-api/main/latest-version.txt';
     private const string SUPPORT_URL        = 'https://github.com/thobgg/webtreesand-api';
+
+    // Hier liegt die App zum Herunterladen (Seite "App" in webtrees).
+    private const string APP_DOWNLOAD_URL   = 'https://github.com/thobgg/webtreesand/releases/latest';
+
+    // Koppeln: der Einmal-Code gilt so viele Sekunden und genau einmal. Gespeichert wird nur sein Hash.
+    private const int    PAIR_SECONDS       = 600;
+    private const string PAIR_SETTING       = 'webtreesand_pair';
 
     private const int PAGE_SIZE           = 50;
     private const int MEDIA_PAGE_SIZE     = 60;
@@ -155,6 +179,22 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
         }
 
         return [
+            'App'                                        => 'App',
+            'webtreesAnd – die App für diesen Stammbaum' => 'webtreesAnd – the app for this family tree',
+            'Mit webtreesAnd verbinden'                  => 'Connect with webtreesAnd',
+            '1. App installieren'                        => '1. Install the app',
+            'Lade die App auf dein Android-Handy oder -Tablet. Beim ersten Mal fragt Android, ob dein Browser Apps installieren darf – das einmal erlauben.' => 'Download the app to your Android phone or tablet. The first time, Android asks whether your browser may install apps – allow it once.',
+            'App herunterladen'                          => 'Download the app',
+            'Am Computer? Dann diesen Code mit der Handy-Kamera scannen:' => 'On a computer? Scan this code with your phone camera:',
+            '2. Mit deinem Konto verbinden'              => '2. Connect your account',
+            'Ein Tipp genügt – Adresse und Passwort musst du in der App nicht eintippen.' => 'One tap is enough – there is no need to type the address or a password into the app.',
+            'Jetzt verbinden'                            => 'Connect now',
+            'Der Code gilt %s Minuten und nur ein einziges Mal. Er verbindet die App mit deinem Konto – gib ihn nicht weiter.' => 'The code is valid for %s minutes and only once. It connects the app to your account – do not share it.',
+            'Melde dich an, um die App mit deinem Konto zu verbinden.' => 'Sign in to connect the app to your account.',
+            'Das Verbinden per Code ist nur über eine verschlüsselte Verbindung (https) möglich. In der App kannst du dich stattdessen mit Adresse, Benutzername und Passwort anmelden.' => 'Connecting with a code needs an encrypted connection (https). In the app you can sign in with address, user name and password instead.',
+            'webtreesAnd öffnen'                         => 'Open webtreesAnd',
+            'Die App ist noch nicht installiert?'        => 'The app is not installed yet?',
+            'Nichts passiert? Dann ist die App noch nicht installiert oder der Code ist abgelaufen – öffne in webtrees die Seite „App“ erneut.' => 'Nothing happens? Then the app is not installed yet or the code has expired – open the “App” page in webtrees again.',
             self::DESCRIPTION => 'JSON interface for the native Android app “webtreesAnd” – reads and writes with the rights of the signed-in user.',
         ];
     }
@@ -166,7 +206,7 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
 
     public function customModuleVersion(): string
     {
-        return '0.6.0';
+        return '0.7.0';
     }
 
     public function customModuleLatestVersionUrl(): string
@@ -177,6 +217,183 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     public function customModuleSupportUrl(): string
     {
         return self::SUPPORT_URL;
+    }
+
+    public function boot(): void
+    {
+        View::registerNamespace($this->name(), $this->resourcesFolder() . 'views/');
+    }
+
+    public function resourcesFolder(): string
+    {
+        return __DIR__ . '/resources/';
+    }
+
+    // ───────────────────────────── Menue und Seiten fuer Menschen ─────────────────────────────
+
+    public function defaultMenuOrder(): int
+    {
+        return 99;
+    }
+
+    /**
+     * Menuepunkt "App" - nur fuer angemeldete Benutzer, denn dort wird das eigene Konto mit der App verbunden.
+     * (Verwalter koennen ihn unter Verwaltung -> Module -> Menues verschieben oder abschalten.)
+     */
+    public function getMenu(Tree $tree): Menu|null
+    {
+        if (!Auth::check()) {
+            return null;
+        }
+
+        return new Menu(I18N::translate('App'), $this->actionUrl('App', $tree->name()), 'menu-webtreesand', ['rel' => 'nofollow']);
+    }
+
+    /**
+     * Seite "App": App installieren (Link + QR) und das eigene Konto mit der App verbinden (Knopf + QR).
+     */
+    public function getAppAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree     = $request->getAttribute('tree');
+        $tree     = $tree instanceof Tree ? $tree : null;
+        $user     = Auth::user();
+        $base_url = Validator::attributes($request)->string('base_url');
+        $host     = (string) parse_url($base_url, PHP_URL_HOST);
+
+        // Der Einmal-Code ist so gut wie ein Passwort - er darf nur verschluesselt reisen (Ausnahme: der eigene Rechner).
+        $secure = str_starts_with($base_url, 'https://') || in_array($host, ['localhost', '127.0.0.1', '::1'], true);
+
+        $connect_url = '';
+        $deep_link   = '';
+
+        if (Auth::check() && $secure) {
+            $code = bin2hex(random_bytes(24));
+            $user->setPreference(self::PAIR_SETTING, hash('sha256', $code) . '|' . (time() + self::PAIR_SECONDS) . '|' . ($tree?->name() ?? ''));
+
+            $params      = ['code' => $code, 'tree' => $tree?->name() ?? '', 'user' => $user->userName()];
+            $connect_url = $this->actionUrl('Connect', null, $params);
+            $deep_link   = $this->deepLink($base_url, $params);
+        }
+
+        return $this->viewResponse($this->name() . '::app', [
+            'title'        => I18N::translate('webtreesAnd – die App für diesen Stammbaum'),
+            'tree'         => $tree,
+            'logged_in'    => Auth::check(),
+            'secure'       => $secure,
+            'download_url' => self::APP_DOWNLOAD_URL,
+            'download_qr'  => $this->qrSvg(self::APP_DOWNLOAD_URL),
+            'connect_url'  => $connect_url,
+            'connect_qr'   => $connect_url === '' ? '' : $this->qrSvg($connect_url),
+            'deep_link'    => $deep_link,
+            'minutes'      => intdiv(self::PAIR_SECONDS, 60),
+        ]);
+    }
+
+    /**
+     * Zielseite des Verbinden-QR-Codes: wird im Browser des HANDYS geoeffnet (dort ist man meist nicht angemeldet)
+     * und reicht nur an die App weiter. Kameras oeffnen verlaesslich nur https-Adressen, keine App-Links - daher dieser Umweg.
+     */
+    public function getConnectAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $params = [
+            'code' => Validator::queryParams($request)->string('code', ''),
+            'tree' => Validator::queryParams($request)->string('tree', ''),
+            'user' => Validator::queryParams($request)->string('user', ''),
+        ];
+
+        return $this->viewResponse($this->name() . '::connect', [
+            'title'        => I18N::translate('Mit webtreesAnd verbinden'),
+            'tree'         => null,
+            'deep_link'    => $this->deepLink(Validator::attributes($request)->string('base_url'), $params),
+            'download_url' => self::APP_DOWNLOAD_URL,
+        ]);
+    }
+
+    /**
+     * Die App loest den Einmal-Code ein: Rumpf { code }. Danach ist ihre Sitzung als dieser Benutzer angemeldet -
+     * ohne dass ein Passwort das Geraet je gesehen hat.
+     */
+    public function postPairAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $code = $this->str($this->body($request), 'code');
+
+        if (preg_match('/^[0-9a-f]{48}$/', $code) !== 1) {
+            return $this->error(400, 'pair-invalid');
+        }
+
+        $row = DB::table('user_setting')
+            ->where('setting_name', '=', self::PAIR_SETTING)
+            ->where('setting_value', 'LIKE', hash('sha256', $code) . '|%')
+            ->first();
+
+        if ($row === null) {
+            return $this->error(403, 'pair-invalid');
+        }
+
+        $user = Registry::container()->get(UserService::class)->find((int) $row->user_id);
+
+        [, $expires, $tree_name] = explode('|', (string) $row->setting_value) + ['', '0', ''];
+
+        // Einmal heisst einmal: der Code ist ab jetzt verbraucht - auch wenn er abgelaufen ist.
+        $user?->setPreference(self::PAIR_SETTING, '');
+
+        if ($user === null || (int) $expires < time()) {
+            return $this->error(403, 'pair-expired');
+        }
+
+        if ($user->getPreference(UserInterface::PREF_IS_EMAIL_VERIFIED) !== '1' || $user->getPreference(UserInterface::PREF_IS_ACCOUNT_APPROVED) !== '1') {
+            return $this->error(403, 'pair-invalid');
+        }
+
+        Auth::login($user);
+        Log::addAuthenticationLog('Login (webtreesAnd, QR-Code): ' . $user->userName() . '/' . $user->realName());
+        $user->setPreference(UserInterface::PREF_TIMESTAMP_ACTIVE, (string) time());
+
+        return response(['ok' => true, 'tree' => $tree_name, 'user' => $user->userName()]);
+    }
+
+    /**
+     * @param array<string,string> $params
+     */
+    private function deepLink(string $base_url, array $params): string
+    {
+        return 'webtreesand://connect?' . http_build_query(['url' => $base_url] + $params);
+    }
+
+    /**
+     * Adresse einer Aktion dieses Moduls. Die Route heisst in webtrees 2.2 "module", ab 2.3 traegt sie den Klassennamen.
+     *
+     * @param array<string,string> $params
+     */
+    private function actionUrl(string $action, string|null $tree, array $params = []): string
+    {
+        $all = ['module' => $this->name(), 'action' => $action, 'tree' => $tree] + $params;
+
+        try {
+            return route('module', $all);
+        } catch (Throwable) {
+            return route(ModuleAction::class, $all);
+        }
+    }
+
+    /**
+     * QR-Code als SVG. webtrees 2.2 bringt dafuer TCPDF mit, 2.3 tc-lib-barcode; fehlt beides, bleibt es beim Link.
+     */
+    private function qrSvg(string $data): string
+    {
+        try {
+            if (class_exists('TCPDF2DBarcode')) {
+                return (new \TCPDF2DBarcode($data, 'QRCODE,M'))->getBarcodeSVGcode(5, 5, 'black');
+            }
+
+            if (class_exists('Com\\Tecnick\\Barcode\\Barcode')) {
+                return (new \Com\Tecnick\Barcode\Barcode())->getBarcodeObj('QRCODE,M', $data, -5, -5, 'black')->getSvgCode();
+            }
+        } catch (Throwable) {
+            // dann eben ohne Bild
+        }
+
+        return '';
     }
 
     /**
