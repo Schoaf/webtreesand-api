@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1 – 2026-09-17
+- API level 3: `?lang=de` (or `en-GB`, …) selects the language of labels, dates and relationship names for
+  that one answer. The session and the user's language preference are left alone. Without it, a client
+  running in German showed “Occupation” when the webtrees account was set to English.
+
 ## 0.4.0 – 2026-09-17
 - API level 2: `MediaList` (photo overview), `Individual.relationship` (“great-grandmother” relative to
   `relativeTo` or the user's own record), `Pedigree.ancestors[].hasParents` (expand a branch upwards),

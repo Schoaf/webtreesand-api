@@ -60,6 +60,9 @@ without it the answer is a 302 to the home page or a 404. With “pretty URLs”
 redirects to `<base>/module/_webtreesand-api_/<Action>/<tree>?…`; the `index.php?route=` form always
 works, so a client need not know the setting.
 
+Every action accepts `lang=<language tag>` (`de`, `de-DE`, `en-GB`, …): labels, dates and relationship names
+of that answer come in this language if it is active in webtrees – otherwise in the language of the session.
+
 Rules for clients:
 
 - A response counts only if it is `Content-Type: application/json`. Anything else means “sign in”

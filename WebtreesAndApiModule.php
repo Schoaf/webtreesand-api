@@ -11,6 +11,7 @@ use Fisharebest\Webtrees\DB;
 use Fisharebest\Webtrees\Elements\UnknownElement;
 use Fisharebest\Webtrees\Fact;
 use Fisharebest\Webtrees\Family;
+use Fisharebest\Webtrees\Gedcom;
 use Fisharebest\Webtrees\GedcomRecord;
 use Fisharebest\Webtrees\I18N;
 use Fisharebest\Webtrees\Individual;
@@ -35,9 +36,12 @@ use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Collection;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Server\MiddlewareInterface;
+use Psr\Http\Server\RequestHandlerInterface;
 use Throwable;
 
 use function array_key_exists;
+use function array_map;
 use function class_exists;
 use function count;
 use function explode;
@@ -56,6 +60,7 @@ use function preg_split;
 use function response;
 use function str_replace;
 use function str_starts_with;
+use function strtolower;
 use function strtoupper;
 use function strip_tags;
 use function strlen;
@@ -80,13 +85,14 @@ use const PREG_SPLIT_NO_EMPTY;
  * (canShow(), facts(), children() ...). Damit gelten dieselben Regeln wie
  * auf den HTML-Seiten, fuer Gaeste wie fuer angemeldete Benutzer.
  */
-class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterface
+class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterface, MiddlewareInterface
 {
     use ModuleCustomTrait;
 
     public const string MODULE_NAME = '_webtreesand-api_';
+    // 3: ?lang=<Sprache> fuer Beschriftungen und Datumsangaben der Antwort
     // 2: MediaList, Individual.relationship (relativeTo), Info.trees[].individuals, Pedigree.ancestors[].hasParents
-    public const int    API_VERSION = 2;
+    public const int    API_VERSION = 3;
 
     private const string DESCRIPTION = 'JSON-Schnittstelle für die native Android-App „webtreesAnd“ – liest und schreibt mit den Rechten des angemeldeten Benutzers.';
 
@@ -153,7 +159,7 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
 
     public function customModuleVersion(): string
     {
-        return '0.4.0';
+        return '0.4.1';
     }
 
     public function customModuleLatestVersionUrl(): string
@@ -164,6 +170,54 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     public function customModuleSupportUrl(): string
     {
         return self::SUPPORT_URL;
+    }
+
+    /**
+     * Sprache der Antwort: ?lang=de (oder en-GB ...). Die App laeuft in der Sprache des Geraets, das
+     * webtrees-Konto vielleicht in einer anderen - ohne diesen Schritt kaemen Beschriftungen ("Occupation")
+     * und Datumsangaben in der Kontosprache und mischten sich mit den Texten der App.
+     * Umgeschaltet wird nur fuer diese eine Antwort; Sitzung und Kontoeinstellung bleiben unberuehrt.
+     */
+    public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+    {
+        if ($request->getAttribute('module') === self::MODULE_NAME) {
+            $wanted = Validator::queryParams($request)->string('lang', '');
+            $tag    = $wanted === '' ? null : $this->matchLanguage($wanted);
+
+            if ($tag !== null && $tag !== I18N::languageTag()) {
+                I18N::init($tag);
+                // webtrees hat die Bezeichnungen der GEDCOM-Tags ("Geburt", "Beruf" ...) schon in der alten
+                // Sprache aufgebaut - nach dem Wechsel neu registrieren, sonst bleiben sie stehen.
+                (new Gedcom())->registerTags(Registry::elementFactory(), true);
+            }
+        }
+
+        return $handler->handle($request);
+    }
+
+    /**
+     * "de-DE" -> "de", "en" -> "en-US" ... - nur Sprachen, die in dieser webtrees-Installation aktiv sind.
+     */
+    private function matchLanguage(string $wanted): string|null
+    {
+        $tags    = array_map(static fn ($locale): string => $locale->languageTag(), I18N::activeLocales());
+        $wanted  = strtolower($wanted);
+        $primary = explode('-', $wanted)[0];
+
+        foreach ([
+            static fn (string $tag): bool => strtolower($tag) === $wanted,
+            static fn (string $tag): bool => strtolower($tag) === $primary,
+            static fn (string $tag): bool => $tag === 'en-US' && $primary === 'en',
+            static fn (string $tag): bool => str_starts_with(strtolower($tag), $primary . '-'),
+        ] as $rule) {
+            foreach ($tags as $tag) {
+                if ($rule($tag)) {
+                    return $tag;
+                }
+            }
+        }
+
+        return null;
     }
 
     // ───────────────────────────── Endpunkte ─────────────────────────────
