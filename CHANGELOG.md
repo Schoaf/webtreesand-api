@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0 – 2026-09-17
+- **Settings page** in the control panel (wrench icon in the module list): install the app (QR code), choose **which
+  family trees the app may reach**, jump to the “App” page of a tree to connect, and see the status (https, upload limit).
+- Trees that are not enabled cannot be reached through this module at all – for any user, whatever their rights in
+  webtrees (error `tree-disabled`, API level 7); the “App” menu entry is hidden there too. Default: all trees, as before.
+
 ## 0.7.0 – 2026-09-17
 - New page **“App”** (menu entry for signed-in users): install the app (link + QR code) and **connect it to your
   account with one tap** – no address, no password to type. The QR codes are generated on the server (TCPDF /

@@ -22,6 +22,13 @@ a JSON interface – for reading **and** writing. It is an ordinary custom modul
 To update, replace the folder. To uninstall, delete it. The module creates no database tables and
 stores no settings.
 
+## Settings
+
+*Control panel → Modules → All modules → WebtreesAnd API → wrench icon* (tip: type “API” into the search box of the
+module list). The page offers the app download, the status (https, upload limit) and the most important switch:
+**which family trees the app may reach.** Trees that are not ticked cannot be reached through this module at all –
+for any user, whatever their rights in webtrees. Default: all trees.
+
 ## For family members: the “App” page
 
 Signed-in users find a menu entry **App**. The page offers two steps:

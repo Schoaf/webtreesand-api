@@ -1,0 +1,73 @@
+<?php
+
+declare(strict_types=1);
+
+use Fisharebest\Webtrees\Http\RequestHandlers\ControlPanel;
+use Fisharebest\Webtrees\Http\RequestHandlers\ModulesAllPage;
+use Fisharebest\Webtrees\I18N;
+
+/**
+ * @var string                                                                  $title
+ * @var array<int,array{name:string,title:string,enabled:bool,app_url:string}> $trees
+ * @var string                                                                  $save_url
+ * @var string                                                                  $download_url
+ * @var string                                                                  $download_qr
+ * @var string                                                                  $version
+ * @var int                                                                     $api
+ * @var bool                                                                    $https
+ * @var int                                                                     $max_upload
+ */
+
+?>
+
+<?= view('components/breadcrumbs', ['links' => [route(ControlPanel::class) => I18N::translate('Control panel'), route(ModulesAllPage::class) => I18N::translate('Modules'), $title]]) ?>
+
+<h1><?= e($title) ?></h1>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-5">
+        <h2 class="h4"><?= I18N::translate('App installieren') ?></h2>
+        <p><?= I18N::translate('Die App webtreesAnd gibt es bei GitHub. Familienmitglieder finden diesen Schritt auch auf der Seite „App“ im Menü des Stammbaums.') ?></p>
+        <p><a class="btn btn-secondary" href="<?= e($download_url) ?>"><?= I18N::translate('App herunterladen') ?></a></p>
+        <?php if ($download_qr !== '') : ?>
+            <div style="max-width: 10rem; background: #fff; padding: .5rem;"><?= $download_qr ?></div>
+        <?php endif ?>
+    </div>
+
+    <div class="col-lg-7">
+        <h2 class="h4"><?= I18N::translate('Stammbäume für die App') ?></h2>
+        <p><?= I18N::translate('Nur angekreuzte Stammbäume sind über die App erreichbar – für alle Benutzer, unabhängig von ihren Rechten in webtrees. In nicht freigegebenen Bäumen erscheint auch der Menüpunkt „App“ nicht.') ?></p>
+
+        <form method="post" action="<?= e($save_url) ?>">
+            <?= csrf_field() ?>
+            <table class="table table-sm align-middle">
+                <?php foreach ($trees as $tree) : ?>
+                    <tr>
+                        <td>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="trees[]" value="<?= e($tree['name']) ?>" id="tree-<?= e($tree['name']) ?>" <?= $tree['enabled'] ? 'checked' : '' ?>>
+                                <label class="form-check-label" for="tree-<?= e($tree['name']) ?>"><?= e($tree['title']) ?></label>
+                            </div>
+                        </td>
+                        <td class="text-end">
+                            <?php if ($tree['enabled']) : ?>
+                                <a class="btn btn-sm btn-primary" href="<?= e($tree['app_url']) ?>" title="<?= I18N::translate('Seite „App“ öffnen') ?>"><?= I18N::translate('Verbinden') ?></a>
+                            <?php endif ?>
+                        </td>
+                    </tr>
+                <?php endforeach ?>
+            </table>
+            <button type="submit" class="btn btn-primary"><?= I18N::translate('Speichern') ?></button>
+        </form>
+    </div>
+</div>
+
+<h2 class="h4"><?= I18N::translate('Status') ?></h2>
+<table class="table table-sm" style="max-width: 50rem;">
+    <tr><th scope="row"><?= I18N::translate('Modulversion') ?></th><td><?= e($version) ?> (API <?= $api ?>)</td></tr>
+    <tr>
+        <th scope="row"><?= I18N::translate('Verschlüsselte Verbindung (https)') ?></th>
+        <td><?= $https ? I18N::translate('ja – Verbinden per Tipp/QR-Code ist möglich') : I18N::translate('nein – Verbinden per Tipp/QR-Code ist abgeschaltet; die Anmeldung mit Adresse, Benutzername und Passwort funktioniert') ?></td>
+    </tr>
+    <tr><th scope="row"><?= I18N::translate('Größte Datei beim Hochladen') ?></th><td><?= $max_upload > 0 ? I18N::number(round($max_upload / 1048576, 1), 1) . ' MB' : I18N::translate('unbekannt') ?></td></tr>
+</table>

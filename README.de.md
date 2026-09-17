@@ -22,6 +22,13 @@ in `modules_v4/`, der webtrees-Kern wird nicht verändert.
 Aktualisieren: Ordner ersetzen. Entfernen: Ordner löschen. Das Modul legt keine Datenbanktabellen an
 und speichert keine Einstellungen.
 
+## Einstellungen
+
+*Verwaltung → Module → Alle Module → WebtreesAnd API → Schraubenschlüssel* (Tipp: im Suchfeld der Modulliste „API"
+eintippen). Die Seite bietet den App-Download, den Status (https, Upload-Limit) und den wichtigsten Schalter:
+**welche Stammbäume die App erreichen darf.** Nicht angekreuzte Bäume sind über dieses Modul gar nicht erreichbar –
+für keinen Benutzer, unabhängig von seinen Rechten in webtrees. Standard: alle Bäume.
+
 ## Für Familienmitglieder: die Seite „App"
 
 Angemeldete Benutzer finden im Menü den Eintrag **App**. Die Seite bietet zwei Schritte:

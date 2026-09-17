@@ -21,6 +21,7 @@ use Fisharebest\Webtrees\Log;
 use Fisharebest\Webtrees\Media;
 use Fisharebest\Webtrees\Menu;
 use Fisharebest\Webtrees\Module\AbstractModule;
+use Fisharebest\Webtrees\Module\ModuleConfigInterface;
 use Fisharebest\Webtrees\Module\ModuleCustomInterface;
 use Fisharebest\Webtrees\Module\ModuleCustomTrait;
 use Fisharebest\Webtrees\Module\ModuleMenuInterface;
@@ -58,6 +59,7 @@ use function count;
 use function explode;
 use function hash;
 use function http_build_query;
+use function implode;
 use function html_entity_decode;
 use function in_array;
 use function ini_get;
@@ -74,7 +76,9 @@ use function preg_quote;
 use function preg_replace;
 use function preg_split;
 use function random_bytes;
+use function redirect;
 use function response;
+use function str_contains;
 use function str_replace;
 use function str_starts_with;
 use function strtolower;
@@ -105,18 +109,19 @@ use const PREG_SPLIT_NO_EMPTY;
  * (canShow(), facts(), children() ...). Damit gelten dieselben Regeln wie
  * auf den HTML-Seiten, fuer Gaeste wie fuer angemeldete Benutzer.
  */
-class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterface, ModuleMenuInterface, MiddlewareInterface
+class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterface, ModuleConfigInterface, ModuleMenuInterface, MiddlewareInterface
 {
     use ModuleCustomTrait;
     use ModuleMenuTrait;
 
     public const string MODULE_NAME = '_webtreesand-api_';
+    // 7: Verwalter legt fest, welche Stammbaeume die App erreicht (Fehler tree-disabled)
     // 6: Koppeln per Einmal-Code (Seiten App/Connect, Aktion Pair)
     // 5: Info.maxUpload, Moderation (Pending, Accept, Reject), trees[].canModerate/pending
     // 4: Anniversaries, DeleteRecord, Unlink; Ortskoordinaten auch aus der webtrees-Ortstabelle
     // 3: ?lang=<Sprache> fuer Beschriftungen und Datumsangaben der Antwort
     // 2: MediaList, Individual.relationship (relativeTo), Info.trees[].individuals, Pedigree.ancestors[].hasParents
-    public const int    API_VERSION = 6;
+    public const int    API_VERSION = 7;
 
     private const string DESCRIPTION = 'JSON-Schnittstelle für die native Android-App „webtreesAnd“ – liest und schreibt mit den Rechten des angemeldeten Benutzers.';
 
@@ -130,6 +135,9 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     // Koppeln: der Einmal-Code gilt so viele Sekunden und genau einmal. Gespeichert wird nur sein Hash.
     private const int    PAIR_SECONDS       = 600;
     private const string PAIR_SETTING       = 'webtreesand_pair';
+
+    // Moduleinstellung: fuer welche Stammbaeume die App freigegeben ist. '*' (Standard) = alle, sonst Namen mit Komma.
+    private const string TREES_SETTING      = 'app_trees';
 
     private const int PAGE_SIZE           = 50;
     private const int MEDIA_PAGE_SIZE     = 60;
@@ -180,6 +188,21 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
 
         return [
             'App'                                        => 'App',
+            'Die Einstellungen wurden gespeichert.'      => 'The settings have been saved.',
+            'App installieren'                           => 'Install the app',
+            'Die App webtreesAnd gibt es bei GitHub. Familienmitglieder finden diesen Schritt auch auf der Seite „App“ im Menü des Stammbaums.' => 'The webtreesAnd app is available on GitHub. Family members also find this step on the “App” page in the tree menu.',
+            'Stammbäume für die App' => 'Family trees for the app',
+            'Nur angekreuzte Stammbäume sind über die App erreichbar – für alle Benutzer, unabhängig von ihren Rechten in webtrees. In nicht freigegebenen Bäumen erscheint auch der Menüpunkt „App“ nicht.' => 'Only ticked trees can be reached by the app – for all users, whatever their rights in webtrees. In trees that are not ticked, the “App” menu entry does not appear either.',
+            'Verbinden'                                  => 'Connect',
+            'Seite „App“ öffnen'                         => 'Open the “App” page',
+            'Speichern'                                  => 'Save',
+            'Status'                                     => 'Status',
+            'Modulversion'                               => 'Module version',
+            'Verschlüsselte Verbindung (https)'          => 'Encrypted connection (https)',
+            'ja – Verbinden per Tipp/QR-Code ist möglich' => 'yes – connecting by tap/QR code is possible',
+            'nein – Verbinden per Tipp/QR-Code ist abgeschaltet; die Anmeldung mit Adresse, Benutzername und Passwort funktioniert' => 'no – connecting by tap/QR code is switched off; signing in with address, user name and password works',
+            'Größte Datei beim Hochladen'                => 'Largest upload',
+            'unbekannt'                                  => 'unknown',
             'webtreesAnd – die App für diesen Stammbaum' => 'webtreesAnd – the app for this family tree',
             'Mit webtreesAnd verbinden'                  => 'Connect with webtreesAnd',
             '1. App installieren'                        => '1. Install the app',
@@ -206,7 +229,7 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
 
     public function customModuleVersion(): string
     {
-        return '0.7.0';
+        return '0.8.0';
     }
 
     public function customModuleLatestVersionUrl(): string
@@ -242,11 +265,79 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
      */
     public function getMenu(Tree $tree): Menu|null
     {
-        if (!Auth::check()) {
+        if (!Auth::check() || !$this->treeEnabled($tree)) {
             return null;
         }
 
         return new Menu(I18N::translate('App'), $this->actionUrl('App', $tree->name()), 'menu-webtreesand', ['rel' => 'nofollow']);
+    }
+
+    // ───────────────────────────── Einstellungen (Verwaltung) ─────────────────────────────
+
+    /**
+     * Schraubenschluessel in der Modulliste. (Aktionen mit "Admin" im Namen laesst webtrees nur Administratoren ausfuehren.)
+     */
+    public function getConfigLink(): string
+    {
+        return $this->actionUrl('Admin', null);
+    }
+
+    public function getAdminAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $this->layout = 'layouts/administration';
+
+        $base_url = Validator::attributes($request)->string('base_url');
+        $trees    = [];
+
+        foreach (Registry::container()->get(TreeService::class)->all() as $tree) {
+            $trees[] = [
+                'name'    => $tree->name(),
+                'title'   => $tree->title(),
+                'enabled' => $this->treeEnabled($tree),
+                'app_url' => $this->actionUrl('App', $tree->name()),
+            ];
+        }
+
+        return $this->viewResponse($this->name() . '::admin', [
+            'title'        => $this->title(),
+            'trees'        => $trees,
+            'save_url'     => $this->actionUrl('Admin', null),
+            'download_url' => self::APP_DOWNLOAD_URL,
+            'download_qr'  => $this->qrSvg(self::APP_DOWNLOAD_URL),
+            'version'      => $this->customModuleVersion(),
+            'api'          => self::API_VERSION,
+            'https'        => str_starts_with($base_url, 'https://'),
+            'max_upload'   => $this->maxUploadBytes(),
+        ]);
+    }
+
+    public function postAdminAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $chosen = Validator::parsedBody($request)->array('trees');
+        $names  = [];
+
+        foreach (Registry::container()->get(TreeService::class)->all() as $tree) {
+            if (in_array($tree->name(), $chosen, true)) {
+                $names[] = $tree->name();
+            }
+        }
+
+        // '-' statt leer: eine leere Einstellung hiesse "nie gespeichert" und damit "alle".
+        $this->setPreference(self::TREES_SETTING, $names === [] ? '-' : implode(',', $names));
+
+        FlashMessages::addMessage(I18N::translate('Die Einstellungen wurden gespeichert.'), 'success');
+
+        return redirect($this->actionUrl('Admin', null));
+    }
+
+    /**
+     * Darf die App diesen Stammbaum erreichen? Ohne gespeicherte Einstellung: ja (wie vor Version 0.8).
+     */
+    private function treeEnabled(Tree $tree): bool
+    {
+        $setting = $this->getPreference(self::TREES_SETTING, '*');
+
+        return $setting === '*' || in_array($tree->name(), explode(',', $setting), true);
     }
 
     /**
@@ -405,6 +496,14 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
         if ($request->getAttribute('module') === self::MODULE_NAME) {
+            // Vom Verwalter nicht fuer die App freigegebene Baeume sind ueber dieses Modul gar nicht erreichbar -
+            // unabhaengig davon, was das Konto in webtrees selbst duerfte.
+            $tree = $request->getAttribute('tree');
+
+            if ($tree instanceof Tree && !$this->treeEnabled($tree) && !str_contains((string) $request->getAttribute('action'), 'Admin')) {
+                return $this->error(403, 'tree-disabled');
+            }
+
             $wanted = Validator::queryParams($request)->string('lang', '');
             $tag    = $wanted === '' ? null : $this->matchLanguage($wanted);
 
@@ -456,6 +555,10 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
         $trees = [];
 
         foreach (Registry::container()->get(TreeService::class)->all() as $tree) {
+            if (!$this->treeEnabled($tree)) {
+                continue;
+            }
+
             $trees[] = [
                 'name'        => $tree->name(),
                 'title'       => $tree->title(),
