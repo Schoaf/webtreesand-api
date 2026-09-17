@@ -8,6 +8,7 @@ use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\Contracts\UserInterface;
 use Fisharebest\Webtrees\Date;
 use Fisharebest\Webtrees\DB;
+use Fisharebest\Webtrees\Elements\UnknownElement;
 use Fisharebest\Webtrees\Fact;
 use Fisharebest\Webtrees\Family;
 use Fisharebest\Webtrees\GedcomRecord;
@@ -20,8 +21,10 @@ use Fisharebest\Webtrees\Module\ModuleCustomTrait;
 use Fisharebest\Webtrees\Note;
 use Fisharebest\Webtrees\Place;
 use Fisharebest\Webtrees\Registry;
+use Fisharebest\Webtrees\Services\LinkedRecordService;
 use Fisharebest\Webtrees\Services\MediaFileService;
 use Fisharebest\Webtrees\Services\PendingChangesService;
+use Fisharebest\Webtrees\Services\RelationshipService;
 use Fisharebest\Webtrees\Services\SearchService;
 use Fisharebest\Webtrees\Services\TreeService;
 use Fisharebest\Webtrees\Session;
@@ -82,7 +85,8 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     use ModuleCustomTrait;
 
     public const string MODULE_NAME = '_webtreesand-api_';
-    public const int    API_VERSION = 1;
+    // 2: MediaList, Individual.relationship (relativeTo), Info.trees[].individuals, Pedigree.ancestors[].hasParents
+    public const int    API_VERSION = 2;
 
     private const string DESCRIPTION = 'JSON-Schnittstelle für die native Android-App „webtrees Native“ – liest und schreibt mit den Rechten des angemeldeten Benutzers.';
 
@@ -91,11 +95,13 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     private const string SUPPORT_URL        = 'https://github.com/thobgg/webtreesand-api';
 
     private const int PAGE_SIZE           = 50;
+    private const int MEDIA_PAGE_SIZE     = 60;
     private const int MAX_PEDIGREE_GEN    = 6;
     private const int MAX_DESCENDANTS_GEN = 4;
 
     // Diese Tags sind Verknuepfungen oder Verwaltungsdaten, keine Ereignisse.
-    private const array SKIP_FACTS = ['FAMS', 'FAMC', 'OBJE', 'CHAN', '_UID', '_TODO', '_WT_OBJE_SORT'];
+    // (HUSB/WIFE/CHIL sind die Verknuepfungen innerhalb eines Familien-Datensatzes.)
+    private const array SKIP_FACTS = ['FAMS', 'FAMC', 'HUSB', 'WIFE', 'CHIL', 'OBJE', 'CHAN', '_UID', '_TODO', '_WT_OBJE_SORT'];
 
     // Verknuepfungen laufen ueber AddIndividual/Media - nicht ueber den Fakten-Editor.
     private const array LINK_TAGS = ['FAMS', 'FAMC', 'HUSB', 'WIFE', 'CHIL', 'OBJE', 'CHAN'];
@@ -147,7 +153,7 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
 
     public function customModuleVersion(): string
     {
-        return '0.3.0';
+        return '0.4.0';
     }
 
     public function customModuleLatestVersionUrl(): string
@@ -175,6 +181,7 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
             $trees[] = [
                 'name'        => $tree->name(),
                 'title'       => $tree->title(),
+                'individuals' => DB::table('individuals')->where('i_file', '=', $tree->id())->count(),
                 'role'        => $this->role($tree, $user),
                 'canEdit'     => Auth::isEditor($tree, $user),
                 'canUpload'   => Auth::canUploadMedia($tree, $user),
@@ -287,11 +294,58 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
 
         return response([
             'person'         => $this->personSummary($individual),
+            'relationship'   => $this->relationship($request, $individual),
             'canEdit'        => $individual->canEdit(),
             'facts'          => $this->factsJson($individual),
             'parentFamilies' => $parents,
             'spouseFamilies' => $spouses,
             'media'          => $this->mediaJson($individual),
+        ]);
+    }
+
+    /**
+     * Alle Medienobjekte des Baums, neueste zuerst: ?page=<n>
+     * Je Eintrag die verknuepften Personen (hoechstens drei Namen) - fuer die Fotouebersicht der App.
+     */
+    public function getMediaListAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree   = Validator::attributes($request)->tree();
+        $page   = max(1, Validator::queryParams($request)->integer('page', 1));
+        $offset = ($page - 1) * self::MEDIA_PAGE_SIZE;
+
+        // Eine Zeile mehr holen, um zu wissen, ob es eine weitere Seite gibt.
+        $rows = DB::table('media')
+            ->where('m_file', '=', $tree->id())
+            ->orderByDesc('m_id')
+            ->offset($offset)
+            ->limit(self::MEDIA_PAGE_SIZE + 1)
+            ->get()
+            ->map(Registry::mediaFactory()->mapper($tree));
+
+        $linked = Registry::container()->get(LinkedRecordService::class);
+        $data   = [];
+
+        foreach ($rows->slice(0, self::MEDIA_PAGE_SIZE) as $media) {
+            if (!$media instanceof Media || !$media->canShow()) {
+                continue;
+            }
+
+            $people = [];
+            foreach ($linked->linkedIndividuals($media)->take(3) as $individual) {
+                if ($individual->canShowName()) {
+                    $people[] = ['xref' => $individual->xref(), 'name' => $this->plain($individual->fullName())];
+                }
+            }
+
+            foreach ($this->mediaFilesJson($media) as $file) {
+                $data[] = $file + ['people' => $people];
+            }
+        }
+
+        return response([
+            'page'     => $page,
+            'nextPage' => $rows->count() > self::MEDIA_PAGE_SIZE ? $page + 1 : null,
+            'data'     => $data,
         ]);
     }
 
@@ -352,9 +406,15 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
             }
         }
 
+        // hasParents: damit die App an der obersten Reihe ein "weiter nach oben"-Symbol zeigen kann.
         $data = [];
         foreach ($ancestors as $n => $individual) {
-            $data[] = ['n' => $n, 'person' => $this->personSummary($individual)];
+            $family = $individual->canShow() ? $individual->childFamilies()->first() : null;
+            $data[] = [
+                'n'          => $n,
+                'person'     => $this->personSummary($individual),
+                'hasParents' => $family instanceof Family && ($family->husband() instanceof Individual || $family->wife() instanceof Individual),
+            ];
         }
 
         return response([
@@ -817,6 +877,9 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
                 'id'      => $fact->id(),
                 'tag'     => $tag,
                 'label'   => $this->factLabel($fact),
+                // false: ein Tag, das webtrees nicht kennt (Hersteller-Tag ohne Definition, z. B. Ahnenblatts _INET).
+                // Clients koennen solche Zeilen ausblenden; in webtrees selbst bleiben sie unveraendert erhalten.
+                'known'   => !Registry::elementFactory()->make($fact->tag()) instanceof UnknownElement,
                 'value'   => $this->factValue($fact, $record->tree()),
                 'type'    => $fact->attribute('TYPE'),
                 'date'    => $this->dateJson($fact->date()),
@@ -843,29 +906,75 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
                 continue;
             }
 
-            foreach ($media->mediaFiles() as $media_file) {
-                $is_image = $media_file->isImage();
-
-                try {
-                    $thumb = $is_image ? $media_file->imageUrl(400, 400, 'contain') : null;
-                    $full  = $media_file->isExternal() ? $media_file->filename() : $media_file->downloadUrl('inline');
-                } catch (Throwable) {
-                    continue;
-                }
-
-                $data[] = [
-                    'xref'    => $media->xref(),
-                    'title'   => $media_file->title() !== '' ? $media_file->title() : $this->plain($media->fullName()),
-                    'mime'    => $media_file->mimeType(),
-                    'isImage' => $is_image,
-                    'thumb'   => $thumb,
-                    'file'    => $full,
-                    'url'     => $media->url(),
-                ];
+            foreach ($this->mediaFilesJson($media) as $file) {
+                $data[] = $file;
             }
         }
 
         return $data;
+    }
+
+    /**
+     * Die Dateien eines Medienobjekts. Defekte oder fehlende Dateien werden uebersprungen.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private function mediaFilesJson(Media $media): array
+    {
+        $data = [];
+
+        foreach ($media->mediaFiles() as $media_file) {
+            $is_image = $media_file->isImage();
+
+            try {
+                $thumb = $is_image ? $media_file->imageUrl(400, 400, 'contain') : null;
+                $full  = $media_file->isExternal() ? $media_file->filename() : $media_file->downloadUrl('inline');
+            } catch (Throwable) {
+                continue;
+            }
+
+            $data[] = [
+                'xref'    => $media->xref(),
+                'title'   => $media_file->title() !== '' ? $media_file->title() : $this->plain($media->fullName()),
+                'mime'    => $media_file->mimeType(),
+                'isImage' => $is_image,
+                'thumb'   => $thumb,
+                'file'    => $full,
+                'url'     => $media->url(),
+            ];
+        }
+
+        return $data;
+    }
+
+    /**
+     * "Urgrossmutter", "Cousin" ... - wie $individual mit einer Bezugsperson verwandt ist.
+     * Bezugsperson: ?relativeTo=<xref>, sonst die eigene Person des angemeldeten Benutzers.
+     */
+    private function relationship(ServerRequestInterface $request, Individual $individual): string
+    {
+        $tree = $individual->tree();
+        $xref = Validator::queryParams($request)->string('relativeTo', '');
+
+        if ($xref === '') {
+            $xref = $tree->getUserPreference(Auth::user(), UserInterface::PREF_TREE_ACCOUNT_XREF);
+        }
+
+        if ($xref === '' || $xref === $individual->xref()) {
+            return '';
+        }
+
+        $other = Registry::individualFactory()->make($xref, $tree);
+
+        if ($other === null || !$other->canShow()) {
+            return '';
+        }
+
+        try {
+            return $this->plain(Registry::container()->get(RelationshipService::class)->getCloseRelationshipName($other, $individual));
+        } catch (Throwable) {
+            return '';
+        }
     }
 
     /**

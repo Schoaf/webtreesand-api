@@ -35,6 +35,14 @@ The module has no login and no permission system of its own – on purpose:
   log and moderation (“pending changes”) therefore work exactly as in the web interface. Every POST
   passes webtrees' CSRF check.
 
+## One media folder per tree
+
+If several trees are used by different groups of people, give each tree its **own media folder**
+(*Control panel → Family trees → Preferences → Media folder*, e.g. `media/smith/`). This is a webtrees
+matter, not one of this module: webtrees offers editors all files of the tree's media folder that the tree
+does not use yet (“unused files”) – with a shared folder, editors of one tree can see and link the files
+of another.
+
 ## For developers
 
 ### Addresses
@@ -77,12 +85,13 @@ Image addresses (`thumb`, `file`) are webtrees' signed media routes and need the
 
 | Action | Tree | Parameters | Content |
 | - | - | - | - |
-| `Info` | – | – | versions, `api` level, user, visible trees with role and rights, CSRF token |
+| `Info` | – | – | versions, `api` level, user, visible trees with role, rights and number of individuals, CSRF token |
 | `Individuals` | yes | `q`, `page` | people by sort name, 50 per page, `nextPage` |
-| `Individual` | yes | `xref` | person, facts, parent and spouse families, media |
+| `Individual` | yes | `xref`, `relativeTo?` | person, facts (`known: false` marks vendor tags webtrees has no definition for), parent and spouse families, media, `relationship` to `relativeTo` (default: the user's own record), e.g. “great-grandmother” |
 | `Family` | yes | `xref` | family with facts, children, media |
-| `Pedigree` | yes | `xref`, `generations` (1–6) | ancestors with ahnentafel number `n` |
+| `Pedigree` | yes | `xref`, `generations` (1–6) | ancestors with ahnentafel number `n`; `hasParents` tells a client that the branch can be expanded further |
 | `Descendants` | yes | `xref`, `generations` (1–4) | descendants as a tree |
+| `MediaList` | yes | `page` | all media objects of the tree, newest first, 60 per page, each with up to three linked people |
 | `Tags` | yes | `type` (`INDI`/`FAM`) | labelled list of facts a client can offer for adding |
 
 ### Writing (POST)

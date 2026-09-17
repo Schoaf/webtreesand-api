@@ -39,6 +39,14 @@ Das Modul hat bewusst keine eigene Anmeldung und keine eigene Rechteverwaltung:
 der Daten. Hat der Benutzer „Änderungen automatisch annehmen", sind sie sofort gültig; sonst warten
 sie wie jede andere Bearbeitung auf die Freigabe durch einen Moderator.
 
+## Ein Medienordner je Stammbaum
+
+Nutzen verschiedene Personengruppen verschiedene Bäume, sollte jeder Baum einen **eigenen Medienordner**
+haben (*Verwaltung → Stammbäume → Einstellungen → Medienordner*, z. B. `media/mueller/`). Das ist eine
+Eigenheit von webtrees, nicht dieses Moduls: webtrees bietet Bearbeitern alle Dateien des Medienordners an,
+die der Baum noch nicht verwendet („unbenutzte Dateien") – bei einem gemeinsamen Ordner sehen Bearbeiter des
+einen Baums die Dateien des anderen und können sie verknüpfen.
+
 ## Für Entwickler
 
 Die vollständige Beschreibung der Schnittstelle (Adressen, Anmeldung, alle Aktionen, Fehlercodes)

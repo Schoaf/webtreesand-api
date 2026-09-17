@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0 – 2026-09-17
+- API level 2: `MediaList` (photo overview), `Individual.relationship` (“great-grandmother” relative to
+  `relativeTo` or the user's own record), `Pedigree.ancestors[].hasParents` (expand a branch upwards),
+  `Info.trees[].individuals`, `facts[].known` (vendor tags webtrees has no definition for).
+- Family records no longer list their `HUSB`/`WIFE`/`CHIL` links as facts.
+- README: recommendation to use one media folder per tree.
+
 ## 0.3.0 – 2026-09-17
 - Module description is translatable (German source, English for all other languages).
 - Update notice in the webtrees control panel (`latest-version.txt`).
