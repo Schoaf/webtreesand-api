@@ -2,7 +2,7 @@
 
 **English** · [Deutsch](README.de.md)
 
-A [webtrees](https://webtrees.net/) module that gives the native Android app *webtrees Native*
+A [webtrees](https://webtrees.net/) module that gives the native Android app *webtreesAnd*
 a JSON interface – for reading **and** writing. It is an ordinary custom module: it lives in
 `modules_v4/`, the webtrees core is not modified.
 

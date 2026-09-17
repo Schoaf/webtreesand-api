@@ -88,7 +88,7 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     // 2: MediaList, Individual.relationship (relativeTo), Info.trees[].individuals, Pedigree.ancestors[].hasParents
     public const int    API_VERSION = 2;
 
-    private const string DESCRIPTION = 'JSON-Schnittstelle für die native Android-App „webtrees Native“ – liest und schreibt mit den Rechten des angemeldeten Benutzers.';
+    private const string DESCRIPTION = 'JSON-Schnittstelle für die native Android-App „webtreesAnd“ – liest und schreibt mit den Rechten des angemeldeten Benutzers.';
 
     // Eine Textdatei mit der neuesten Versionsnummer; webtrees zeigt damit in der Modulverwaltung einen Update-Hinweis.
     private const string LATEST_VERSION_URL = 'https://raw.githubusercontent.com/thobgg/webtreesand-api/main/latest-version.txt';
@@ -142,7 +142,7 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
         }
 
         return [
-            self::DESCRIPTION => 'JSON interface for the native Android app “webtrees Native” – reads and writes with the rights of the signed-in user.',
+            self::DESCRIPTION => 'JSON interface for the native Android app “webtreesAnd” – reads and writes with the rights of the signed-in user.',
         ];
     }
 
