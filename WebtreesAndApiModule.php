@@ -10,6 +10,7 @@ use Fisharebest\Webtrees\Date;
 use Fisharebest\Webtrees\DB;
 use Fisharebest\Webtrees\Elements\UnknownElement;
 use Fisharebest\Webtrees\Fact;
+use Fisharebest\Webtrees\FlashMessages;
 use Fisharebest\Webtrees\Family;
 use Fisharebest\Webtrees\Gedcom;
 use Fisharebest\Webtrees\GedcomRecord;
@@ -21,7 +22,9 @@ use Fisharebest\Webtrees\Module\ModuleCustomInterface;
 use Fisharebest\Webtrees\Module\ModuleCustomTrait;
 use Fisharebest\Webtrees\Note;
 use Fisharebest\Webtrees\Place;
+use Fisharebest\Webtrees\PlaceLocation;
 use Fisharebest\Webtrees\Registry;
+use Fisharebest\Webtrees\Services\CalendarService;
 use Fisharebest\Webtrees\Services\LinkedRecordService;
 use Fisharebest\Webtrees\Services\MediaFileService;
 use Fisharebest\Webtrees\Services\PendingChangesService;
@@ -67,6 +70,7 @@ use function strlen;
 use function strrpos;
 use function substr;
 use function trim;
+use function usort;
 
 use const ENT_HTML5;
 use const ENT_QUOTES;
@@ -90,9 +94,10 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     use ModuleCustomTrait;
 
     public const string MODULE_NAME = '_webtreesand-api_';
+    // 4: Anniversaries, DeleteRecord, Unlink; Ortskoordinaten auch aus der webtrees-Ortstabelle
     // 3: ?lang=<Sprache> fuer Beschriftungen und Datumsangaben der Antwort
     // 2: MediaList, Individual.relationship (relativeTo), Info.trees[].individuals, Pedigree.ancestors[].hasParents
-    public const int    API_VERSION = 3;
+    public const int    API_VERSION = 4;
 
     private const string DESCRIPTION = 'JSON-Schnittstelle für die native Android-App „webtreesAnd“ – liest und schreibt mit den Rechten des angemeldeten Benutzers.';
 
@@ -159,7 +164,7 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
 
     public function customModuleVersion(): string
     {
-        return '0.4.1';
+        return '0.5.0';
     }
 
     public function customModuleLatestVersionUrl(): string
@@ -401,6 +406,55 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
             'nextPage' => $rows->count() > self::MEDIA_PAGE_SIZE ? $page + 1 : null,
             'data'     => $data,
         ]);
+    }
+
+    /**
+     * Jahrestage der naechsten Tage: ?days=<1..60> (Standard 14) - Geburts-, Heirats- und Todestage.
+     * Nutzt den Kalenderdienst von webtrees; es erscheint nur, was der Benutzer sehen darf.
+     */
+    public function getAnniversariesAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree  = Validator::attributes($request)->tree();
+        $days  = min(60, max(1, Validator::queryParams($request)->integer('days', 14)));
+        $today = Registry::timestampFactory()->now()->julianDay();
+
+        $facts = Registry::container()->get(CalendarService::class)
+            ->getEventsList($today, $today + $days - 1, 'BIRT MARR DEAT', false, 'anniv', $tree);
+
+        $data = [];
+
+        foreach ($facts as $fact) {
+            $record = $fact->record();
+
+            if (!$record->canShow() || !$fact->canShow() || $fact->anniv <= 0) {
+                continue;
+            }
+
+            $person = $record instanceof Individual ? $record : null;
+            $couple = [];
+
+            if ($record instanceof Family) {
+                foreach ($record->spouses() as $spouse) {
+                    $couple[] = $this->personSummary($spouse);
+                }
+            }
+
+            $data[] = [
+                'inDays'  => $fact->jd - $today,
+                'tag'     => $this->shortTag($fact->tag()),
+                'label'   => $this->factLabel($fact),
+                'years'   => $fact->anniv,
+                'date'    => $this->dateJson($fact->date()),
+                'xref'    => $record->xref(),
+                'name'    => $this->plain($record->fullName()),
+                'person'  => $person instanceof Individual ? $this->personSummary($person) : null,
+                'couple'  => $couple,
+            ];
+        }
+
+        usort($data, static fn (array $a, array $b): int => [$a['inDays'], $a['name']] <=> [$b['inDays'], $b['name']]);
+
+        return response(['days' => $days, 'data' => $data]);
     }
 
     /**
@@ -759,6 +813,85 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     }
 
     /**
+     * Datensatz loeschen: ?xref=I123
+     * Uebergibt an die Loesch-Logik von webtrees selbst: Verweise anderer Datensaetze werden entfernt, eine Familie
+     * mit nur noch einem Mitglied und ohne Ereignisse wird mit geloescht - genau wie in der Weboberflaeche.
+     */
+    public function postDeleteRecordAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree   = Validator::attributes($request)->tree();
+        $xref   = $this->xref($request);
+        $record = Registry::gedcomRecordFactory()->make($xref, $tree);
+        $denied = $this->denyEdit($record);
+
+        if ($denied !== null) {
+            return $denied;
+        }
+
+        $request = $request->withAttribute('xref', $xref);
+
+        // webtrees 2.2: RequestHandlers\DeleteRecord::handle() - ab 2.3: Controllers\DeleteRecord::post()
+        $old = 'Fisharebest\\Webtrees\\Http\\RequestHandlers\\DeleteRecord';
+        $new = 'Fisharebest\\Webtrees\\Http\\Controllers\\DeleteRecord';
+
+        if (class_exists($old)) {
+            Registry::container()->get($old)->handle($request);
+        } elseif (class_exists($new)) {
+            Registry::container()->get($new)->post($request, $tree);
+        } else {
+            return $this->error(501, 'not-supported');
+        }
+
+        // Die Hinweise ("Die Familie ... wurde geloescht") sind fuer die Weboberflaeche gedacht - hier verwerfen,
+        // sonst tauchen sie beim naechsten Seitenaufruf im Browser auf.
+        FlashMessages::getMessages();
+
+        return $this->written($record);
+    }
+
+    /**
+     * Verknuepfung loesen - die Person bleibt, sie gehoert nur nicht mehr zur Familie.
+     * Rumpf: { family: "F12", individual: "I34" }
+     */
+    public function postUnlinkAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree       = Validator::attributes($request)->tree();
+        $body       = $this->body($request);
+        $family     = Registry::familyFactory()->make($this->str($body, 'family'), $tree);
+        $individual = Registry::individualFactory()->make($this->str($body, 'individual'), $tree);
+
+        foreach ([$family, $individual] as $record) {
+            $denied = $this->denyEdit($record);
+
+            if ($denied !== null) {
+                return $denied;
+            }
+        }
+
+        $removed = 0;
+
+        foreach ($family->facts(['HUSB', 'WIFE', 'CHIL'], false, null, true) as $fact) {
+            if ($fact->value() === '@' . $individual->xref() . '@') {
+                $family->deleteFact($fact->id(), true);
+                $removed++;
+            }
+        }
+
+        foreach ($individual->facts(['FAMS', 'FAMC'], false, null, true) as $fact) {
+            if ($fact->value() === '@' . $family->xref() . '@') {
+                $individual->deleteFact($fact->id(), true);
+                $removed++;
+            }
+        }
+
+        if ($removed === 0) {
+            return $this->error(404, 'link-not-found');
+        }
+
+        return $this->written($individual, ['family' => $family->xref()]);
+    }
+
+    /**
      * Datei hochladen und als Medienobjekt mit einem Datensatz verknuepfen: ?xref=I123
      * multipart/form-data: file, title?, note?, folder?
      */
@@ -1069,6 +1202,18 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     {
         if ($place->gedcomName() === '') {
             return null;
+        }
+
+        // Steht am Ereignis keine Koordinate (2 PLAC / 3 MAP), kennt webtrees den Ort vielleicht aus seiner
+        // Ortstabelle (Verwaltung -> Geografische Daten).
+        if ($latitude === null || $longitude === null) {
+            try {
+                $location  = new PlaceLocation($place->gedcomName());
+                $latitude  = $location->latitude();
+                $longitude = $location->longitude();
+            } catch (Throwable) {
+                $latitude = $longitude = null;
+            }
         }
 
         return [

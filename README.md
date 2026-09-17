@@ -94,6 +94,7 @@ Image addresses (`thumb`, `file`) are webtrees' signed media routes and need the
 | `Family` | yes | `xref` | family with facts, children, media |
 | `Pedigree` | yes | `xref`, `generations` (1–6) | ancestors with ahnentafel number `n`; `hasParents` tells a client that the branch can be expanded further |
 | `Descendants` | yes | `xref`, `generations` (1–4) | descendants as a tree |
+| `Anniversaries` | yes | `days` (1–60, default 14) | births, marriages and deaths whose anniversary falls into the next days, with the number of years |
 | `MediaList` | yes | `page` | all media objects of the tree, newest first, 60 per page, each with up to three linked people |
 | `Tags` | yes | `type` (`INDI`/`FAM`) | labelled list of facts a client can offer for adding |
 
@@ -107,6 +108,8 @@ Header `X-CSRF-TOKEN: <csrf from Info>`, JSON body. Answer: `{"ok":true,"xref":"
 | `Fact` | `xref` | `{factId?, tag, value?, date?, place?, note?}` or `{factId?, gedcom}` – with `factId` the fact is changed; sub-lines that are not mentioned (sources, media, coordinates) are kept |
 | `DeleteFact` | `xref` | `{factId}` |
 | `AddIndividual` | – | `{relation: child\|spouse\|father\|mother\|none, relativeTo?, family?, given, surname, sex, birthDate?, birthPlace?, dead?, deathDate?, deathPlace?, marriageDate?, marriagePlace?}` |
+| `DeleteRecord` | `xref` | – deletes the record with webtrees' own logic: links from other records are removed, a family left with one member and no events is deleted too |
+| `Unlink` | – | `{family, individual}` – removes the person from the family; both records stay |
 | `Media` | `xref` | `multipart/form-data`: `file`, `title?`, `note?`, `folder?` – uploads and links |
 
 Dates in GEDCOM format (`12 MAR 1890`, `ABT 1850`, `BET 1900 AND 1910`). Error codes: `not-found`,
@@ -114,7 +117,7 @@ Dates in GEDCOM format (`12 MAR 1890`, `ABT 1850`, `BET 1900 AND 1910`). Error c
 `invalid-date`, `invalid-gedcom`, `link-tag-not-allowed`, `parent-exists`, `family-required`,
 `family-not-found`, `name-required`, `upload-not-allowed`, `upload-failed`.
 
-Not included yet: deleting records, removing links, creating sources.
+Not included yet: creating sources and repositories, merging records.
 
 ### Releases
 

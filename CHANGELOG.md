@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0 – 2026-09-17
+- API level 4: `Anniversaries` (births, marriages and deaths of the next days), `DeleteRecord` (hands over to
+  webtrees' own delete logic, including removing links and empty families), `Unlink` (remove a person from a
+  family, both records stay).
+- Place coordinates fall back to webtrees' location table when the fact itself carries none.
+
 ## 0.4.1 – 2026-09-17
 - API level 3: `?lang=de` (or `en-GB`, …) selects the language of labels, dates and relationship names for
   that one answer. The session and the user's language preference are left alone. Without it, a client
