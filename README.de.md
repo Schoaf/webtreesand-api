@@ -6,6 +6,12 @@ Ein Modul für [webtrees](https://webtrees.net/), das der nativen Android-App **
 JSON-Schnittstelle gibt – zum Lesen **und** Schreiben. Es ist ein gewöhnliches Zusatzmodul: Es liegt
 in `modules_v4/`, der webtrees-Kern wird nicht verändert.
 
+**Wozu:** Es bringt zwei Welten zusammen. Die Person, die den Stammbaum am PC akribisch pflegt, arbeitet in webtrees
+weiter wie bisher. Die Familie, die bisher nur eine am Handy mühsam bedienbare Adresse bekam, bekommt den Stammbaum auf
+Handy und Tablet: Wer war das, wie sind wir verwandt, wer hat bald Geburtstag, welche Fotos gibt es. Und der Rückweg ist
+offen: Das Foto vom Grabstein oder das korrigierte Datum aus der App landet als ausstehende Änderung bei der Person am
+PC, in derselben Installation, unter denselben Rechten und Regeln.
+
 | | |
 | - | - |
 | webtrees | 2.2.x (mit 2.2.6 getestet); für 2.3 vorbereitet |

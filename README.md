@@ -6,6 +6,12 @@ A [webtrees](https://webtrees.net/) module that gives the native Android app **[
 a JSON interface – for reading **and** writing. It is an ordinary custom module: it lives in
 `modules_v4/`, the webtrees core is not modified.
 
+**Why:** it brings two worlds together. The person who maintains the tree meticulously at the PC keeps working in
+webtrees as before. The family, who so far only got a web address that is hard to use on a phone, get the tree on phone
+and tablet: who was that, how are we related, who has a birthday soon, which photos are there. And the way back is open:
+the photo of a gravestone or a corrected date sent from the app arrives as a pending change for the person at the PC,
+in the same installation, under the same rights and rules.
+
 | | |
 | - | - |
 | webtrees | 2.2.x (tested with 2.2.6); prepared for 2.3 |
