@@ -19,6 +19,28 @@ in the same installation, under the same rights and rules.
 | Access | read and write – always with the rights of the signed-in webtrees user |
 | License | GPL-3.0 |
 
+## The app: webtreesAnd
+
+The module exists for one purpose: **[webtreesAnd](https://github.com/thobgg/WebtreesAnd)**, a native Android app (Kotlin,
+no WebView) for phone and tablet. [Download the APK](https://github.com/thobgg/WebtreesAnd/releases/latest) – it is signed;
+outside the Play Store, Android asks once to allow your browser to install apps.
+
+| Tablet: tree and profile side by side | Phone: the profile as a timeline |
+| - | - |
+| ![Tree and profile side by side](docs/app-tablet.png) | ![Profile on a phone](docs/app-handy.png) |
+
+- **The tree as the centre:** hourglass view with ancestors, partners, children and grandchildren, siblings on request;
+  pan and zoom freely, unfold branches upwards, make any person the centre.
+- **Profile:** life as a timeline (with marriage and the births of the children), the relationship to yourself
+  (“paternal grandfather”), photos, family, a map of the places of life.
+- **Editing:** add, change and delete events, add relatives with the “+” on any card, take or pick photos and attach
+  them to a person – resized to fit the server's upload limit.
+- **Anniversaries** of the coming days, with a daily reminder if you like; moderators accept or reject pending changes in the app.
+- **Connect with one tap:** the “App” page in webtrees hands server, tree and a one-time code to the app; nothing to type.
+
+German and English; the labels of the server come in the language of the app. Whatever is not native yet opens as a
+webtrees page in the same session. All pictures show the fictional demo tree “Familie Falkenrath”.
+
 ## Installation
 
 1. Download the ZIP from the [latest release](../../releases/latest).

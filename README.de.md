@@ -19,6 +19,28 @@ PC, in derselben Installation, unter denselben Rechten und Regeln.
 | Zugriff | lesen und schreiben – immer mit den Rechten des angemeldeten webtrees-Benutzers |
 | Lizenz | GPL-3.0 |
 
+## Die App: webtreesAnd
+
+Das Modul hat einen Zweck: **[webtreesAnd](https://github.com/thobgg/WebtreesAnd)**, eine native Android-App (Kotlin,
+kein WebView) für Handy und Tablet. [APK herunterladen](https://github.com/thobgg/WebtreesAnd/releases/latest) – signiert;
+außerhalb des Play Store fragt Android einmalig, ob der Browser Apps installieren darf.
+
+| Tablet: Baum und Profil nebeneinander | Handy: das Profil als Zeitleiste |
+| - | - |
+| ![Baum und Profil nebeneinander](docs/app-tablet.png) | ![Profil am Handy](docs/app-handy.png) |
+
+- **Baum als Mittelpunkt:** Sanduhr-Ansicht mit Ahnen, Partnern, Kindern und Enkeln, auf Wunsch mit Geschwistern;
+  frei verschieben und zoomen, Zweige nach oben aufklappen, jede Person zur Mittelperson machen.
+- **Profil:** Lebenslauf als Zeitleiste (mit Heirat und Geburten der Kinder), Verwandtschaft zur eigenen Person
+  („Großvater väterlicherseits“), Fotos, Familie, Karte der Lebensstationen.
+- **Bearbeiten:** Ereignisse anlegen, ändern, löschen, Verwandte über das „+“ an jeder Karte anlegen, Fotos aufnehmen
+  oder auswählen und einer Person zuordnen – passend zum Upload-Limit des Servers verkleinert.
+- **Jahrestage** der nächsten Tage, auf Wunsch mit täglicher Erinnerung; Moderatoren nehmen ausstehende Änderungen in der App an oder verwerfen sie.
+- **Verbinden mit einem Tipp:** Die Seite „App“ in webtrees übergibt Server, Baum und einen Einmal-Code an die App; nichts eintippen.
+
+Deutsch und Englisch; die Beschriftungen des Servers kommen in der Sprache der App. Was noch nicht nativ geht, öffnet
+die App als webtrees-Seite in derselben Sitzung. Alle Bilder zeigen den frei erfundenen Demo-Stammbaum „Familie Falkenrath“.
+
 ## Installation
 
 1. Das ZIP aus dem [neuesten Release](../../releases/latest) laden.
