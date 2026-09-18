@@ -29,6 +29,8 @@ module list). The page offers the app download, the status (https, upload limit)
 **which family trees the app may reach.** Trees that are not ticked cannot be reached through this module at all –
 for any user, whatever their rights in webtrees. Default: all trees.
 
+![Settings page: install the app, family trees for the app, status](docs/einstellungen.png)
+
 ## For family members: the “App” page
 
 Signed-in users find a menu entry **App**. The page offers two steps:

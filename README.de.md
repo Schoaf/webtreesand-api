@@ -29,6 +29,8 @@ eintippen). Die Seite bietet den App-Download, den Status (https, Upload-Limit) 
 **welche Stammbäume die App erreichen darf.** Nicht angekreuzte Bäume sind über dieses Modul gar nicht erreichbar –
 für keinen Benutzer, unabhängig von seinen Rechten in webtrees. Standard: alle Bäume.
 
+![Einstellungsseite: App installieren, Stammbäume für die App, Status](docs/einstellungen.png)
+
 ## Für Familienmitglieder: die Seite „App"
 
 Angemeldete Benutzer finden im Menü den Eintrag **App**. Die Seite bietet zwei Schritte:
