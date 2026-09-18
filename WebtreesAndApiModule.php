@@ -53,6 +53,7 @@ use Throwable;
 
 use function array_key_exists;
 use function array_map;
+use function array_slice;
 use function bin2hex;
 use function class_exists;
 use function count;
@@ -83,6 +84,7 @@ use function str_replace;
 use function str_starts_with;
 use function strtolower;
 use function strtoupper;
+use function substr_count;
 use function time;
 use function strip_tags;
 use function strlen;
@@ -229,7 +231,7 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
 
     public function customModuleVersion(): string
     {
-        return '0.8.0';
+        return '1.0.0';
     }
 
     public function customModuleLatestVersionUrl(): string
@@ -362,7 +364,9 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
             $user->setPreference(self::PAIR_SETTING, hash('sha256', $code) . '|' . (time() + self::PAIR_SECONDS) . '|' . ($tree?->name() ?? ''));
 
             $params      = ['code' => $code, 'tree' => $tree?->name() ?? '', 'user' => $user->userName()];
-            $connect_url = $this->actionUrl('Connect', null, $params);
+            // Der Code reist im URL-Fragment (#...): das Fragment erreicht nie den Server und steht damit weder im
+            // Zugriffsprotokoll des Webservers noch in dem eines Proxys. Die Verbinden-Seite liest es per JavaScript.
+            $connect_url = $this->actionUrl('Connect', null) . '#' . http_build_query($params);
             $deep_link   = $this->deepLink($base_url, $params);
         }
 
@@ -383,19 +387,14 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     /**
      * Zielseite des Verbinden-QR-Codes: wird im Browser des HANDYS geoeffnet (dort ist man meist nicht angemeldet)
      * und reicht nur an die App weiter. Kameras oeffnen verlaesslich nur https-Adressen, keine App-Links - daher dieser Umweg.
+     * Code, Baum und Benutzer stehen im URL-Fragment und kommen nie beim Server an; die Seite baut den App-Link per JavaScript.
      */
     public function getConnectAction(ServerRequestInterface $request): ResponseInterface
     {
-        $params = [
-            'code' => Validator::queryParams($request)->string('code', ''),
-            'tree' => Validator::queryParams($request)->string('tree', ''),
-            'user' => Validator::queryParams($request)->string('user', ''),
-        ];
-
         return $this->viewResponse($this->name() . '::connect', [
             'title'        => I18N::translate('Mit webtreesAnd verbinden'),
             'tree'         => null,
-            'deep_link'    => $this->deepLink(Validator::attributes($request)->string('base_url'), $params),
+            'base_url'     => Validator::attributes($request)->string('base_url'),
             'download_url' => self::APP_DOWNLOAD_URL,
         ]);
     }
@@ -500,7 +499,7 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
             // unabhaengig davon, was das Konto in webtrees selbst duerfte.
             $tree = $request->getAttribute('tree');
 
-            if ($tree instanceof Tree && !$this->treeEnabled($tree) && !str_contains((string) $request->getAttribute('action'), 'Admin')) {
+            if ($tree instanceof Tree && !$this->treeEnabled($tree) && !str_contains(strtolower((string) $request->getAttribute('action')), 'admin')) {
                 return $this->error(403, 'tree-disabled');
             }
 
@@ -1036,22 +1035,23 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
             }
         }
 
+        // Ein Wert der Form @X@ waere fuer GEDCOM ein Verweis auf einen Datensatz, kein Text.
+        foreach (['value', 'place', 'note'] as $key) {
+            if ($this->looksLikePointer($this->str($body, $key))) {
+                return $this->error(400, 'invalid-value');
+            }
+        }
+
         if ($this->str($body, 'gedcom') !== '') {
             $gedcom = trim(str_replace("\r", '', $this->str($body, 'gedcom')));
         } else {
             $gedcom = $this->buildFactGedcom($body, $old?->gedcom() ?? '');
         }
 
-        if (preg_match('/^1 ([A-Z_][A-Z0-9_]*)/', $gedcom, $match) !== 1) {
-            return $this->error(400, 'invalid-gedcom');
-        }
+        $problem = $this->factGedcomProblem($gedcom);
 
-        if (in_array($match[1], self::LINK_TAGS, true)) {
-            return $this->error(400, 'link-tag-not-allowed');
-        }
-
-        if (preg_match('/\n2 DATE (.+)/', $gedcom, $date_match) === 1 && !(new Date($date_match[1]))->isOK()) {
-            return $this->error(400, 'invalid-date');
+        if ($problem !== null) {
+            return $this->error(400, $problem);
         }
 
         if ($old === null) {
@@ -1135,8 +1135,14 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
             }
         }
 
-        $given   = $this->line($this->str($body, 'given'));
-        $surname = $this->line($this->str($body, 'surname'));
+        foreach (['birthPlace', 'deathPlace', 'marriagePlace'] as $key) {
+            if ($this->looksLikePointer($this->str($body, $key))) {
+                return $this->error(400, 'invalid-value');
+            }
+        }
+
+        $given   = $this->namePart($this->str($body, 'given'));
+        $surname = $this->namePart($this->str($body, 'surname'));
         $sex     = strtoupper($this->str($body, 'sex', 'U'));
         $sex     = in_array($sex, ['M', 'F', 'U', 'X'], true) ? $sex : 'U';
 
@@ -1309,7 +1315,7 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
 
     /**
      * Datei hochladen und als Medienobjekt mit einem Datensatz verknuepfen: ?xref=I123
-     * multipart/form-data: file, title?, note?, folder?
+     * multipart/form-data: file, title?, note?
      */
     public function postMediaAction(ServerRequestInterface $request): ResponseInterface
     {
@@ -1331,10 +1337,11 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
         $note  = Registry::elementFactory()->make('OBJE:NOTE')->canonical($this->str($body, 'note'));
 
         // Der Upload-Dienst von webtrees prueft Dateinamen und gesperrte Endungen (php, exe ...).
-        // auto=1: Dateiname wird der SHA1 des Inhalts - keine Kollisionen, keine Sonderzeichen.
+        // auto=1: Dateiname wird der SHA1 des Inhalts - keine Kollisionen, keine Sonderzeichen; die Datei liegt
+        // dann immer direkt im Medienordner des Baums (einen Unterordner ignoriert webtrees bei auto=1).
         $upload_request = $request->withParsedBody([
             'file_location' => 'upload',
-            'folder'        => $this->str($body, 'folder'),
+            'folder'        => '',
             'new_file'      => '',
             'auto'          => '1',
         ]);
@@ -1809,6 +1816,50 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     }
 
     /**
+     * Prueft das fertige GEDCOM EINES Ereignisses, egal ob aus Einzelfeldern gebaut oder roh uebergeben.
+     * Liefert den Fehlercode fuer die App - oder null, wenn alles in Ordnung ist.
+     *
+     * Erlaubt ist genau eine Ebene-1-Zeile mit Unterzeilen der Ebenen 2-9. Alles andere (eine zweite Ebene-1-Zeile,
+     * eine Ebene-0-Zeile, eine Zeile ohne Tag) wird abgelehnt: ueber das rohe Feld "gedcom" liessen sich sonst
+     * Verknuepfungen (FAMS, OBJE), Sperren (RESN) oder ganze Datensaetze an den Regeln dieses Moduls vorbeischleusen.
+     * webtrees selbst prueft nur die erste Zeile.
+     */
+    private function factGedcomProblem(string $gedcom): string|null
+    {
+        if (preg_match('/^1 ([A-Z_][A-Z0-9_]*)/', $gedcom, $match) !== 1) {
+            return 'invalid-gedcom';
+        }
+
+        $tag = $match[1];
+
+        foreach (array_slice(explode("\n", $gedcom), 1) as $line) {
+            if (preg_match('/^[2-9] [A-Z_][A-Z0-9_]*( .*)?$/', $line) !== 1) {
+                return 'invalid-gedcom';
+            }
+        }
+
+        // Verknuepfungen entstehen nur ueber AddIndividual, Media und Unlink - nie ueber den Fakten-Editor.
+        if (in_array($tag, self::LINK_TAGS, true)) {
+            return 'link-tag-not-allowed';
+        }
+
+        // Ein Name traegt den Nachnamen zwischen genau zwei Schraegstrichen (oder gar keinen); "@" hat darin nichts verloren.
+        if ($tag === 'NAME') {
+            [$first] = explode("\n", $gedcom, 2);
+
+            if (!in_array(substr_count($first, '/'), [0, 2], true) || str_contains($first, '@')) {
+                return 'invalid-name';
+            }
+        }
+
+        if (preg_match('/\n2 DATE (.+)/', $gedcom, $date_match) === 1 && !(new Date($date_match[1]))->isOK()) {
+            return 'invalid-date';
+        }
+
+        return null;
+    }
+
+    /**
      * Zeilen hinter die Ebene-1-Zeile (samt deren CONT-Fortsetzungen) setzen.
      */
     private function insertAfterFirstLine(string $gedcom, string $insert): string
@@ -1899,6 +1950,22 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     private function line(string $value): string
     {
         return trim((string) preg_replace('/\s+/u', ' ', $value));
+    }
+
+    /**
+     * Namensbestandteil: einzeilig und ohne die GEDCOM-Sonderzeichen "/" (umschliesst den Nachnamen) und "@" (Verweis).
+     */
+    private function namePart(string $value): string
+    {
+        return $this->line(str_replace(['/', '@'], '', $value));
+    }
+
+    /**
+     * "@I123@" - fuer GEDCOM ein Verweis auf einen Datensatz. Als Text eingegeben wuerde webtrees ihn als Verknuepfung lesen.
+     */
+    private function looksLikePointer(string $value): bool
+    {
+        return preg_match('/^@[^@\n]+@/', trim($value)) === 1;
     }
 
     /**

@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.0 – 2026-09-18
+Hardening after a security review of the module; the API level stays 7, nothing changes for clients that use the
+documented fields.
+- The one-time code of the “Connect” QR code travels in the URL fragment (`#code=…`) instead of the query string:
+  it no longer reaches the web server and therefore no access log. The “Connect” page builds the app link in
+  JavaScript and removes the fragment from the browser history.
+- `Fact`: the GEDCOM of one fact may contain only one level-1 line; every further line must be a sub-line (levels 2–9)
+  with a valid tag (`invalid-gedcom`). This closes a gap where the raw `gedcom` field could smuggle in further
+  level-1 lines (`FAMS`, `OBJE`, `RESN`, …) past the `link-tag-not-allowed` rule. Values, places and notes of the
+  form `@X@` are rejected (`invalid-value`) – for GEDCOM they would be pointers, not text. A `NAME` needs its surname
+  between exactly two slashes and no `@` (`invalid-name`).
+- `AddIndividual`: slashes and `@` are removed from given names and surnames; places of the form `@X@` are rejected.
+- `Media`: the `folder` parameter is gone – webtrees ignored it anyway (`auto=1` stores the file under its SHA-1 name
+  directly in the tree's media folder). The README says so now.
+- Cosmetic: the “admin only” check in the middleware compares case-insensitively, like webtrees itself.
+
 ## 0.8.0 – 2026-09-17
 - **Settings page** in the control panel (wrench icon in the module list): install the app (QR code), choose **which
   family trees the app may reach**, jump to the “App” page of a tree to connect, and see the status (https, upload limit).

@@ -130,11 +130,11 @@ Header `X-CSRF-TOKEN: <csrf from Info>`, JSON body. Answer: `{"ok":true,"xref":"
 | `Accept`, `Reject` | `xref?` | – moderators only: accept or reject the pending changes of one record, or of the whole tree when `xref` is omitted; answer `{ok, pending}` |
 | `DeleteRecord` | `xref` | – deletes the record with webtrees' own logic: links from other records are removed, a family left with one member and no events is deleted too |
 | `Unlink` | – | `{family, individual}` – removes the person from the family; both records stay |
-| `Media` | `xref` | `multipart/form-data`: `file`, `title?`, `note?`, `folder?` – uploads and links |
+| `Media` | `xref` | `multipart/form-data`: `file`, `title?`, `note?` – uploads and links; the file is stored under the SHA-1 of its content directly in the tree's media folder |
 
 Dates in GEDCOM format (`12 MAR 1890`, `ABT 1850`, `BET 1900 AND 1910`). Error codes: `not-found`,
 `private`, `not-editable`, `not-editor`, `fact-locked`, `family-locked`, `fact-not-found`,
-`invalid-date`, `invalid-gedcom`, `link-tag-not-allowed`, `parent-exists`, `family-required`,
+`invalid-date`, `invalid-gedcom` (only one level-1 line, sub-lines 2–9 with a valid tag), `invalid-value` (text of the form `@X@` would be a pointer), `invalid-name` (surname between exactly two slashes), `link-tag-not-allowed`, `parent-exists`, `family-required`,
 `family-not-found`, `name-required`, `upload-not-allowed`, `upload-failed`.
 
 Not included yet: creating sources and repositories, merging records.

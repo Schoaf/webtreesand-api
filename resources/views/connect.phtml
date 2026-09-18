@@ -6,7 +6,7 @@ use Fisharebest\Webtrees\I18N;
 
 /**
  * @var string $title
- * @var string $deep_link
+ * @var string $base_url
  * @var string $download_url
  */
 
@@ -14,13 +14,33 @@ use Fisharebest\Webtrees\I18N;
 
 <h2 class="wt-page-title"><?= e($title) ?></h2>
 
-<p><a class="btn btn-primary btn-lg" id="webtreesand-open" href="<?= e($deep_link) ?>"><?= I18N::translate('webtreesAnd öffnen') ?></a></p>
+<p><a class="btn btn-primary btn-lg" id="webtreesand-open" href="webtreesand://connect?url=<?= e(rawurlencode($base_url)) ?>"><?= I18N::translate('webtreesAnd öffnen') ?></a></p>
 
 <p class="text-muted"><?= I18N::translate('Nichts passiert? Dann ist die App noch nicht installiert oder der Code ist abgelaufen – öffne in webtrees die Seite „App“ erneut.') ?></p>
 
 <p><?= I18N::translate('Die App ist noch nicht installiert?') ?> <a href="<?= e($download_url) ?>"><?= I18N::translate('App herunterladen') ?></a></p>
 
 <script>
-  // Gleich weiterreichen - der Knopf bleibt fuer Browser, die das nicht von selbst duerfen.
-  window.setTimeout(function () { window.location.href = document.getElementById('webtreesand-open').href; }, 400);
+  // Code, Baum und Benutzer stehen im URL-Fragment (#code=...): das Fragment erreicht nie den Server und damit
+  // kein Zugriffsprotokoll. Hier wird daraus der App-Link gebaut - und das Fragment aus dem Browser-Verlauf entfernt.
+  (function () {
+    var link   = document.getElementById('webtreesand-open');
+    var given  = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    var query  = new URLSearchParams({ url: <?= json_encode($base_url, JSON_THROW_ON_ERROR | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?> });
+
+    ['code', 'tree', 'user'].forEach(function (key) {
+      if (given.get(key)) {
+        query.set(key, given.get(key));
+      }
+    });
+
+    link.href = 'webtreesand://connect?' + query.toString();
+
+    if (window.history.replaceState) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+
+    // Gleich weiterreichen - der Knopf bleibt fuer Browser, die das nicht von selbst duerfen.
+    window.setTimeout(function () { window.location.href = link.href; }, 400);
+  })();
 </script>
