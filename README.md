@@ -141,10 +141,8 @@ Not included yet: creating sources and repositories, merging records.
 
 ### Code layout
 
-`WebtreesAndApiModule.php` is the entry point (metadata, menu, middleware). The rest is split by task under `src/`:
-`AppPages` (settings, “App” page, pairing), `ReadActions` (GET endpoints), `WriteActions` (POST endpoints),
-`JsonBuilders` (response building blocks) and `GedcomText` (pure GEDCOM text helpers, no webtrees state).
-English texts live in `resources/lang/en.php`.
+Start with the header of `WebtreesAndApiModule.php`: it is the entry point and lists which part of the module lives
+in which file under `src/`.
 
 ### Releases
 

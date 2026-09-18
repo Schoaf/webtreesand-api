@@ -6,6 +6,7 @@ namespace WebtreesAnd\Api;
 
 use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\DB;
+use Fisharebest\Webtrees\Exceptions\FileUploadException;
 use Fisharebest\Webtrees\Date;
 use Fisharebest\Webtrees\Family;
 use Fisharebest\Webtrees\FlashMessages;
@@ -14,9 +15,9 @@ use Fisharebest\Webtrees\Registry;
 use Fisharebest\Webtrees\Services\MediaFileService;
 use Fisharebest\Webtrees\Services\PendingChangesService;
 use Fisharebest\Webtrees\Validator;
+use League\Flysystem\FilesystemException;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
-use Throwable;
 
 use function array_key_exists;
 use function class_exists;
@@ -430,7 +431,8 @@ trait WriteActions
 
         try {
             $file = Registry::container()->get(MediaFileService::class)->uploadFile($upload_request);
-        } catch (Throwable) {
+        } catch (FileUploadException | FilesystemException) {
+            // Abgebrochener Upload oder Medienordner nicht beschreibbar - fuer die App ein fachlicher Fehler, kein 500er.
             $file = '';
         }
 

@@ -22,7 +22,6 @@ use Fisharebest\Webtrees\Tree;
 use Fisharebest\Webtrees\Validator;
 use Illuminate\Support\Collection;
 use Psr\Http\Message\ServerRequestInterface;
-use Throwable;
 
 use function class_exists;
 use function html_entity_decode;
@@ -53,16 +52,8 @@ trait JsonBuilders
      */
     private function personSummary(Individual $individual): array
     {
-        $thumb = null;
-
-        try {
-            $media_file = $individual->findHighlightedMediaFile();
-            if ($media_file !== null && $media_file->isImage()) {
-                $thumb = $media_file->imageUrl(200, 200, 'crop');
-            }
-        } catch (Throwable) {
-            // Fehlende Datei o. ae. - dann eben kein Bild.
-        }
+        $media_file = $individual->findHighlightedMediaFile();
+        $thumb      = $media_file !== null && $media_file->isImage() ? $media_file->imageUrl(200, 200, 'crop') : null;
 
         return [
             'xref'     => $individual->xref(),
@@ -210,13 +201,8 @@ trait JsonBuilders
 
         foreach ($media->mediaFiles() as $media_file) {
             $is_image = $media_file->isImage();
-
-            try {
-                $thumb = $is_image ? $media_file->imageUrl(400, 400, 'contain') : null;
-                $full  = $media_file->isExternal() ? $media_file->filename() : $media_file->downloadUrl('inline');
-            } catch (Throwable) {
-                continue;
-            }
+            $thumb    = $is_image ? $media_file->imageUrl(400, 400, 'contain') : null;
+            $full     = $media_file->isExternal() ? $media_file->filename() : $media_file->downloadUrl('inline');
 
             $data[] = [
                 'xref'    => $media->xref(),
@@ -255,11 +241,8 @@ trait JsonBuilders
             return '';
         }
 
-        try {
-            return $this->plain(Registry::container()->get(RelationshipService::class)->getCloseRelationshipName($other, $individual));
-        } catch (Throwable) {
-            return '';
-        }
+        // Liefert '' fuer nicht verwandte Personen.
+        return $this->plain(Registry::container()->get(RelationshipService::class)->getCloseRelationshipName($other, $individual));
     }
 
     /**
@@ -305,13 +288,9 @@ trait JsonBuilders
         // Steht am Ereignis keine Koordinate (2 PLAC / 3 MAP), kennt webtrees den Ort vielleicht aus seiner
         // Ortstabelle (Verwaltung -> Geografische Daten).
         if ($latitude === null || $longitude === null) {
-            try {
-                $location  = new PlaceLocation($place->gedcomName());
-                $latitude  = $location->latitude();
-                $longitude = $location->longitude();
-            } catch (Throwable) {
-                $latitude = $longitude = null;
-            }
+            $location  = new PlaceLocation($place->gedcomName());
+            $latitude  = $location->latitude();
+            $longitude = $location->longitude();
         }
 
         return [
@@ -343,11 +322,7 @@ trait JsonBuilders
             return '';
         }
 
-        try {
-            return $this->plain(Registry::elementFactory()->make($fact->tag())->value($value, $tree));
-        } catch (Throwable) {
-            return $value;
-        }
+        return $this->plain(Registry::elementFactory()->make($fact->tag())->value($value, $tree));
     }
 
     /**

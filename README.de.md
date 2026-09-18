@@ -71,9 +71,8 @@ einen Baums die Dateien des anderen und können sie verknüpfen.
 Die vollständige Beschreibung der Schnittstelle (Adressen, Anmeldung, alle Aktionen, Fehlercodes)
 steht in der [englischen README](README.md#for-developers).
 
-Aufbau des Quelltexts: `WebtreesAndApiModule.php` ist der Einstieg (Metadaten, Menü, Middleware), der Rest liegt nach
-Aufgabe getrennt unter `src/` – Seiten und Koppeln, lesende und schreibende Endpunkte, JSON-Bausteine und reine
-GEDCOM-Textfunktionen. Die englischen Texte stehen in `resources/lang/en.php`.
+Einstieg in den Quelltext ist der Kopf von `WebtreesAndApiModule.php`: dort steht, welcher Teil des Moduls in
+welcher Datei unter `src/` liegt.
 
 Releases: `./build-release.sh` baut `webtreesand-api-vX.Y.Z.zip` aus dem letzten Commit.
 `latest-version.txt` auf dem Hauptzweig speist den Update-Hinweis in der webtrees-Verwaltung.

@@ -23,7 +23,7 @@ use Fisharebest\Webtrees\Webtrees;
 use Illuminate\Database\Query\JoinClause;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
-use Throwable;
+use InvalidArgumentException;
 
 use function in_array;
 use function max;
@@ -407,7 +407,7 @@ trait ReadActions
         foreach ($rows as $xref => $changes) {
             try {
                 $record = Registry::gedcomRecordFactory()->make((string) $xref, $tree);
-            } catch (Throwable) {
+            } catch (InvalidArgumentException) {
                 // Angelegt und gleich wieder geloescht, beides noch ausstehend: webtrees kann daraus kein Objekt
                 // bauen ("Invalid GEDCOM record"). Der Moderator soll den Eintrag trotzdem sehen und wegraeumen koennen.
                 $record = null;
