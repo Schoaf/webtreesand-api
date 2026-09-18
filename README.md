@@ -39,7 +39,7 @@ for any user, whatever their rights in webtrees. Default: all trees.
 with its name, download addresses (https only) and the scheme of its connect link. It then appears next to webtreesAnd
 on the “App” page and when connecting. With the fields empty nothing changes. See [Connecting other apps](#connecting-other-apps).
 
-![Settings page: install the app, family trees for the app, status](docs/einstellungen.png)
+![Settings page: install the app, family trees for the app, another app, status](docs/einstellungen.png)
 
 ## For family members: the “App” page
 

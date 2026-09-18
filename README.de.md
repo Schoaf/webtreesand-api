@@ -40,7 +40,7 @@ mit Name, Download-Adressen (nur https) und dem Schema ihres Verbinden-Links ein
 webtreesAnd auf der Seite „App“ und beim Verbinden. Bleiben die Felder leer, ändert sich nichts.
 Siehe [Andere Apps koppeln](#andere-apps-koppeln).
 
-![Einstellungsseite: App installieren, Stammbäume für die App, Status](docs/einstellungen.png)
+![Einstellungsseite: App installieren, Stammbäume für die App, weitere App, Status](docs/einstellungen.png)
 
 ## Für Familienmitglieder: die Seite „App"
 
