@@ -35,6 +35,10 @@ module list). The page offers the app download, the status (https, upload limit)
 **which family trees the app may reach.** Trees that are not ticked cannot be reached through this module at all –
 for any user, whatever their rights in webtrees. Default: all trees.
 
+**Another app (optional):** a second app that follows the same interface – for iPhone and iPad, say – can be entered
+with its name, download addresses (https only) and the scheme of its connect link. It then appears next to webtreesAnd
+on the “App” page and when connecting. With the fields empty nothing changes. See [Connecting other apps](#connecting-other-apps).
+
 ![Settings page: install the app, family trees for the app, status](docs/einstellungen.png)
 
 ## For family members: the “App” page
@@ -109,6 +113,21 @@ Rules for clients:
 3. `GET …/Info` – `user.loggedIn` tells whether it worked
 
 Image addresses (`thumb`, `file`) are webtrees' signed media routes and need the same cookie.
+
+### Connecting other apps
+
+Any client can use the interface with the normal sign-in above. A second app can also take part in the one-tap
+connection if a manager enters it under *Settings → Another app* with its own URL scheme. The contract is the one
+webtreesAnd uses:
+
+1. The “App” page and the “Connect” page open `<scheme>://connect?url=<base URL>&code=<48 hex>&tree=<tree name>&user=<user name>`
+   in the app. `tree` and `user` are hints for the display; `url` is the webtrees base URL.
+2. The app calls `GET <url>…/Info` to obtain a session cookie and the `csrf` token, then `POST …/Pair` with header
+   `X-CSRF-TOKEN` and body `{"code": "<code>"}` – like every other POST. Answer: `{"ok":true,"tree":"…","user":"…"}` – the session
+   is now signed in as that user – or `{"ok":false,"error":"pair-invalid"|"pair-expired"}`.
+3. The code is valid for 10 minutes and exactly once, whichever app redeems it. It is only offered over https.
+
+Nothing else in the module is specific to one app: the JSON endpoints, rights and privacy are the same for every client.
 
 ### Reading (GET)
 

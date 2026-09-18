@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.0 – 2026-09-18
+A second app next to webtreesAnd; the API level stays 7, the JSON answers do not change.
+- **Settings: “Another app (optional)”.** A manager can enter a second app that follows the same interface – name,
+  download addresses for Android and iPhone/iPad (https only) and the scheme of its connect link. With a name entered,
+  the “App” page offers both downloads, and “Connect” shows one button per app; the QR code leads to the “Connect”
+  page, which then lets the person choose instead of forwarding at once. The one-time code is the same for both and
+  is used up by whichever app redeems it. webtreesAnd stays first and remains the default; with the fields empty
+  nothing changes.
+- The connect link is now documented as a contract for other apps: `<scheme>://connect?url=…&code=…&tree=…&user=…`,
+  redeemed with `POST Pair {code}`.
+
 ## 1.0.0 – 2026-09-18
 Hardening after a security review of the module; the API level stays 7, nothing changes for clients that use the
 documented fields.

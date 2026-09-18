@@ -26,8 +26,10 @@ use function hash;
 use function http_build_query;
 use function implode;
 use function in_array;
+use function filter_var;
 use function ini_get;
 use function intdiv;
+use function mb_substr;
 use function min;
 use function parse_url;
 use function preg_match;
@@ -35,11 +37,13 @@ use function random_bytes;
 use function redirect;
 use function response;
 use function str_starts_with;
+use function strtolower;
 use function strtoupper;
 use function substr;
 use function time;
 use function trim;
 
+use const FILTER_VALIDATE_URL;
 use const PHP_URL_HOST;
 
 /**
@@ -78,6 +82,13 @@ trait AppPages
             'save_url'     => $this->actionUrl('Admin', null),
             'download_url' => self::APP_DOWNLOAD_URL,
             'download_qr'  => $this->qrSvg(self::APP_DOWNLOAD_URL),
+            'app2'         => $this->secondApp(),
+            'app2_raw'     => [
+                'name'    => $this->getPreference(self::APP2_NAME_SETTING),
+                'android' => $this->getPreference(self::APP2_ANDROID_SETTING),
+                'ios'     => $this->getPreference(self::APP2_IOS_SETTING),
+                'scheme'  => $this->getPreference(self::APP2_SCHEME_SETTING),
+            ],
             'version'      => $this->customModuleVersion(),
             'api'          => self::API_VERSION,
             'https'        => str_starts_with($base_url, 'https://'),
@@ -98,6 +109,42 @@ trait AppPages
 
         // '-' statt leer: eine leere Einstellung hiesse "nie gespeichert" und damit "alle".
         $this->setPreference(self::TREES_SETTING, $names === [] ? '-' : implode(',', $names));
+
+        // Zweite App: nur gueltige Werte werden gespeichert, alles andere wird verworfen und gemeldet.
+        $body    = Validator::parsedBody($request);
+        $name    = trim($body->string('app2_name', ''));
+        $android = trim($body->string('app2_android_url', ''));
+        $ios     = trim($body->string('app2_ios_url', ''));
+        $scheme  = strtolower(trim($body->string('app2_scheme', '')));
+        $rejected = [];
+
+        // Download-Adressen: nur https und nur, was PHP als URL erkennt.
+        $checkUrl = static function (string $url) use (&$rejected): string {
+            if ($url === '' || (str_starts_with($url, 'https://') && filter_var($url, FILTER_VALIDATE_URL) !== false)) {
+                return $url;
+            }
+
+            $rejected[] = $url;
+
+            return '';
+        };
+        $android = $checkUrl($android);
+        $ios     = $checkUrl($ios);
+
+        // Ein eigenes URL-Schema: Buchstaben, Ziffern, + . - ; nicht das von webtreesAnd und keins, das ein Browser selbst versteht.
+        if ($scheme !== '' && (preg_match('/^[a-z][a-z0-9+.-]{1,30}$/', $scheme) !== 1 || in_array($scheme, ['webtreesand', 'http', 'https', 'javascript', 'data', 'file', 'intent'], true))) {
+            $rejected[] = $scheme;
+            $scheme     = '';
+        }
+
+        $this->setPreference(self::APP2_NAME_SETTING, mb_substr($name, 0, 60));
+        $this->setPreference(self::APP2_ANDROID_SETTING, $android);
+        $this->setPreference(self::APP2_IOS_SETTING, $ios);
+        $this->setPreference(self::APP2_SCHEME_SETTING, $scheme);
+
+        if ($rejected !== []) {
+            FlashMessages::addMessage(I18N::translate('Nicht übernommen (nur https-Adressen und ein einfaches Schema wie „meineapp“ sind erlaubt): %s', implode(', ', $rejected)), 'warning');
+        }
 
         FlashMessages::addMessage(I18N::translate('Die Einstellungen wurden gespeichert.'), 'success');
 
@@ -120,6 +167,8 @@ trait AppPages
 
         $connect_url = '';
         $deep_link   = '';
+        $deep_link2  = '';
+        $app2        = $this->secondApp();
 
         if (Auth::check() && $secure) {
             $code = bin2hex(random_bytes(24));
@@ -129,7 +178,8 @@ trait AppPages
             // Der Code reist im URL-Fragment (#...): das Fragment erreicht nie den Server und steht damit weder im
             // Zugriffsprotokoll des Webservers noch in dem eines Proxys. Die Verbinden-Seite liest es per JavaScript.
             $connect_url = $this->actionUrl('Connect', null) . '#' . http_build_query($params);
-            $deep_link   = $this->deepLink($base_url, $params);
+            $deep_link   = $this->deepLink('webtreesand', $base_url, $params);
+            $deep_link2  = $app2 !== null && $app2['scheme'] !== '' ? $this->deepLink($app2['scheme'], $base_url, $params) : '';
         }
 
         return $this->viewResponse($this->name() . '::app', [
@@ -142,6 +192,9 @@ trait AppPages
             'connect_url'  => $connect_url,
             'connect_qr'   => $connect_url === '' ? '' : $this->qrSvg($connect_url),
             'deep_link'    => $deep_link,
+            'app2'         => $app2,
+            'app2_qr'      => $app2 === null ? '' : $this->qrSvg($app2['android'] !== '' ? $app2['android'] : $app2['ios']),
+            'deep_link2'   => $deep_link2,
             'minutes'      => intdiv(self::PAIR_SECONDS, 60),
         ]);
     }
@@ -158,6 +211,7 @@ trait AppPages
             'tree'         => null,
             'base_url'     => Validator::attributes($request)->string('base_url'),
             'download_url' => self::APP_DOWNLOAD_URL,
+            'app2'         => $this->secondApp(),
         ]);
     }
 
@@ -207,9 +261,31 @@ trait AppPages
     /**
      * @param array<string,string> $params
      */
-    private function deepLink(string $base_url, array $params): string
+    private function deepLink(string $scheme, string $base_url, array $params): string
     {
-        return 'webtreesand://connect?' . http_build_query(['url' => $base_url] + $params);
+        return $scheme . '://connect?' . http_build_query(['url' => $base_url] + $params);
+    }
+
+    /**
+     * Die vom Verwalter eingetragene zweite App - oder null, wenn keine eingetragen ist.
+     * Sie folgt derselben Schnittstelle und demselben Koppel-Link, nur mit eigenem Schema.
+     *
+     * @return array{name:string,android:string,ios:string,scheme:string}|null
+     */
+    private function secondApp(): ?array
+    {
+        $name = trim($this->getPreference(self::APP2_NAME_SETTING));
+
+        if ($name === '') {
+            return null;
+        }
+
+        return [
+            'name'    => $name,
+            'android' => $this->getPreference(self::APP2_ANDROID_SETTING),
+            'ios'     => $this->getPreference(self::APP2_IOS_SETTING),
+            'scheme'  => $this->getPreference(self::APP2_SCHEME_SETTING),
+        ];
     }
 
     /**

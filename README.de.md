@@ -35,6 +35,11 @@ eintippen). Die Seite bietet den App-Download, den Status (https, Upload-Limit) 
 **welche Stammbäume die App erreichen darf.** Nicht angekreuzte Bäume sind über dieses Modul gar nicht erreichbar –
 für keinen Benutzer, unabhängig von seinen Rechten in webtrees. Standard: alle Bäume.
 
+**Weitere App (optional):** Eine zweite App, die derselben Schnittstelle folgt – etwa für iPhone und iPad – lässt sich
+mit Name, Download-Adressen (nur https) und dem Schema ihres Verbinden-Links eintragen. Sie erscheint dann neben
+webtreesAnd auf der Seite „App“ und beim Verbinden. Bleiben die Felder leer, ändert sich nichts.
+Siehe [Andere Apps koppeln](#andere-apps-koppeln).
+
 ![Einstellungsseite: App installieren, Stammbäume für die App, Status](docs/einstellungen.png)
 
 ## Für Familienmitglieder: die Seite „App"
@@ -78,6 +83,15 @@ einen Baums die Dateien des anderen und können sie verknüpfen.
 
 Die vollständige Beschreibung der Schnittstelle (Adressen, Anmeldung, alle Aktionen, Fehlercodes)
 steht in der [englischen README](README.md#for-developers).
+
+**Andere Apps koppeln:** Jeder Client kann die Schnittstelle mit der normalen Anmeldung benutzen. Eine zweite App kann
+zusätzlich am Verbinden per Tipp teilnehmen, wenn ein Verwalter sie unter *Einstellungen → Weitere App* mit eigenem
+URL-Schema einträgt. Der Vertrag ist der von webtreesAnd: Die Seiten „App“ und „Verbinden“ öffnen
+`<schema>://connect?url=<Basisadresse>&code=<48 Hex>&tree=<Baumname>&user=<Benutzername>` in der App. Die App holt sich
+mit `GET …/Info` Sitzungs-Cookie und `csrf`, dann `POST …/Pair` mit Header `X-CSRF-TOKEN` und Rumpf `{"code": "…"}`;
+Antwort `{"ok":true,"tree":"…","user":"…"}`, die Sitzung ist jetzt als dieser Benutzer angemeldet. Der Code gilt
+10 Minuten und genau einmal, egal welche App ihn einlöst, und wird nur über https angeboten. Sonst ist nichts im Modul
+an eine App gebunden: JSON-Endpunkte, Rechte und Datenschutz sind für jeden Client gleich.
 
 Einstieg in den Quelltext ist der Kopf von `WebtreesAndApiModule.php`: dort steht, welcher Teil des Moduls in
 welcher Datei unter `src/` liegt.

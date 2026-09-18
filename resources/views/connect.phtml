@@ -5,16 +5,24 @@ declare(strict_types=1);
 use Fisharebest\Webtrees\I18N;
 
 /**
- * @var string $title
- * @var string $base_url
- * @var string $download_url
+ * @var string                                                           $title
+ * @var string                                                           $base_url
+ * @var string                                                           $download_url
+ * @var array{name:string,android:string,ios:string,scheme:string}|null $app2
  */
+
+$app2_scheme = $app2 !== null && $app2['scheme'] !== '' ? $app2['scheme'] : '';
 
 ?>
 
 <h2 class="wt-page-title"><?= e($title) ?></h2>
 
-<p><a class="btn btn-primary btn-lg" id="webtreesand-open" href="webtreesand://connect?url=<?= e(rawurlencode($base_url)) ?>"><?= I18N::translate('webtreesAnd öffnen') ?></a></p>
+<p>
+    <a class="btn btn-primary btn-lg" data-scheme="webtreesand" href="webtreesand://connect?url=<?= e(rawurlencode($base_url)) ?>"><?= I18N::translate('webtreesAnd öffnen') ?></a>
+    <?php if ($app2_scheme !== '') : ?>
+        <a class="btn btn-outline-primary btn-lg" data-scheme="<?= e($app2_scheme) ?>" href="<?= e($app2_scheme) ?>://connect?url=<?= e(rawurlencode($base_url)) ?>"><?= I18N::translate('%s öffnen', e($app2['name'] ?? '')) ?></a>
+    <?php endif ?>
+</p>
 
 <p class="text-muted"><?= I18N::translate('Nichts passiert? Dann ist die App noch nicht installiert oder der Code ist abgelaufen – öffne in webtrees die Seite „App“ erneut.') ?></p>
 
@@ -24,7 +32,7 @@ use Fisharebest\Webtrees\I18N;
   // Code, Baum und Benutzer stehen im URL-Fragment (#code=...): das Fragment erreicht nie den Server und damit
   // kein Zugriffsprotokoll. Hier wird daraus der App-Link gebaut - und das Fragment aus dem Browser-Verlauf entfernt.
   (function () {
-    var link   = document.getElementById('webtreesand-open');
+    var links  = document.querySelectorAll('a[data-scheme]');
     var given  = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     var query  = new URLSearchParams({ url: <?= json_encode($base_url, JSON_THROW_ON_ERROR | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?> });
 
@@ -34,13 +42,18 @@ use Fisharebest\Webtrees\I18N;
       }
     });
 
-    link.href = 'webtreesand://connect?' + query.toString();
+    links.forEach(function (link) {
+      link.href = link.getAttribute('data-scheme') + '://connect?' + query.toString();
+    });
 
     if (window.history.replaceState) {
       window.history.replaceState(null, '', window.location.pathname + window.location.search);
     }
 
-    // Gleich weiterreichen - der Knopf bleibt fuer Browser, die das nicht von selbst duerfen.
-    window.setTimeout(function () { window.location.href = link.href; }, 400);
+    // Gibt es nur eine App, gleich weiterreichen - der Knopf bleibt fuer Browser, die das nicht von selbst duerfen.
+    // Bei zwei Apps entscheidet der Mensch, welche er hat.
+    if (links.length === 1) {
+      window.setTimeout(function () { window.location.href = links[0].href; }, 400);
+    }
   })();
 </script>

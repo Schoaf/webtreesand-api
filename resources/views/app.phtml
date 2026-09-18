@@ -5,15 +5,18 @@ declare(strict_types=1);
 use Fisharebest\Webtrees\I18N;
 
 /**
- * @var string $title
- * @var bool   $logged_in
- * @var bool   $secure
- * @var string $download_url
- * @var string $download_qr
- * @var string $connect_url
- * @var string $connect_qr
- * @var string $deep_link
- * @var int    $minutes
+ * @var string                                                           $title
+ * @var bool                                                             $logged_in
+ * @var bool                                                             $secure
+ * @var string                                                           $download_url
+ * @var string                                                           $download_qr
+ * @var string                                                           $connect_url
+ * @var string                                                           $connect_qr
+ * @var string                                                           $deep_link
+ * @var array{name:string,android:string,ios:string,scheme:string}|null $app2
+ * @var string                                                           $app2_qr
+ * @var string                                                           $deep_link2
+ * @var int                                                              $minutes
  */
 
 ?>
@@ -31,6 +34,22 @@ use Fisharebest\Webtrees\I18N;
                     <p class="text-muted small mb-1"><?= I18N::translate('Am Computer? Dann diesen Code mit der Handy-Kamera scannen:') ?></p>
                     <div style="max-width: 11rem; background: #fff; padding: .5rem;"><?= $download_qr ?></div>
                 <?php endif ?>
+
+                <?php if ($app2 !== null && ($app2['android'] !== '' || $app2['ios'] !== '')) : ?>
+                    <hr>
+                    <p><?= I18N::translate('Oder %s:', e($app2['name'])) ?></p>
+                    <p>
+                        <?php if ($app2['android'] !== '') : ?>
+                            <a class="btn btn-outline-primary" href="<?= e($app2['android']) ?>"><?= I18N::translate('Für Android') ?></a>
+                        <?php endif ?>
+                        <?php if ($app2['ios'] !== '') : ?>
+                            <a class="btn btn-outline-primary" href="<?= e($app2['ios']) ?>"><?= I18N::translate('Für iPhone/iPad') ?></a>
+                        <?php endif ?>
+                    </p>
+                    <?php if ($app2_qr !== '') : ?>
+                        <div style="max-width: 11rem; background: #fff; padding: .5rem;"><?= $app2_qr ?></div>
+                    <?php endif ?>
+                <?php endif ?>
             </div>
         </div>
     </div>
@@ -45,7 +64,12 @@ use Fisharebest\Webtrees\I18N;
                     <p><?= I18N::translate('Das Verbinden per Code ist nur über eine verschlüsselte Verbindung (https) möglich. In der App kannst du dich stattdessen mit Adresse, Benutzername und Passwort anmelden.') ?></p>
                 <?php else : ?>
                     <p><?= I18N::translate('Ein Tipp genügt – Adresse und Passwort musst du in der App nicht eintippen.') ?></p>
-                    <p><a class="btn btn-primary" href="<?= e($deep_link) ?>"><?= I18N::translate('Jetzt verbinden') ?></a></p>
+                    <p>
+                        <a class="btn btn-primary" href="<?= e($deep_link) ?>"><?= $deep_link2 === '' ? I18N::translate('Jetzt verbinden') : I18N::translate('Mit webtreesAnd verbinden') ?></a>
+                        <?php if ($deep_link2 !== '') : ?>
+                            <a class="btn btn-outline-primary" href="<?= e($deep_link2) ?>"><?= I18N::translate('Mit %s verbinden', e($app2['name'] ?? '')) ?></a>
+                        <?php endif ?>
+                    </p>
                     <?php if ($connect_qr !== '') : ?>
                         <p class="text-muted small mb-1"><?= I18N::translate('Am Computer? Dann diesen Code mit der Handy-Kamera scannen:') ?></p>
                         <div style="max-width: 13rem; background: #fff; padding: .5rem;"><?= $connect_qr ?></div>

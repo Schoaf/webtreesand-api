@@ -86,6 +86,14 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     // Moduleinstellung: fuer welche Stammbaeume die App freigegeben ist. '*' (Standard) = alle, sonst Namen mit Komma.
     private const string TREES_SETTING      = 'app_trees';
 
+    // Eine zweite App, die derselben Schnittstelle folgt (z. B. fuer iOS): der Verwalter traegt sie in den
+    // Einstellungen ein, dann erscheint sie neben webtreesAnd auf der Seite "App" und beim Koppeln.
+    // Leerer Name = keine zweite App. Das Schema ist der Teil vor "://" des Koppel-Links (webtreesAnd: "webtreesand").
+    private const string APP2_NAME_SETTING    = 'app2_name';
+    private const string APP2_ANDROID_SETTING = 'app2_android_url';
+    private const string APP2_IOS_SETTING     = 'app2_ios_url';
+    private const string APP2_SCHEME_SETTING  = 'app2_scheme';
+
     private const int PAGE_SIZE           = 50;
     private const int MEDIA_PAGE_SIZE     = 60;
     private const int MAX_PEDIGREE_GEN    = 6;
@@ -137,7 +145,7 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
 
     public function customModuleVersion(): string
     {
-        return '1.0.0';
+        return '1.1.0';
     }
 
     public function customModuleLatestVersionUrl(): string
