@@ -23,7 +23,7 @@ PC, in derselben Installation, unter denselben Rechten und Regeln.
 
 Das Modul hat einen Zweck: **[webtreesAnd](https://github.com/thobgg/WebtreesAnd)**, eine native Android-App (Kotlin,
 kein WebView) für Handy und Tablet. Jede Aktion, jedes Feld und das Verbinden per Tipp sind für diese App gebaut und dort
-täglich im Einsatz; andere Apps können dieselbe Schnittstelle nutzen. [APK herunterladen](https://github.com/thobgg/WebtreesAnd/releases/latest) – signiert;
+täglich im Einsatz. [APK herunterladen](https://github.com/thobgg/WebtreesAnd/releases/latest) – signiert;
 außerhalb des Play Store fragt Android einmalig, ob der Browser Apps installieren darf.
 
 | Tablet: Baum und Profil nebeneinander | Handy: das Profil als Zeitleiste |
