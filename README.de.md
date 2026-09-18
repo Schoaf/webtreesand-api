@@ -19,8 +19,8 @@ in `modules_v4/`, der webtrees-Kern wird nicht verändert.
 2. Nach `modules_v4/` der webtrees-Installation entpacken, sodass `modules_v4/webtreesand-api/module.php` entsteht.
 3. Fertig – das Modul ist aktiv und steht unter *Verwaltung → Module → Alle Module*.
 
-Aktualisieren: Ordner ersetzen. Entfernen: Ordner löschen. Das Modul legt keine Datenbanktabellen an
-und speichert keine Einstellungen.
+Aktualisieren: Ordner ersetzen. Entfernen: Ordner löschen. Das Modul legt keine Datenbanktabellen an. Es
+speichert eine Moduleinstellung (welche Bäume die App erreichen darf) und je Benutzer nur den Hash eines Einmal-Codes, solange er gilt.
 
 ## Einstellungen
 
@@ -70,6 +70,10 @@ einen Baums die Dateien des anderen und können sie verknüpfen.
 
 Die vollständige Beschreibung der Schnittstelle (Adressen, Anmeldung, alle Aktionen, Fehlercodes)
 steht in der [englischen README](README.md#for-developers).
+
+Aufbau des Quelltexts: `WebtreesAndApiModule.php` ist der Einstieg (Metadaten, Menü, Middleware), der Rest liegt nach
+Aufgabe getrennt unter `src/` – Seiten und Koppeln, lesende und schreibende Endpunkte, JSON-Bausteine und reine
+GEDCOM-Textfunktionen. Die englischen Texte stehen in `resources/lang/en.php`.
 
 Releases: `./build-release.sh` baut `webtreesand-api-vX.Y.Z.zip` aus dem letzten Commit.
 `latest-version.txt` auf dem Hauptzweig speist den Update-Hinweis in der webtrees-Verwaltung.

@@ -15,6 +15,10 @@ documented fields.
 - `Media`: the `folder` parameter is gone – webtrees ignored it anyway (`auto=1` stores the file under its SHA-1 name
   directly in the tree's media folder). The README says so now.
 - Cosmetic: the “admin only” check in the middleware compares case-insensitively, like webtrees itself.
+- `Pending` no longer fails with “Invalid GEDCOM record” when a record was created and deleted again while both
+  changes are still pending; the entry is listed with name and type taken from the raw GEDCOM.
+- Code split by task: the module class stays the entry point, `src/` holds the pages, the read and write endpoints,
+  the JSON builders and the pure GEDCOM text helpers. English texts moved to `resources/lang/en.php`.
 
 ## 0.8.0 – 2026-09-17
 - **Settings page** in the control panel (wrench icon in the module list): install the app (QR code), choose **which

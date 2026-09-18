@@ -19,8 +19,8 @@ a JSON interface – for reading **and** writing. It is an ordinary custom modul
 2. Unpack it into `modules_v4/` of your webtrees installation, so that you get `modules_v4/webtreesand-api/module.php`.
 3. Done – the module is active and listed under *Control panel → Modules → All modules*.
 
-To update, replace the folder. To uninstall, delete it. The module creates no database tables and
-stores no settings.
+To update, replace the folder. To uninstall, delete it. The module creates no database tables. It stores
+one module setting (which trees the app may reach) and, per user, only the hash of a pairing code while it is valid.
 
 ## Settings
 
@@ -138,6 +138,13 @@ Dates in GEDCOM format (`12 MAR 1890`, `ABT 1850`, `BET 1900 AND 1910`). Error c
 `family-not-found`, `name-required`, `upload-not-allowed`, `upload-failed`.
 
 Not included yet: creating sources and repositories, merging records.
+
+### Code layout
+
+`WebtreesAndApiModule.php` is the entry point (metadata, menu, middleware). The rest is split by task under `src/`:
+`AppPages` (settings, “App” page, pairing), `ReadActions` (GET endpoints), `WriteActions` (POST endpoints),
+`JsonBuilders` (response building blocks) and `GedcomText` (pure GEDCOM text helpers, no webtrees state).
+English texts live in `resources/lang/en.php`.
 
 ### Releases
 
