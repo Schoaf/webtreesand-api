@@ -22,7 +22,8 @@ in the same installation, under the same rights and rules.
 ## The app: webtreesAnd
 
 The module exists for one purpose: **[webtreesAnd](https://github.com/thobgg/WebtreesAnd)**, a native Android app (Kotlin,
-no WebView) for phone and tablet. [Download the APK](https://github.com/thobgg/WebtreesAnd/releases/latest) – it is signed;
+no WebView) for phone and tablet. It is the reference app for this interface: every action, every field and the one-tap
+connection were built for it and are in daily use there. Other apps may follow the same interface; webtreesAnd defines it. [Download the APK](https://github.com/thobgg/WebtreesAnd/releases/latest) – it is signed;
 outside the Play Store, Android asks once to allow your browser to install apps.
 
 | Tablet: tree and profile side by side | Phone: the profile as a timeline |
