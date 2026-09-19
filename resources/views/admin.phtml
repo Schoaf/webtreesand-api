@@ -37,6 +37,16 @@ use Fisharebest\Webtrees\I18N;
             <?php if ($download_qr !== '') : ?>
                 <div style="max-width: 10rem; background: #fff; padding: .5rem;"><?= $download_qr ?></div>
             <?php endif ?>
+
+            <h2 class="h4 mt-4"><?= I18N::translate('Mit dem Konto verbinden') ?></h2>
+            <p><?= I18N::translate('Die Seite „App“ zeigt einen QR-Code zum Anmelden. Mit der Handy-Kamera gescannt, öffnet er die App und meldet sie mit dem eigenen Konto an – ohne Adresse und Passwort einzutippen.') ?></p>
+            <p>
+                <?php foreach ($trees as $tree) : ?>
+                    <?php if ($tree['enabled']) : ?>
+                        <a class="btn btn-primary mb-1" href="<?= e($tree['app_url']) ?>"><?= I18N::translate('Seite „App“ öffnen: %s', e($tree['title'])) ?></a>
+                    <?php endif ?>
+                <?php endforeach ?>
+            </p>
         </div>
 
         <div class="col-lg-7">
