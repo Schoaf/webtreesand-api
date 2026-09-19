@@ -79,6 +79,7 @@ trait AppPages
         return $this->viewResponse($this->name() . '::admin', [
             'title'        => $this->title(),
             'trees'        => $trees,
+            'app_menu'     => $this->getPreference(self::MENU_SETTING, '0') === '1',
             'save_url'     => $this->actionUrl('Admin', null),
             'download_url' => self::APP_DOWNLOAD_URL,
             'download_qr'  => $this->qrSvg(self::APP_DOWNLOAD_URL),
@@ -109,6 +110,7 @@ trait AppPages
 
         // '-' statt leer: eine leere Einstellung hiesse "nie gespeichert" und damit "alle".
         $this->setPreference(self::TREES_SETTING, $names === [] ? '-' : implode(',', $names));
+        $this->setPreference(self::MENU_SETTING, Validator::parsedBody($request)->boolean('app_menu', false) ? '1' : '0');
 
         // Zweite App: nur gueltige Werte werden gespeichert, alles andere wird verworfen und gemeldet.
         $body    = Validator::parsedBody($request);

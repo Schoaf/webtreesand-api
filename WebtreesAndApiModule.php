@@ -13,6 +13,8 @@ use Fisharebest\Webtrees\Module\AbstractModule;
 use Fisharebest\Webtrees\Module\ModuleConfigInterface;
 use Fisharebest\Webtrees\Module\ModuleCustomInterface;
 use Fisharebest\Webtrees\Module\ModuleCustomTrait;
+use Fisharebest\Webtrees\Module\ModuleFooterInterface;
+use Fisharebest\Webtrees\Module\ModuleFooterTrait;
 use Fisharebest\Webtrees\Module\ModuleMenuInterface;
 use Fisharebest\Webtrees\Module\ModuleMenuTrait;
 use Fisharebest\Webtrees\Registry;
@@ -50,10 +52,11 @@ use function strtolower;
  *   src/JsonBuilders.php  Bausteine der JSON-Antworten
  *   src/GedcomText.php    reine GEDCOM-Textfunktionen (bauen, pruefen, entschaerfen)
  */
-class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterface, ModuleConfigInterface, ModuleMenuInterface, MiddlewareInterface
+class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterface, ModuleConfigInterface, ModuleMenuInterface, ModuleFooterInterface, MiddlewareInterface
 {
     use ModuleCustomTrait;
     use ModuleMenuTrait;
+    use ModuleFooterTrait;
 
     use AppPages;
     use ReadActions;
@@ -87,6 +90,10 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
 
     // Moduleinstellung: fuer welche Stammbaeume die App freigegeben ist. '*' (Standard) = alle, sonst Namen mit Komma.
     private const string TREES_SETTING      = 'app_trees';
+
+    // Moduleinstellung: Menuepunkt "App" im Hauptmenue zeigen. Standard aus - der Weg zur Seite "App" ist der Link
+    // in der Fusszeile. (Das Haekchen unter Verwaltung -> Module -> Menues schaltet das GANZE Modul ab, auch die API.)
+    private const string MENU_SETTING       = 'app_menu';
 
     // Eine zweite App, die derselben Schnittstelle folgt (z. B. fuer iOS): der Verwalter traegt sie in den
     // Einstellungen ein, dann erscheint sie neben webtreesAnd auf der Seite "App" und beim Koppeln.
@@ -177,16 +184,32 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     }
 
     /**
-     * Menuepunkt "App" - nur fuer angemeldete Benutzer, denn dort wird das eigene Konto mit der App verbunden.
-     * (Verwalter koennen ihn unter Verwaltung -> Module -> Menues verschieben oder abschalten.)
+     * Menuepunkt "App" - nur wenn in den Moduleinstellungen eingeschaltet und nur fuer angemeldete Benutzer,
+     * denn dort wird das eigene Konto mit der App verbunden.
      */
     public function getMenu(Tree $tree): Menu|null
     {
-        if (!Auth::check() || !$this->treeEnabled($tree)) {
+        if ($this->getPreference(self::MENU_SETTING, '0') !== '1' || !Auth::check() || !$this->treeEnabled($tree)) {
             return null;
         }
 
         return new Menu(I18N::translate('App'), $this->actionUrl('App', $tree->name()), 'menu-webtreesand', ['rel' => 'nofollow']);
+    }
+
+    /**
+     * Unauffaelliger Weg zur Seite "App": ein kleiner Link in der Fusszeile, nur fuer angemeldete Benutzer
+     * in freigegebenen Baeumen.
+     */
+    public function getFooter(ServerRequestInterface $request): string
+    {
+        $tree = Validator::attributes($request)->treeOptional();
+
+        if ($tree === null || !Auth::check() || !$this->treeEnabled($tree)) {
+            return '';
+        }
+
+        return '<div class="wt-footer wt-footer-webtreesand text-center my-2 small"><a href="' . e($this->actionUrl('App', $tree->name())) . '" rel="nofollow">'
+            . I18N::translate('App für Android') . '</a></div>';
     }
 
     /**

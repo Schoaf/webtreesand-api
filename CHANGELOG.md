@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+- The “App” page is reached through a small **footer link** “App for Android” (signed-in users, enabled trees only).
+  The main-menu entry is now **off by default**; managers can switch it on in the module settings.
+- The settings page explains the sign-in QR code and links to the “App” page of every enabled tree.
+
 ## 1.2.0 – 2026-09-19
 API level 8. New fields and actions only; existing answers keep all their fields.
 - **`Places?q=`**: place names of the tree as suggestions while typing (editors only, up to 20), searched per level

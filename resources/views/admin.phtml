@@ -9,6 +9,7 @@ use Fisharebest\Webtrees\I18N;
 /**
  * @var string                                                                  $title
  * @var array<int,array{name:string,title:string,enabled:bool,app_url:string}> $trees
+ * @var bool                                                                    $app_menu
  * @var string                                                                  $save_url
  * @var string                                                                  $download_url
  * @var string                                                                  $download_qr
@@ -32,7 +33,7 @@ use Fisharebest\Webtrees\I18N;
     <div class="row g-4 mb-4">
         <div class="col-lg-5">
             <h2 class="h4"><?= I18N::translate('App installieren') ?></h2>
-            <p><?= I18N::translate('Die App webtreesAnd gibt es bei GitHub. Familienmitglieder finden diesen Schritt auch auf der Seite „App“ im Menü des Stammbaums.') ?></p>
+            <p><?= I18N::translate('Die App webtreesAnd gibt es bei GitHub. Familienmitglieder finden diesen Schritt auch auf der Seite „App“ – angemeldet über den Link „App für Android“ in der Fußzeile.') ?></p>
             <p><a class="btn btn-secondary" href="<?= e($download_url) ?>"><?= I18N::translate('App herunterladen') ?></a></p>
             <?php if ($download_qr !== '') : ?>
                 <div style="max-width: 10rem; background: #fff; padding: .5rem;"><?= $download_qr ?></div>
@@ -51,7 +52,7 @@ use Fisharebest\Webtrees\I18N;
 
         <div class="col-lg-7">
             <h2 class="h4"><?= I18N::translate('Stammbäume für die App') ?></h2>
-            <p><?= I18N::translate('Nur angekreuzte Stammbäume sind über die App erreichbar – für alle Benutzer, unabhängig von ihren Rechten in webtrees. In nicht freigegebenen Bäumen erscheint auch der Menüpunkt „App“ nicht.') ?></p>
+            <p><?= I18N::translate('Nur angekreuzte Stammbäume sind über die App erreichbar – für alle Benutzer, unabhängig von ihren Rechten in webtrees. In nicht freigegebenen Bäumen erscheinen auch der Link und der Menüpunkt „App“ nicht.') ?></p>
 
             <table class="table table-sm align-middle">
                 <?php foreach ($trees as $tree) : ?>
@@ -70,6 +71,12 @@ use Fisharebest\Webtrees\I18N;
                     </tr>
                 <?php endforeach ?>
             </table>
+
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="app_menu" value="1" id="app_menu" <?= $app_menu ? 'checked' : '' ?>>
+                <label class="form-check-label" for="app_menu"><?= I18N::translate('Menüpunkt „App“ im Hauptmenü zeigen') ?></label>
+                <div class="form-text"><?= I18N::translate('Ohne Menüpunkt erreichen angemeldete Benutzer die Seite „App“ über den Link „App für Android“ in der Fußzeile.') ?></div>
+            </div>
         </div>
     </div>
 
