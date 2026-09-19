@@ -3,41 +3,39 @@
 **English** · [Deutsch](README.de.md)
 
 A [webtrees](https://webtrees.net/) module that gives the native Android app **[webtreesAnd](https://github.com/thobgg/WebtreesAnd)**
-a JSON interface – for reading **and** writing. It is an ordinary custom module: it lives in
+a JSON interface for reading **and** writing. It is an ordinary custom module: it lives in
 `modules_v4/`, the webtrees core is not modified.
 
-**Why:** it brings two worlds together. The person who maintains the tree meticulously at the PC keeps working in
-webtrees as before. The family, who so far only got a web address that is hard to use on a phone, get the tree on phone
-and tablet: who was that, how are we related, who has a birthday soon, which photos are there. And the way back is open:
-the photo of a gravestone or a corrected date sent from the app arrives as a pending change for the person at the PC,
-in the same installation, under the same rights and rules.
+**Why:** whoever maintains the tree at the PC keeps working in webtrees as before. The rest of the family, who so far
+only had a website that is hard to use on a phone, get the tree on phone and tablet through the app: tree,
+relationships, anniversaries and photos. Changes made in the app, such as a photo of a gravestone or a corrected date,
+arrive as pending changes in the same webtrees installation.
 
 | | |
 | - | - |
 | webtrees | 2.2.x (tested with 2.2.6); prepared for 2.3 |
 | PHP | 8.3 or newer (as required by webtrees 2.2) |
-| Access | read and write – always with the rights of the signed-in webtrees user |
+| Access | read and write, always with the rights of the signed-in webtrees user |
 | License | GPL-3.0 |
 
 ## The app: webtreesAnd
 
-The module exists for one purpose: **[webtreesAnd](https://github.com/thobgg/WebtreesAnd)**, a native Android app (Kotlin,
-no WebView) for phone and tablet. Every action, every field and the one-tap connection were built for this app and are in
-daily use there. [Download the APK](https://github.com/thobgg/WebtreesAnd/releases/latest) – it is signed;
-outside the Play Store, Android asks once to allow your browser to install apps.
+The module is the server side of **[webtreesAnd](https://github.com/thobgg/WebtreesAnd)**, a native Android app
+(Kotlin, no WebView) for phone and tablet. [Download the APK](https://github.com/thobgg/WebtreesAnd/releases/latest)
+(signed). Outside the Play Store, Android asks once to allow your browser to install apps.
 
 | Tablet: tree and profile side by side | Phone: the profile as a timeline |
 | - | - |
 | ![Tree and profile side by side](docs/app-tablet.png) | ![Profile on a phone](docs/app-handy.png) |
 
-- **The tree as the centre:** hourglass view with ancestors, partners, children and grandchildren, siblings on request;
+- **Tree:** hourglass view with ancestors, partners, children and grandchildren, siblings on request;
   pan and zoom freely, unfold branches upwards, make any person the centre.
-- **Profile:** life as a timeline (with marriage and the births of the children), the relationship to yourself
-  (“paternal grandfather”), photos, family, a map of the places of life.
+- **Profile:** a timeline of the person's life (with marriage and the births of the children), the relationship to
+  yourself (“paternal grandfather”), photos, family, a map of where the person lived.
 - **Editing:** add, change and delete events, add relatives with the “+” on any card, take or pick photos and attach
-  them to a person – resized to fit the server's upload limit.
+  them to a person, resized to fit the server's upload limit.
 - **Anniversaries** of the coming days, with a daily reminder if you like; moderators accept or reject pending changes in the app.
-- **Connect with one tap:** the “App” page in webtrees hands server, tree and a one-time code to the app; nothing to type.
+- **Connect with one tap:** the “App” page in webtrees hands server, tree and a one-time code to the app.
 
 German and English; the labels of the server come in the language of the app. Whatever is not native yet opens as a
 webtrees page in the same session. All pictures show the fictional demo tree “Familie Falkenrath”.
@@ -46,7 +44,7 @@ webtrees page in the same session. All pictures show the fictional demo tree “
 
 1. Download the ZIP from the [latest release](../../releases/latest).
 2. Unpack it into `modules_v4/` of your webtrees installation, so that you get `modules_v4/webtreesand-api/module.php`.
-3. Done – the module is active and listed under *Control panel → Modules → All modules*.
+3. Done. The module is active and listed under *Control panel → Modules → All modules*.
 
 To update, replace the folder. To uninstall, delete it. The module creates no database tables. It stores
 one module setting (which trees the app may reach) and, per user, only the hash of a pairing code while it is valid.
@@ -55,12 +53,11 @@ one module setting (which trees the app may reach) and, per user, only the hash 
 
 *Control panel → Modules → All modules → WebtreesAnd API → wrench icon* (tip: type “API” into the search box of the
 module list). The page offers the app download, the status (https, upload limit) and the most important switch:
-**which family trees the app may reach.** Trees that are not ticked cannot be reached through this module at all –
+**which family trees the app may reach.** Trees that are not ticked cannot be reached through this module at all,
 for any user, whatever their rights in webtrees. Default: all trees.
 
-**Another app (optional):** a second app that follows the same interface – for iPhone and iPad, say – can be entered
-with its name, download addresses (https only) and the scheme of its connect link. It then appears next to webtreesAnd
-on the “App” page and when connecting. With the fields empty nothing changes. See [Connecting other apps](#connecting-other-apps).
+**Another app (optional):** here a second app that follows the same interface can be entered, for iPhone and iPad, say.
+With the fields empty nothing changes. See [Connecting other apps](#connecting-other-apps).
 
 ![Settings page: install the app, family trees for the app, another app, status](docs/einstellungen.png)
 
@@ -68,8 +65,8 @@ on the “App” page and when connecting. With the fields empty nothing changes
 
 Signed-in users find a menu entry **App**. The page offers two steps:
 
-1. **Install the app** – a button and a QR code leading to the download.
-2. **Connect your account** – one tap (or a QR code when sitting at a computer) hands the server address, the tree and
+1. **Install the app:** a button and a QR code lead to the download.
+2. **Connect your account:** one tap (or a QR code when sitting at a computer) hands the server address, the tree and
    a one-time code to the app. There is nothing to type, and the password never reaches the phone.
 
 The one-time code is shown only to the signed-in user, is valid for 10 minutes and exactly once, and is only offered over
@@ -77,7 +74,7 @@ https. Only its hash is stored. Managers can move or hide the menu entry under *
 
 ## Privacy and permissions
 
-The module has no login and no permission system of its own – on purpose:
+The module deliberately has no login and no permission system of its own:
 
 - The app signs in with the normal webtrees login; every request runs as that user.
 - Data is read only through the webtrees objects (`canShow()`, `facts()`, `children()` …). The same
@@ -93,7 +90,7 @@ The module has no login and no permission system of its own – on purpose:
 If several trees are used by different groups of people, give each tree its **own media folder**
 (*Control panel → Family trees → Preferences → Media folder*, e.g. `media/smith/`). This is a webtrees
 matter, not one of this module: webtrees offers editors all files of the tree's media folder that the tree
-does not use yet (“unused files”) – with a shared folder, editors of one tree can see and link the files
+does not use yet (“unused files”). With a shared folder, editors of one tree can see and link the files
 of another.
 
 ## For developers
@@ -140,7 +137,8 @@ Image addresses (`thumb`, `file`) are webtrees' signed media routes and need the
 ### Connecting other apps
 
 Any client can use the interface with the normal sign-in above. A second app can also take part in the one-tap
-connection if a manager enters it under *Settings → Another app* with its own URL scheme. The contract is the one
+connection if a manager enters it under *Settings → Another app* with its name, download addresses (https only) and its own URL
+scheme; it then appears next to webtreesAnd on the “App” page and when connecting. The contract is the one
 webtreesAnd uses:
 
 1. The “App” page and the “Connect” page open `<scheme>://connect?url=<base URL>&code=<48 hex>&tree=<tree name>&user=<user name>`
@@ -148,7 +146,7 @@ webtreesAnd uses:
 2. The app calls `GET <url>…/Info` to obtain a session cookie and the `csrf` token, then `POST …/Pair` with header
    `X-CSRF-TOKEN` and body `{"code": "<code>"}` – like every other POST. Answer: `{"ok":true,"tree":"…","user":"…"}` – the session
    is now signed in as that user – or `{"ok":false,"error":"pair-invalid"|"pair-expired"}`.
-3. The code is valid for 10 minutes and exactly once, whichever app redeems it. It is only offered over https.
+3. The rules for the code are those [above](#for-family-members-the-app-page), whichever app redeems it.
 
 Nothing else in the module is specific to one app: the JSON endpoints, rights and privacy are the same for every client.
 
