@@ -61,6 +61,11 @@ trait ReadActions
         $user  = Auth::user();
         $trees = [];
 
+        // Eine angemeldete App fragt beim Start hier nach: dann braucht dieser Benutzer den Hinweis auf die App nicht mehr.
+        if (Auth::check() && $user->getPreference(self::HINT_SETTING) === '') {
+            $user->setPreference(self::HINT_SETTING, 'connected');
+        }
+
         foreach (Registry::container()->get(TreeService::class)->all() as $tree) {
             if (!$this->treeEnabled($tree)) {
                 continue;

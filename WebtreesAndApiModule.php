@@ -8,15 +8,12 @@ use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\Gedcom;
 use Fisharebest\Webtrees\Http\RequestHandlers\ModuleAction;
 use Fisharebest\Webtrees\I18N;
-use Fisharebest\Webtrees\Menu;
 use Fisharebest\Webtrees\Module\AbstractModule;
 use Fisharebest\Webtrees\Module\ModuleConfigInterface;
 use Fisharebest\Webtrees\Module\ModuleCustomInterface;
 use Fisharebest\Webtrees\Module\ModuleCustomTrait;
 use Fisharebest\Webtrees\Module\ModuleFooterInterface;
 use Fisharebest\Webtrees\Module\ModuleFooterTrait;
-use Fisharebest\Webtrees\Module\ModuleMenuInterface;
-use Fisharebest\Webtrees\Module\ModuleMenuTrait;
 use Fisharebest\Webtrees\Registry;
 use Fisharebest\Webtrees\Tree;
 use Fisharebest\Webtrees\Validator;
@@ -52,10 +49,9 @@ use function strtolower;
  *   src/JsonBuilders.php  Bausteine der JSON-Antworten
  *   src/GedcomText.php    reine GEDCOM-Textfunktionen (bauen, pruefen, entschaerfen)
  */
-class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterface, ModuleConfigInterface, ModuleMenuInterface, ModuleFooterInterface, MiddlewareInterface
+class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterface, ModuleConfigInterface, ModuleFooterInterface, MiddlewareInterface
 {
     use ModuleCustomTrait;
-    use ModuleMenuTrait;
     use ModuleFooterTrait;
 
     use AppPages;
@@ -91,9 +87,8 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     // Moduleinstellung: fuer welche Stammbaeume die App freigegeben ist. '*' (Standard) = alle, sonst Namen mit Komma.
     private const string TREES_SETTING      = 'app_trees';
 
-    // Moduleinstellung: Menuepunkt "App" im Hauptmenue zeigen. Standard aus - der Weg zur Seite "App" ist der Link
-    // in der Fusszeile. (Das Haekchen unter Verwaltung -> Module -> Menues schaltet das GANZE Modul ab, auch die API.)
-    private const string MENU_SETTING       = 'app_menu';
+    // Benutzereinstellung: Hinweis auf die App nicht mehr zeigen - 'connected' (App verbunden) oder 'dismissed'.
+    private const string HINT_SETTING       = 'webtreesand_hint';
 
     // Eine zweite App, die derselben Schnittstelle folgt (z. B. fuer iOS): der Verwalter traegt sie in den
     // Einstellungen ein, dann erscheint sie neben webtreesAnd auf der Seite "App" und beim Koppeln.
@@ -178,27 +173,10 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
         return __DIR__ . '/resources/';
     }
 
-    public function defaultMenuOrder(): int
-    {
-        return 99;
-    }
-
     /**
-     * Menuepunkt "App" - nur wenn in den Moduleinstellungen eingeschaltet und nur fuer angemeldete Benutzer,
-     * denn dort wird das eigene Konto mit der App verbunden.
-     */
-    public function getMenu(Tree $tree): Menu|null
-    {
-        if ($this->getPreference(self::MENU_SETTING, '0') !== '1' || !Auth::check() || !$this->treeEnabled($tree)) {
-            return null;
-        }
-
-        return new Menu(I18N::translate('App'), $this->actionUrl('App', $tree->name()), 'menu-webtreesand', ['rel' => 'nofollow']);
-    }
-
-    /**
-     * Unauffaelliger Weg zur Seite "App": ein kleiner Link in der Fusszeile, nur fuer angemeldete Benutzer
-     * in freigegebenen Baeumen.
+     * Der Weg zur Seite "App" fuer angemeldete Benutzer in freigegebenen Baeumen: ein deutlicher Hinweis oben auf der
+     * Seite, bis die App verbunden oder der Hinweis weggeklickt ist - danach nur noch der Link in der Fusszeile.
+     * (Ein Menuepunkt waere fuer etwas, das man einmal braucht, zu viel.)
      */
     public function getFooter(ServerRequestInterface $request): string
     {
@@ -208,8 +186,14 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
             return '';
         }
 
-        return '<div class="wt-footer wt-footer-webtreesand text-center my-2 small"><a href="' . e($this->actionUrl('App', $tree->name())) . '" rel="nofollow">'
-            . I18N::translate('App für Android') . '</a></div>';
+        $action = (string) $request->getAttribute('action');
+
+        return view($this->name() . '::footer', [
+            'app_url'   => $this->actionUrl('App', $tree->name()),
+            'hint'      => Auth::user()->getPreference(self::HINT_SETTING) === '' && $action !== 'App' && $action !== 'Connect',
+            'hint_url'  => $this->actionUrl('HintOff', $tree->name()),
+            'page_url'  => (string) $request->getUri(),
+        ]);
     }
 
     /**

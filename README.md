@@ -63,16 +63,17 @@ With the fields empty nothing changes. See [Connecting other apps](#connecting-o
 
 ## For family members: the “App” page
 
-Signed-in users find a small link **App for Android** in the footer of every page. The page offers two steps:
+Signed-in users see a note **“The family tree on your phone”** at the top of the page with a button to the “App” page.
+The note disappears for good once their app is connected (or when they click *Do not show again*); after that the
+link **App for Android** in the footer leads there, for example for a new phone. The page offers two steps:
 
 1. **Install the app:** a button and a QR code lead to the download.
 2. **Connect your account:** one tap (or a QR code when sitting at a computer) hands the server address, the tree and
    a one-time code to the app. There is nothing to type, and the password never reaches the phone.
 
 The one-time code is shown only to the signed-in user, is valid for 10 minutes and exactly once, and is only offered over
-https. Only its hash is stored. Managers who prefer an **App** entry in the main menu switch it on in the module settings
-(off by default). Do not untick the module under *Control panel → Modules → Menus* or *Footers*: that switches off the
-whole module, including the API.
+https. Only its hash is stored. Do not untick the module under *Control panel → Modules → Footers*: in webtrees that switches
+off the whole module, including the API.
 
 ## Privacy and permissions
 

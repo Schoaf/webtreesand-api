@@ -79,7 +79,6 @@ trait AppPages
         return $this->viewResponse($this->name() . '::admin', [
             'title'        => $this->title(),
             'trees'        => $trees,
-            'app_menu'     => $this->getPreference(self::MENU_SETTING, '0') === '1',
             'save_url'     => $this->actionUrl('Admin', null),
             'download_url' => self::APP_DOWNLOAD_URL,
             'download_qr'  => $this->qrSvg(self::APP_DOWNLOAD_URL),
@@ -110,7 +109,6 @@ trait AppPages
 
         // '-' statt leer: eine leere Einstellung hiesse "nie gespeichert" und damit "alle".
         $this->setPreference(self::TREES_SETTING, $names === [] ? '-' : implode(',', $names));
-        $this->setPreference(self::MENU_SETTING, Validator::parsedBody($request)->boolean('app_menu', false) ? '1' : '0');
 
         // Zweite App: nur gueltige Werte werden gespeichert, alles andere wird verworfen und gemeldet.
         $body    = Validator::parsedBody($request);
@@ -202,6 +200,18 @@ trait AppPages
     }
 
     /**
+     * "Nicht mehr anzeigen" im Hinweis auf die App: gilt fuer diesen Benutzer, auf allen Geraeten.
+     */
+    public function postHintOffAction(ServerRequestInterface $request): ResponseInterface
+    {
+        if (Auth::check()) {
+            Auth::user()->setPreference(self::HINT_SETTING, 'dismissed');
+        }
+
+        return redirect(Validator::parsedBody($request)->isLocalUrl()->string('url', $this->actionUrl('App', null)));
+    }
+
+    /**
      * Zielseite des Verbinden-QR-Codes: wird im Browser des HANDYS geoeffnet (dort ist man meist nicht angemeldet)
      * und reicht nur an die App weiter. Kameras oeffnen verlaesslich nur https-Adressen, keine App-Links - daher dieser Umweg.
      * Code, Baum und Benutzer stehen im URL-Fragment und kommen nie beim Server an; die Seite baut den App-Link per JavaScript.
@@ -256,6 +266,7 @@ trait AppPages
         Auth::login($user);
         Log::addAuthenticationLog('Login (webtreesAnd, QR-Code): ' . $user->userName() . '/' . $user->realName());
         $user->setPreference(UserInterface::PREF_TIMESTAMP_ACTIVE, (string) time());
+        $user->setPreference(self::HINT_SETTING, 'connected');
 
         return response(['ok' => true, 'tree' => $tree_name, 'user' => $user->userName()]);
     }

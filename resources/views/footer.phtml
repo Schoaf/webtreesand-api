@@ -1,0 +1,42 @@
+<?php
+
+declare(strict_types=1);
+
+use Fisharebest\Webtrees\I18N;
+
+/**
+ * @var string $app_url
+ * @var bool   $hint
+ * @var string $hint_url
+ * @var string $page_url
+ */
+
+?>
+<?php if ($hint) : ?>
+    <div class="alert alert-info d-flex flex-wrap align-items-center gap-2 wt-webtreesand-hint" role="status">
+        <span class="fs-3" aria-hidden="true">📱</span>
+        <div class="me-auto">
+            <strong><?= I18N::translate('Den Stammbaum aufs Handy') ?></strong><br>
+            <?= I18N::translate('Mit der App webtreesAnd hast du ihn immer dabei – Geburtstage, Suche und Eintragen unterwegs. Einrichten dauert eine Minute.') ?>
+        </div>
+        <a class="btn btn-primary" href="<?= e($app_url) ?>" rel="nofollow"><?= I18N::translate('App einrichten') ?></a>
+        <form method="post" action="<?= e($hint_url) ?>" class="m-0">
+            <?= csrf_field() ?>
+            <input type="hidden" name="url" value="<?= e($page_url) ?>">
+            <button type="submit" class="btn btn-link btn-sm"><?= I18N::translate('Nicht mehr anzeigen') ?></button>
+        </form>
+    </div>
+    <script>
+      // Nach oben zu den Meldungen von webtrees - ohne JavaScript bleibt der Hinweis unten in der Fusszeile.
+      (function () {
+        var hint = document.currentScript.previousElementSibling;
+        var target = document.querySelector('.flash-messages');
+        if (target) {
+          target.appendChild(hint);
+        }
+      })();
+    </script>
+<?php endif ?>
+<div class="wt-footer wt-footer-webtreesand text-center my-2">
+    <a href="<?= e($app_url) ?>" rel="nofollow">📱 <?= I18N::translate('App für Android') ?></a>
+</div>

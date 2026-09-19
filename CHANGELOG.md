@@ -1,8 +1,9 @@
 # Changelog
 
 ## Unreleased
-- The “App” page is reached through a small **footer link** “App for Android” (signed-in users, enabled trees only).
-  The main-menu entry is now **off by default**; managers can switch it on in the module settings.
+- **No more “App” menu entry.** Instead, signed-in users see a note “The family tree on your phone” at the top of the
+  page until their app is connected (`Pair`, or the app calling `Info`) or they click *Do not show again*. After that,
+  a footer link “App for Android” leads to the “App” page. Only in enabled trees.
 - The settings page explains the sign-in QR code and links to the “App” page of every enabled tree.
 
 ## 1.2.0 – 2026-09-19
