@@ -158,7 +158,7 @@ trait JsonBuilders
                 'known'   => !Registry::elementFactory()->make($fact->tag()) instanceof UnknownElement,
                 'value'   => $this->factValue($fact, $record->tree()),
                 'type'    => $fact->attribute('TYPE'),
-                'date'    => $this->dateJson($fact->date()),
+                'date'    => $this->dateJson($fact->date(), $fact->attribute('DATE')),
                 'place'   => $this->placeJson($place, $fact->latitude(), $fact->longitude()),
                 'notes'   => $this->factNotes($fact, $record->tree()),
                 'sources' => $this->factSources($fact, $record->tree()),
@@ -175,6 +175,9 @@ trait JsonBuilders
     {
         $data = [];
 
+        // Das Hauptfoto bestimmt webtrees selbst: das erste verknuepfte Medienobjekt mit einem Bild.
+        $primary = $record instanceof Individual ? $record->findHighlightedMediaFile()?->media()->xref() : null;
+
         foreach ($record->facts(['OBJE']) as $fact) {
             $media = $fact->target();
 
@@ -183,7 +186,8 @@ trait JsonBuilders
             }
 
             foreach ($this->mediaFilesJson($media) as $file) {
-                $data[] = $file;
+                // factId: die Verknuepfung (1 OBJE @M1@) - fuer UnlinkMedia und PrimaryMedia.
+                $data[] = $file + ['factId' => $fact->id(), 'primary' => $media->xref() === $primary];
             }
         }
 
@@ -263,17 +267,25 @@ trait JsonBuilders
     /**
      * @return array<string,mixed>|null
      */
-    private function dateJson(Date $date): array|null
+    private function dateJson(Date $date, string $gedcom = ''): array|null
     {
         if (!$date->isOK()) {
             return null;
         }
 
-        return [
+        $json = [
             'text' => $this->plain($date->display()),
             'year' => $date->gregorianYear(),
             'jd'   => $date->minimumJulianDay(),
         ];
+
+        // Bei Ereignissen zusaetzlich das Datum, wie es im GEDCOM steht ("ABT 1850", "9 NOV 1957") - damit ein
+        // Client es zum Bearbeiten vorbelegen kann, ohne die Anzeige ("um 1850") zurueckuebersetzen zu muessen.
+        if ($gedcom !== '') {
+            $json['gedcom'] = $gedcom;
+        }
+
+        return $json;
     }
 
     /**

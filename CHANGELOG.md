@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.2.0 – 2026-09-19
+API level 8. New fields and actions only; existing answers keep all their fields.
+- **`Places?q=`**: place names of the tree as suggestions while typing (editors only, up to 20), searched per level
+  like webtrees' own autocomplete: `Wien, Ö` finds “Wien, Österreich”.
+- **Dates in GEDCOM form:** every fact date (`facts[].date`) now carries `gedcom` (`"ABT 1850"`, `"9 NOV 1957"`)
+  next to the display `text`. Clients can pre-fill an edit form without translating the display back.
+- **Photos:** each entry in `media[]` of `Individual` and `Family` carries `factId` and `primary`. New actions
+  `UnlinkMedia` (remove a photo from a person; the media object stays) and `PrimaryMedia` (make a photo the main one,
+  which webtrees takes from the first linked image).
+- **`Link`**: links two existing people as child, spouse, father or mother – the counterpart to `Unlink`, with the
+  same family rules as `AddIndividual`.
+- **`AddIndividual` with `facts`**: further facts (occupation, residence, note …) are stored together with the new
+  person in one step; if one of them is invalid, nothing is created.
+- **`Individuals?scope=all`**: every search word must appear somewhere in the person's visible facts, not only in the
+  name (`Huber Wien`). Facts the user may not see are not searched.
+- **`Info.trees[].lastChange`**: number of the latest change in the tree, so that clients can tell whether cached data
+  is still current.
+
 ## 1.1.0 – 2026-09-18
 A second app next to webtreesAnd; the API level stays 7, the JSON answers do not change.
 - **Settings: “Another app (optional)”.** A manager can enter a second app that follows the same interface – name,

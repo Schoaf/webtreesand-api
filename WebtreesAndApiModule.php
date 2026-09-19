@@ -62,13 +62,15 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
 
 
     public const string MODULE_NAME = '_webtreesand-api_';
+    // 8: Places (Ortsvorschlaege), facts[].date.gedcom, media[].factId/primary, UnlinkMedia, PrimaryMedia, Link,
+    //    AddIndividual.facts, Individuals?scope=all, Info.trees[].lastChange
     // 7: Verwalter legt fest, welche Stammbaeume die App erreicht (Fehler tree-disabled)
     // 6: Koppeln per Einmal-Code (Seiten App/Connect, Aktion Pair)
     // 5: Info.maxUpload, Moderation (Pending, Accept, Reject), trees[].canModerate/pending
     // 4: Anniversaries, DeleteRecord, Unlink; Ortskoordinaten auch aus der webtrees-Ortstabelle
     // 3: ?lang=<Sprache> fuer Beschriftungen und Datumsangaben der Antwort
     // 2: MediaList, Individual.relationship (relativeTo), Info.trees[].individuals, Pedigree.ancestors[].hasParents
-    public const int    API_VERSION = 7;
+    public const int    API_VERSION = 8;
 
     public const string DESCRIPTION = 'JSON-Schnittstelle für die native Android-App „webtreesAnd“ – liest und schreibt mit den Rechten des angemeldeten Benutzers.';
 
@@ -96,6 +98,7 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
 
     private const int PAGE_SIZE           = 50;
     private const int MEDIA_PAGE_SIZE     = 60;
+    private const int PLACES_LIMIT        = 20;
     private const int MAX_PEDIGREE_GEN    = 6;
     private const int MAX_DESCENDANTS_GEN = 4;
 
@@ -145,7 +148,7 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
 
     public function customModuleVersion(): string
     {
-        return '1.1.0';
+        return '1.2.0';
     }
 
     public function customModuleLatestVersionUrl(): string

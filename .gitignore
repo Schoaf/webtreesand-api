@@ -2,3 +2,5 @@
 # Cookie-Dateien von curl-Tests gegen die lokale Instanz
 cookies.txt
 guest.txt
+# Lokale Arbeitsdateien, nie ins Repo
+tmp/

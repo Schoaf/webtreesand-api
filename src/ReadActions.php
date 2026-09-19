@@ -7,9 +7,13 @@ namespace WebtreesAnd\Api;
 use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\Contracts\UserInterface;
 use Fisharebest\Webtrees\DB;
+use Fisharebest\Webtrees\Fact;
 use Fisharebest\Webtrees\Family;
+use Fisharebest\Webtrees\Http\Exceptions\HttpServiceUnavailableException;
+use Fisharebest\Webtrees\I18N;
 use Fisharebest\Webtrees\Individual;
 use Fisharebest\Webtrees\Media;
+use Fisharebest\Webtrees\Place;
 use Fisharebest\Webtrees\Registry;
 use Fisharebest\Webtrees\Services\CalendarService;
 use Fisharebest\Webtrees\Services\LinkedRecordService;
@@ -21,12 +25,17 @@ use Fisharebest\Webtrees\Tree;
 use Fisharebest\Webtrees\Validator;
 use Fisharebest\Webtrees\Webtrees;
 use Illuminate\Database\Query\JoinClause;
+use Illuminate\Support\Collection;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use InvalidArgumentException;
 
+use function array_map;
+use function explode;
+use function implode;
 use function in_array;
 use function max;
+use function mb_stripos;
 use function min;
 use function preg_match;
 use function preg_split;
@@ -70,6 +79,10 @@ trait ReadActions
                 'autoAccept'  => $user->getPreference(UserInterface::PREF_AUTO_ACCEPT_EDITS) === '1',
                 'userXref'    => $tree->getUserPreference($user, UserInterface::PREF_TREE_ACCOUNT_XREF),
                 'defaultXref' => $tree->getUserPreference($user, UserInterface::PREF_TREE_DEFAULT_XREF),
+                // Nummer der letzten Aenderung im Baum (auch ausstehende, angenommene, verworfene). Ein anderer Wert
+                // als beim letzten Mal heisst: neu laden. Nur auf Gleichheit vergleichen - ein neuer GEDCOM-Import
+                // loescht die Aenderungsliste, dann wird die Zahl kleiner.
+                'lastChange'  => (int) DB::table('change')->where('gedcom_id', '=', $tree->id())->max('change_id'),
             ];
         }
 
@@ -95,6 +108,8 @@ trait ReadActions
 
     /**
      * Personenliste, optional gefiltert: ?q=<Suchworte>&page=<n>
+     * &scope=all: die Suchworte muessen nicht im Namen stehen, sondern irgendwo in den sichtbaren Angaben der Person
+     * (Ort, Jahr, Beruf ...) - "Huber Wien" findet die Hubers mit Wien in Geburt, Wohnort usw.
      */
     public function getIndividualsAction(ServerRequestInterface $request): ResponseInterface
     {
@@ -124,6 +139,14 @@ trait ReadActions
                 ->select(['individuals.*'])
                 ->get()
                 ->map(Registry::individualFactory()->mapper($tree));
+        } elseif (Validator::queryParams($request)->string('scope', '') === 'all') {
+            $rows = $this->searchAllFacts($tree, $words);
+
+            if ($rows === null) {
+                return $this->error(400, 'too-many-results');
+            }
+
+            $rows = $rows->slice($offset, self::PAGE_SIZE + 1);
         } else {
             // Suche: auch Ehe- und Zweitnamen sollen treffen.
             $rows = Registry::container()->get(SearchService::class)
@@ -149,6 +172,45 @@ trait ReadActions
             'nextPage' => $has_more ? $page + 1 : null,
             'data'     => $data,
         ]);
+    }
+
+    /**
+     * Personen, bei denen jedes Suchwort in einer sichtbaren Angabe vorkommt, nach Namen sortiert.
+     * Die allgemeine Suche von webtrees vergleicht mit dem rohen GEDCOM - auch mit Angaben, die der Benutzer nicht sehen
+     * darf. Deshalb wird hier gegen die sichtbaren Ereignisse nachgeprueft. null: zu viele Treffer fuer webtrees.
+     *
+     * @param array<string> $words
+     *
+     * @return Collection<int,Individual>|null
+     */
+    private function searchAllFacts(Tree $tree, array $words): Collection|null
+    {
+        try {
+            $found = Registry::container()->get(SearchService::class)->searchIndividuals([$tree], $words);
+        } catch (HttpServiceUnavailableException) {
+            return null;
+        }
+
+        $words = array_map(I18N::language()->normalize(...), $words);
+
+        return $found
+            ->filter(static function (Individual $individual) use ($words): bool {
+                if (!$individual->canShowName()) {
+                    return false;
+                }
+
+                $text = I18N::language()->normalize(implode("\n", $individual->facts()->map(static fn (Fact $fact): string => $fact->gedcom())->all()));
+
+                foreach ($words as $word) {
+                    if (mb_stripos($text, $word) === false) {
+                        return false;
+                    }
+                }
+
+                return true;
+            })
+            ->sort(static fn (Individual $a, Individual $b): int => [$a->sortName(), $a->xref()] <=> [$b->sortName(), $b->xref()])
+            ->values();
     }
 
     /**
@@ -463,6 +525,32 @@ trait ReadActions
         }
 
         return response(['type' => $type, 'data' => $data]);
+    }
+
+    /**
+     * Ortsvorschlaege beim Tippen: ?q=<Anfang oder Teil des Ortsnamens>
+     * Wie die Autovervollstaendigung von webtrees selbst: nur fuer Bearbeiter, Suche ueber die Ortstabelle des Baums.
+     * "Berlin, Deu" sucht je Ebene: "Berlin" im Ort, "Deu" in der Ebene darueber.
+     */
+    public function getPlacesAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree = Validator::attributes($request)->tree();
+
+        if (!Auth::isEditor($tree)) {
+            return $this->error(403, 'not-editor');
+        }
+
+        $query = trim(Validator::queryParams($request)->string('q', ''));
+        // Leerzeichen nach dem Komma gehoeren nicht zum Suchwort der naechsten Ebene.
+        $search = implode(',', array_map(trim(...), explode(',', $query)));
+
+        $data = Registry::container()->get(SearchService::class)
+            ->searchPlaces($tree, $search, 0, self::PLACES_LIMIT)
+            ->map(static fn (Place $place): string => $place->gedcomName())
+            ->values()
+            ->all();
+
+        return response(['query' => $query, 'data' => $data]);
     }
 
     private function role(Tree $tree, UserInterface $user): string

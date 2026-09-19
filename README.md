@@ -154,9 +154,9 @@ Nothing else in the module is specific to one app: the JSON endpoints, rights an
 
 | Action | Tree | Parameters | Content |
 | - | - | - | - |
-| `Info` | – | – | versions, `api` level, user, visible trees with role, rights, number of individuals and (for moderators) of records with pending changes, `maxUpload` in bytes, CSRF token |
-| `Individuals` | yes | `q`, `page` | people by sort name, 50 per page, `nextPage` |
-| `Individual` | yes | `xref`, `relativeTo?` | person, facts (`known: false` marks vendor tags webtrees has no definition for), parent and spouse families, media, `relationship` to `relativeTo` (default: the user's own record), e.g. “great-grandmother” |
+| `Info` | – | – | versions, `api` level, user, visible trees with role, rights, number of individuals and (for moderators) of records with pending changes, `maxUpload` in bytes, CSRF token, `trees[].lastChange` (number of the latest change in the tree: a different value than last time means “reload”; compare for equality only, a new GEDCOM import resets it) |
+| `Individuals` | yes | `q`, `page`, `scope?` | people by sort name, 50 per page, `nextPage`. `q` searches names; with `scope=all` every word must appear somewhere in the person's visible facts (`Huber Wien` finds the Hubers with Wien as birth place, residence …); error `too-many-results` when webtrees refuses the search |
+| `Individual` | yes | `xref`, `relativeTo?` | person, facts (`known: false` marks vendor tags webtrees has no definition for), parent and spouse families, media, `relationship` to `relativeTo` (default: the user's own record), e.g. “great-grandmother”. Each fact date carries `gedcom` (`"ABT 1850"`) next to the display `text`, for pre-filling an edit form; each media entry carries `factId` and `primary` (the photo webtrees shows for the person) |
 | `Family` | yes | `xref` | family with facts, children, media |
 | `Pedigree` | yes | `xref`, `generations` (1–6) | ancestors with ahnentafel number `n`; `hasParents` tells a client that the branch can be expanded further |
 | `Descendants` | yes | `xref`, `generations` (1–4) | descendants as a tree |
@@ -164,6 +164,7 @@ Nothing else in the module is specific to one app: the JSON endpoints, rights an
 | `Anniversaries` | yes | `days` (1–60, default 14) | births, marriages and deaths whose anniversary falls into the next days, with the number of years |
 | `MediaList` | yes | `page` | all media objects of the tree, newest first, 60 per page, each with up to three linked people |
 | `Tags` | yes | `type` (`INDI`/`FAM`) | labelled list of facts a client can offer for adding |
+| `Places` | yes | `q` | editors only: up to 20 place names of the tree for suggestions while typing; `Wien, Ö` searches per level, like webtrees' own autocomplete |
 
 ### Writing (POST)
 
@@ -174,13 +175,16 @@ Header `X-CSRF-TOKEN: <csrf from Info>`, JSON body. Answer: `{"ok":true,"xref":"
 | - | - | - |
 | `Fact` | `xref` | `{factId?, tag, value?, date?, place?, note?}` or `{factId?, gedcom}` – with `factId` the fact is changed; sub-lines that are not mentioned (sources, media, coordinates) are kept |
 | `DeleteFact` | `xref` | `{factId}` |
-| `AddIndividual` | – | `{relation: child\|spouse\|father\|mother\|none, relativeTo?, family?, given, surname, sex, birthDate?, birthPlace?, dead?, deathDate?, deathPlace?, marriageDate?, marriagePlace?}` |
+| `AddIndividual` | – | `{relation: child\|spouse\|father\|mother\|none, relativeTo?, family?, given, surname, sex, birthDate?, birthPlace?, dead?, deathDate?, deathPlace?, marriageDate?, marriagePlace?, facts?}` – `facts` is a list of further facts in the form of `Fact` (`[{tag:"OCCU", value:"Gardener"}, …]`), stored in the same step as the person; if one is invalid, nothing is created |
 | `Accept`, `Reject` | `xref?` | – moderators only: accept or reject the pending changes of one record, or of the whole tree when `xref` is omitted; answer `{ok, pending}` |
 | `DeleteRecord` | `xref` | – deletes the record with webtrees' own logic: links from other records are removed, a family left with one member and no events is deleted too |
+| `Link` | – | `{individual, relation: child\|spouse\|father\|mother, relativeTo, family?, marriageDate?, marriagePlace?}` – links two existing people like `AddIndividual` does with a new one: `individual` becomes child, spouse, father or mother of `relativeTo`; `link-exists` if they are already linked that way |
 | `Unlink` | – | `{family, individual}` – removes the person from the family; both records stay |
 | `Media` | `xref` | `multipart/form-data`: `file`, `title?`, `note?` – uploads and links; the file is stored under the SHA-1 of its content directly in the tree's media folder |
+| `UnlinkMedia` | `xref` | `{media}` – removes the link to the media object; the media object and its file stay |
+| `PrimaryMedia` | `xref` | `{media}` – makes this the person's main photo by moving its link before all other media links. While the change is pending, a further edit of the same person restores the old order (webtrees keeps the order of the accepted record; its own “re-order media” page behaves the same) |
 
-Dates in GEDCOM format (`12 MAR 1890`, `ABT 1850`, `BET 1900 AND 1910`). Error codes: `not-found`,
+Dates in GEDCOM format (`12 MAR 1890`, `ABT 1850`, `BET 1900 AND 1910`). Error codes: `not-found`, `link-not-found`, `link-exists`, `invalid-relation`, `too-many-results`,
 `private`, `not-editable`, `not-editor`, `fact-locked`, `family-locked`, `fact-not-found`,
 `invalid-date`, `invalid-gedcom` (only one level-1 line, sub-lines 2–9 with a valid tag), `invalid-value` (text of the form `@X@` would be a pointer), `invalid-name` (surname between exactly two slashes), `link-tag-not-allowed`, `parent-exists`, `family-required`,
 `family-not-found`, `name-required`, `upload-not-allowed`, `upload-failed`.
