@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+- **Fix:** `Anniversaries` threw a 500 (`Method julianDay does not exist.`) on every call. `Registry::timestampFactory()->now()->julianDay()`
+  resolves to a `CarbonImmutable` macro that isn't actually implemented; converting today's date via the
+  Gregorian-calendar library webtrees itself ships works reliably instead.
+
 ## 1.2.0 – 2026-09-19
 API level 8. New fields and actions only; existing answers keep all their fields.
 - **`Places?q=`**: place names of the tree as suggestions while typing (editors only, up to 20), searched per level
