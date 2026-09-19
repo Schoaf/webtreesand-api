@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Api4Webtrees;
 
+use Fisharebest\ExtCalendar\GregorianCalendar;
 use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\Contracts\UserInterface;
 use Fisharebest\Webtrees\DB;
@@ -309,7 +310,12 @@ trait ReadActions
     {
         $tree  = Validator::attributes($request)->tree();
         $days  = min(60, max(1, Validator::queryParams($request)->integer('days', 14)));
-        $today = Registry::timestampFactory()->now()->julianDay();
+        // In webtrees 2.2 liefert timestampFactory()->now() ein Timestamp, das julianDay() kennt;
+        // ab 2.3 kommt direkt ein CarbonImmutable, und dort wirft der Aufruf ("Method julianDay does
+        // not exist."). Der Umweg ueber die Gregorianische Kalenderklasse, die webtrees ohnehin
+        // mitbringt und im Kern selbst benutzt, laeuft auf beiden Fassungen.
+        $now   = Registry::timestampFactory()->now();
+        $today = (new GregorianCalendar())->ymdToJd((int) $now->format('Y'), (int) $now->format('n'), (int) $now->format('j'));
 
         $facts = Registry::container()->get(CalendarService::class)
             ->getEventsList($today, $today + $days - 1, 'BIRT MARR DEAT', false, 'anniv', $tree);
