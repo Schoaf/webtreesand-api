@@ -191,6 +191,66 @@ Dates in GEDCOM format (`12 MAR 1890`, `ABT 1850`, `BET 1900 AND 1910`). Error c
 
 Not included yet: creating sources and repositories, merging records.
 
+### Examples
+
+Taken from the demo tree, shortened (`…`). Addresses are abbreviated to `<base>`.
+
+`GET …/Individual/falkenrath?xref=I1&lang=de`
+
+```json
+{
+  "person": {
+    "xref": "I1", "name": "Jonas Falkenrath", "sortName": "Falkenrath,Jonas", "sex": "M",
+    "isDead": false, "private": false, "lifespan": "1985–",
+    "birth": { "date": { "text": "14. März 1985", "year": 1985, "jd": 2446139 },
+               "place": { "name": "Hannover, Niedersachsen, Deutschland", "short": "…", "lat": null, "lng": null } },
+    "death": null,
+    "thumb": "<base>/index.php?route=/tree/falkenrath/media-thumbnail&xref=X88&…",
+    "url": "<base>/index.php?route=/tree/falkenrath/individual/I1/Jonas-Falkenrath"
+  },
+  "relationship": "",
+  "canEdit": true,
+  "facts": [
+    { "id": "8a7b17a3b1a629763d2960f7dffce835", "tag": "BIRT", "label": "Geburt", "known": true, "value": "", "type": "",
+      "date": { "text": "14. März 1985", "year": 1985, "jd": 2446139, "gedcom": "14 MAR 1985" },
+      "place": { "name": "Hannover, Niedersachsen, Deutschland", "short": "…", "lat": 52.3759, "lng": 9.732 },
+      "notes": [], "sources": [] },
+    …
+  ],
+  "parentFamilies": [ … ],
+  "spouseFamilies": [ … ],
+  "media": [
+    { "xref": "X88", "title": "Testbild", "mime": "image/png", "isImage": true,
+      "thumb": "<base>/…/media-thumbnail&xref=X88&…", "file": "<base>/…/media-download&xref=X88&…",
+      "url": "<base>/…/media/X88/Testbild", "factId": "8de7a5f0af3478f4da6ef3bf0b9c684b", "primary": true }
+  ]
+}
+```
+
+`GET …/Places/falkenrath?q=Cel`
+
+```json
+{ "query": "Cel", "data": ["Celle, Niedersachsen, Deutschland"] }
+```
+
+`POST …/AddIndividual/falkenrath` – a new person with an occupation and a residence, as child of `I1`:
+
+```json
+{ "relation": "child", "relativeTo": "I1", "given": "Test", "surname": "Neu", "sex": "F", "birthDate": "1 JAN 1990",
+  "facts": [ { "tag": "OCCU", "value": "Gärtnerin" },
+             { "tag": "RESI", "date": "ABT 2020", "place": "Bremen, Deutschland" } ] }
+```
+
+```json
+{ "ok": true, "xref": "X92", "pending": true, "family": "F1" }
+```
+
+An error – HTTP 200, the intended code in `status`:
+
+```json
+{ "ok": false, "error": "link-exists", "status": 409 }
+```
+
 ### Code layout
 
 Start with the header of `WebtreesAndApiModule.php`: it is the entry point and lists which part of the module lives
