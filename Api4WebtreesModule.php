@@ -28,8 +28,10 @@ use function array_map;
 use function explode;
 use function in_array;
 use function is_array;
+use function is_file;
 use function is_string;
 use function json_decode;
+use function preg_match;
 use function response;
 use function str_contains;
 use function str_starts_with;
@@ -130,7 +132,11 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     }
 
     /**
-     * Quelltext-Sprache ist Deutsch (wie im Sammlungen-Modul); alle anderen Sprachen bekommen Englisch.
+     * Quelltext-Sprache ist Deutsch (wie im Sammlungen-Modul): fuer Deutsch gibt es nichts zu uebersetzen.
+     *
+     * Sonst wird resources/lang/<Sprache>.php genommen - erst die genaue Kennung ("nl-BE"), dann die Sprache
+     * allein ("nl"), zuletzt Englisch. Englisch ist damit eine Datei unter vielen und zugleich der Rueckfall
+     * fuer Sprachen, fuer die es (noch) keine Uebersetzung gibt.
      *
      * @return array<string,string>
      */
@@ -140,7 +146,21 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
             return [];
         }
 
-        return require __DIR__ . '/resources/lang/en.php';
+        foreach ([$language, explode('-', $language)[0], 'en'] as $tag) {
+            // Die Kennung kommt aus webtrees, nicht aus der Anfrage - der Vergleich haelt trotzdem alles
+            // fern, was kein Sprachkuerzel ist ("../", absolute Pfade).
+            if (preg_match('/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/', $tag) !== 1) {
+                continue;
+            }
+
+            $file = __DIR__ . '/resources/lang/' . $tag . '.php';
+
+            if (is_file($file)) {
+                return require $file;
+            }
+        }
+
+        return [];
     }
 
     public function customModuleAuthorName(): string
