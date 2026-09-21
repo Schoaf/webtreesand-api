@@ -47,6 +47,8 @@ webtrees page in the same session. All pictures show the fictional demo tree “
 3. Done. The module is active and listed under *Control panel → Modules → All modules*.
 
 Coming from version 1.2.0 or older: **delete the old `modules_v4/webtreesand-api` folder**, it was renamed in 1.3.0.
+The module's address changed with it (`_api4webtrees_` instead of `_webtreesand-api_`); wtAnd 1.7 or newer handles both,
+and the module takes over its settings from the old name on first run (1.3.2).
 
 To update, replace the folder. To uninstall, delete it. The module creates no database tables. It stores
 one module setting (which trees the app may reach) and, per user, only the hash of a pairing code while it is valid.
@@ -106,13 +108,13 @@ The module uses webtrees' built-in module route and registers no routes of its o
 changes in webtrees 2.3, the module route does not):
 
 ```
-<base>/index.php?route=<path>/module/_webtreesand-api_/<Action>[/<tree>]&<parameters>
+<base>/index.php?route=<path>/module/_api4webtrees_/<Action>[/<tree>]&<parameters>
 ```
 
 `<path>` is the path part of the base URL: `/webtrees` for `https://example.org/webtrees`, empty for
 an installation in the web root. webtrees expects the sub-folder **inside the `route` parameter**;
 without it the answer is a 302 to the home page or a 404. With “pretty URLs” switched on, webtrees
-redirects to `<base>/module/_webtreesand-api_/<Action>/<tree>?…`; the `index.php?route=` form always
+redirects to `<base>/module/_api4webtrees_/<Action>/<tree>?…`; the `index.php?route=` form always
 works, so a client need not know the setting.
 
 Every action accepts `lang=<language tag>` (`de`, `de-DE`, `en-GB`, …): labels, dates and relationship names

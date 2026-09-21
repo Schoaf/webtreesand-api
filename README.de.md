@@ -47,6 +47,8 @@ die App als webtrees-Seite in derselben Sitzung. Alle Bilder zeigen den frei erf
 3. Fertig. Das Modul ist aktiv und steht unter *Verwaltung → Module → Alle Module*.
 
 Wer von Version 1.2.0 oder älter kommt: **den alten Ordner `modules_v4/webtreesand-api` löschen**, er heißt seit 1.3.0 anders.
+Damit ändert sich auch die Adresse des Moduls (`_api4webtrees_` statt `_webtreesand-api_`); wtAnd ab 1.7 kennt beide,
+und das Modul übernimmt beim ersten Aufruf seine Einstellungen vom alten Namen (1.3.2).
 
 Aktualisieren: Ordner ersetzen. Entfernen: Ordner löschen. Das Modul legt keine Datenbanktabellen an. Es
 speichert eine Moduleinstellung (welche Bäume die App erreichen darf) und je Benutzer nur den Hash eines Einmal-Codes, solange er gilt.

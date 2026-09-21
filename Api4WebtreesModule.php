@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Api4Webtrees;
 
 use Fisharebest\Webtrees\Auth;
+use Fisharebest\Webtrees\DB;
 use Fisharebest\Webtrees\Gedcom;
 use Fisharebest\Webtrees\Http\RequestHandlers\ModuleAction;
 use Fisharebest\Webtrees\I18N;
@@ -25,6 +26,7 @@ use Psr\Http\Server\RequestHandlerInterface;
 use Throwable;
 
 use function array_map;
+use function basename;
 use function explode;
 use function in_array;
 use function is_array;
@@ -40,7 +42,7 @@ use function strtolower;
 /**
  * Einstieg des Moduls: Metadaten, Menue, Middleware (Baum-Freigabe, Sprache) und kleine Request-Helfer.
  *
- * Alle Endpunkte laufen ueber die eingebaute Modul-Route /module/_webtreesand-api_/<Action>[/<tree>]
+ * Alle Endpunkte laufen ueber die eingebaute Modul-Route /module/_api4webtrees_/<Action>[/<tree>]
  * (ohne URL-Rewriting: index.php?route=...). Eigene Routen gibt es bewusst nicht - die Routing-API aendert
  * sich mit webtrees 2.3, die Modul-Route bleibt.
  *
@@ -62,7 +64,10 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     use JsonBuilders;
 
 
-    public const string MODULE_NAME = '_webtreesand-api_';
+    // webtrees benennt ein eigenes Modul nach seinem Ordner ("_api4webtrees_") - was setName() im Modul sagt,
+    // ueberschreibt ModuleService::customModules() gleich nach dem Laden. Bis 1.2 hiess der Ordner webtreesand-api;
+    // unter diesem Namen liegen bei Bestandsinstallationen noch die Einstellungen (siehe boot()).
+    public const string OLD_MODULE_NAME = '_webtreesand-api_';
     // 8: Places (Ortsvorschlaege), facts[].date.gedcom, media[].factId/primary, UnlinkMedia, PrimaryMedia, Link,
     //    AddIndividual.facts, Individuals?scope=all, Info.trees[].lastChange
     // 7: Verwalter legt fest, welche Stammbaeume die App erreicht (Fehler tree-disabled)
@@ -118,7 +123,45 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     public function __construct()
     {
         // Siehe Sammlungen-Modul: vom DI-Container erzeugte Instanzen haben sonst keinen Namen.
-        $this->setName(self::MODULE_NAME);
+        // Derselbe Name, den webtrees vergibt: der Ordner, in dem das Modul liegt.
+        $this->setName('_' . basename(__DIR__) . '_');
+    }
+
+    /**
+     * Einstellungen aus der Zeit vor der Umbenennung (1.3.0) uebernehmen: webtrees legt sie unter dem Modulnamen ab,
+     * und der hat sich mit dem Ordner geaendert. Ohne diesen Schritt staende nach dem Update wieder "alle Baeume"
+     * und eine zweite App waere vergessen. Laeuft einmal; danach steht unter dem neuen Namen mindestens ein Eintrag.
+     */
+    private function takeOverOldSettings(): void
+    {
+        if ($this->name() === self::OLD_MODULE_NAME) {
+            return;
+        }
+
+        // Ein Fehler hier darf nie die ganze webtrees-Seite lahmlegen - boot() laeuft bei jedem Aufruf.
+        try {
+            foreach (['module_setting', 'module_privacy'] as $table) {
+                $exists = DB::table($table)->where('module_name', '=', $this->name())->exists();
+
+                if (!$exists) {
+                    $rows = DB::table($table)->where('module_name', '=', self::OLD_MODULE_NAME)->get();
+
+                    foreach ($rows as $row) {
+                        $values = (array) $row;
+                        // module_privacy hat eine Auto-ID; die alte mitzukopieren gaebe einen doppelten Schluessel.
+                        unset($values['id']);
+                        DB::table($table)->insert(['module_name' => $this->name()] + $values);
+                    }
+                }
+            }
+
+            // Auch bei einer Neuinstallation: ab jetzt gibt es einen Eintrag, die Pruefung oben faellt kuenftig kurz aus.
+            if ($this->getPreference('settings_from') === '') {
+                $this->setPreference('settings_from', self::OLD_MODULE_NAME);
+            }
+        } catch (Throwable) {
+            // Dann eben ohne die alten Einstellungen; der Verwalter setzt sie neu.
+        }
     }
 
     public function title(): string
@@ -170,7 +213,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
     public function customModuleVersion(): string
     {
-        return '1.3.1';
+        return '1.3.2';
     }
 
     public function customModuleLatestVersionUrl(): string
@@ -186,6 +229,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     public function boot(): void
     {
         View::registerNamespace($this->name(), $this->resourcesFolder() . 'views/');
+        $this->takeOverOldSettings();
     }
 
     public function resourcesFolder(): string
@@ -234,7 +278,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
      */
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
-        if ($request->getAttribute('module') === self::MODULE_NAME) {
+        if ($request->getAttribute('module') === $this->name()) {
             // Vom Verwalter nicht fuer die App freigegebene Baeume sind ueber dieses Modul gar nicht erreichbar -
             // unabhaengig davon, was das Konto in webtrees selbst duerfte.
             $tree = $request->getAttribute('tree');

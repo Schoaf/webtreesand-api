@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.3.2 – 2026-09-21
+- **Fix: the app could not connect after the 1.3.0 rename.** webtrees names a custom module after its folder
+  (`_api4webtrees_`) and ignores what `setName()` in the module says. So the address did change with 1.3.0 after
+  all – contrary to what its entry below claims – and the module's own name check (language switch, tree
+  restriction) silently stopped matching. The module now uses the folder-derived name everywhere. Addresses are
+  `…/module/_api4webtrees_/<Action>[/<tree>]`; wtAnd 1.7 knows both names and picks the one the server answers to.
+- **Module settings survive the rename.** webtrees stores them under the module name, so after the update the
+  tree restriction and a second app were gone. On first run under the new name the module copies its settings and
+  access levels from `_webtreesand-api_`. The old entry stays listed under *Modules → Deleted modules* until you
+  remove it there.
+
 ## 1.3.1 – 2026-09-21
 - **Fix: `Anniversaries` stops working on webtrees 2.3.** In 2.2 `Registry::timestampFactory()->now()` returns a
   `Timestamp`, which has `julianDay()`. From 2.3 it returns a `CarbonImmutable`, where that call throws
