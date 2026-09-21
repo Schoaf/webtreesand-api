@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 – 2026-09-21
+- **Renamed.** The module is now `api4webtrees`, the app `wtAnd`. Only names and texts have changed – the API level
+  stays 8, every address and every answer is unchanged, and the module keeps its settings.
+  **When updating, delete the old `modules_v4/webtreesand-api` folder first**; otherwise the same module lies in
+  `modules_v4` twice.
 - **No more “App” menu entry.** Instead, signed-in users see a note “The family tree on your phone” at the top of the
   page until their app is connected (`Pair`, or the app calling `Info`) or they click *Do not show again*. After that,
   a footer link “App for Android” leads to the “App” page. Only in enabled trees.
@@ -25,12 +29,12 @@ API level 8. New fields and actions only; existing answers keep all their fields
   is still current.
 
 ## 1.1.0 – 2026-09-18
-A second app next to webtreesAnd; the API level stays 7, the JSON answers do not change.
+A second app next to wtAnd; the API level stays 7, the JSON answers do not change.
 - **Settings: “Another app (optional)”.** A manager can enter a second app that follows the same interface – name,
   download addresses for Android and iPhone/iPad (https only) and the scheme of its connect link. With a name entered,
   the “App” page offers both downloads, and “Connect” shows one button per app; the QR code leads to the “Connect”
   page, which then lets the person choose instead of forwarding at once. The one-time code is the same for both and
-  is used up by whichever app redeems it. webtreesAnd stays first and remains the default; with the fields empty
+  is used up by whichever app redeems it. wtAnd stays first and remains the default; with the fields empty
   nothing changes.
 - The connect link is now documented as a contract for other apps: `<scheme>://connect?url=…&code=…&tree=…&user=…`,
   redeemed with `POST Pair {code}`.

@@ -18,7 +18,7 @@ $app2_scheme = $app2 !== null && $app2['scheme'] !== '' ? $app2['scheme'] : '';
 <h2 class="wt-page-title"><?= e($title) ?></h2>
 
 <p>
-    <a class="btn btn-primary btn-lg" data-scheme="webtreesand" href="webtreesand://connect?url=<?= e(rawurlencode($base_url)) ?>"><?= I18N::translate('webtreesAnd öffnen') ?></a>
+    <a class="btn btn-primary btn-lg" data-scheme="webtreesand" href="webtreesand://connect?url=<?= e(rawurlencode($base_url)) ?>"><?= I18N::translate('wtAnd öffnen') ?></a>
     <?php if ($app2_scheme !== '') : ?>
         <a class="btn btn-outline-primary btn-lg" data-scheme="<?= e($app2_scheme) ?>" href="<?= e($app2_scheme) ?>://connect?url=<?= e(rawurlencode($base_url)) ?>"><?= I18N::translate('%s öffnen', e($app2['name'] ?? '')) ?></a>
     <?php endif ?>

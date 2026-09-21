@@ -65,7 +65,7 @@ use Fisharebest\Webtrees\I18N;
                 <?php else : ?>
                     <p><?= I18N::translate('Ein Tipp genügt – Adresse und Passwort musst du in der App nicht eintippen.') ?></p>
                     <p>
-                        <a class="btn btn-primary" href="<?= e($deep_link) ?>"><?= $deep_link2 === '' ? I18N::translate('Jetzt verbinden') : I18N::translate('Mit webtreesAnd verbinden') ?></a>
+                        <a class="btn btn-primary" href="<?= e($deep_link) ?>"><?= $deep_link2 === '' ? I18N::translate('Jetzt verbinden') : I18N::translate('Mit wtAnd verbinden') ?></a>
                         <?php if ($deep_link2 !== '') : ?>
                             <a class="btn btn-outline-primary" href="<?= e($deep_link2) ?>"><?= I18N::translate('Mit %s verbinden', e($app2['name'] ?? '')) ?></a>
                         <?php endif ?>

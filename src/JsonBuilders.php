@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace WebtreesAnd\Api;
+namespace Api4Webtrees;
 
 use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\Contracts\UserInterface;

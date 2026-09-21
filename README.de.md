@@ -1,8 +1,8 @@
-# WebtreesAnd API
+# api4webtrees
 
 [English](README.md) · **Deutsch**
 
-Ein Modul für [webtrees](https://webtrees.net/), das der nativen Android-App **[webtreesAnd](https://github.com/thobgg/WebtreesAnd)** eine
+Ein Modul für [webtrees](https://webtrees.net/), das der nativen Android-App **[wtAnd](https://github.com/thobgg/wtAnd)** eine
 JSON-Schnittstelle zum Lesen **und** Schreiben gibt. Es ist ein gewöhnliches Zusatzmodul: Es liegt
 in `modules_v4/`, der webtrees-Kern wird nicht verändert.
 
@@ -18,10 +18,10 @@ landen als ausstehende Änderung in derselben webtrees-Installation.
 | Zugriff | lesen und schreiben, immer mit den Rechten des angemeldeten webtrees-Benutzers |
 | Lizenz | GPL-3.0 |
 
-## Die App: webtreesAnd
+## Die App: wtAnd
 
-Das Modul ist die Server-Seite von **[webtreesAnd](https://github.com/thobgg/WebtreesAnd)**, einer nativen Android-App
-(Kotlin, kein WebView) für Handy und Tablet. [APK herunterladen](https://github.com/thobgg/WebtreesAnd/releases/latest)
+Das Modul ist die Server-Seite von **[wtAnd](https://github.com/thobgg/wtAnd)**, einer nativen Android-App
+(Kotlin, kein WebView) für Handy und Tablet. [APK herunterladen](https://github.com/thobgg/wtAnd/releases/latest)
 (signiert). Außerhalb des Play Store fragt Android einmalig, ob der Browser Apps installieren darf.
 
 | Tablet: Baum und Profil nebeneinander | Handy: das Profil als Zeitleiste |
@@ -43,15 +43,17 @@ die App als webtrees-Seite in derselben Sitzung. Alle Bilder zeigen den frei erf
 ## Installation
 
 1. Das ZIP aus dem [neuesten Release](../../releases/latest) laden.
-2. Nach `modules_v4/` der webtrees-Installation entpacken, sodass `modules_v4/webtreesand-api/module.php` entsteht.
+2. Nach `modules_v4/` der webtrees-Installation entpacken, sodass `modules_v4/api4webtrees/module.php` entsteht.
 3. Fertig. Das Modul ist aktiv und steht unter *Verwaltung → Module → Alle Module*.
+
+Wer von Version 1.2.0 oder älter kommt: **den alten Ordner `modules_v4/webtreesand-api` löschen**, er heißt seit 1.3.0 anders.
 
 Aktualisieren: Ordner ersetzen. Entfernen: Ordner löschen. Das Modul legt keine Datenbanktabellen an. Es
 speichert eine Moduleinstellung (welche Bäume die App erreichen darf) und je Benutzer nur den Hash eines Einmal-Codes, solange er gilt.
 
 ## Einstellungen
 
-*Verwaltung → Module → Alle Module → WebtreesAnd API → Schraubenschlüssel* (Tipp: im Suchfeld der Modulliste „API“
+*Verwaltung → Module → Alle Module → api4webtrees → Schraubenschlüssel* (Tipp: im Suchfeld der Modulliste „API“
 eintippen). Die Seite bietet den App-Download, den Status (https, Upload-Limit) und den wichtigsten Schalter:
 **welche Stammbäume die App erreichen darf.** Nicht angekreuzte Bäume sind über dieses Modul gar nicht erreichbar,
 für keinen Benutzer und unabhängig von seinen Rechten in webtrees. Standard: alle Bäume.
@@ -105,15 +107,15 @@ steht in der [englischen README](README.md#for-developers).
 
 **Andere Apps koppeln:** Jeder Client kann die Schnittstelle mit der normalen Anmeldung benutzen. Eine zweite App kann
 zusätzlich am Verbinden per Tipp teilnehmen, wenn ein Verwalter sie unter *Einstellungen → Weitere App* mit Name,
-Download-Adressen (nur https) und eigenem URL-Schema einträgt; sie erscheint dann neben webtreesAnd auf der Seite „App“. Der Vertrag ist der von webtreesAnd: Die Seiten „App“ und „Verbinden“ öffnen
+Download-Adressen (nur https) und eigenem URL-Schema einträgt; sie erscheint dann neben wtAnd auf der Seite „App“. Der Vertrag ist der von wtAnd: Die Seiten „App“ und „Verbinden“ öffnen
 `<schema>://connect?url=<Basisadresse>&code=<48 Hex>&tree=<Baumname>&user=<Benutzername>` in der App. Die App holt sich
 mit `GET …/Info` Sitzungs-Cookie und `csrf`, dann `POST …/Pair` mit Header `X-CSRF-TOKEN` und Rumpf `{"code": "…"}`;
 Antwort `{"ok":true,"tree":"…","user":"…"}`, die Sitzung ist jetzt als dieser Benutzer angemeldet. Für den Code gelten
 die Regeln [oben](#für-familienmitglieder-die-seite-app), egal welche App ihn einlöst. Sonst ist nichts im Modul
 an eine App gebunden: JSON-Endpunkte, Rechte und Datenschutz sind für jeden Client gleich.
 
-Einstieg in den Quelltext ist der Kopf von `WebtreesAndApiModule.php`: dort steht, welcher Teil des Moduls in
+Einstieg in den Quelltext ist der Kopf von `Api4WebtreesModule.php`: dort steht, welcher Teil des Moduls in
 welcher Datei unter `src/` liegt.
 
-Releases: `./build-release.sh` baut `webtreesand-api-vX.Y.Z.zip` aus dem letzten Commit.
+Releases: `./build-release.sh` baut `api4webtrees-vX.Y.Z.zip` aus dem letzten Commit.
 `latest-version.txt` auf dem Hauptzweig speist den Update-Hinweis in der webtrees-Verwaltung.

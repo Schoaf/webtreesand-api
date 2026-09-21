@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace WebtreesAnd\Api;
+namespace Api4Webtrees;
 
 use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\Gedcom;
@@ -49,7 +49,7 @@ use function strtolower;
  *   src/JsonBuilders.php  Bausteine der JSON-Antworten
  *   src/GedcomText.php    reine GEDCOM-Textfunktionen (bauen, pruefen, entschaerfen)
  */
-class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterface, ModuleConfigInterface, ModuleFooterInterface, MiddlewareInterface
+class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface, ModuleConfigInterface, ModuleFooterInterface, MiddlewareInterface
 {
     use ModuleCustomTrait;
     use ModuleFooterTrait;
@@ -71,14 +71,14 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     // 2: MediaList, Individual.relationship (relativeTo), Info.trees[].individuals, Pedigree.ancestors[].hasParents
     public const int    API_VERSION = 8;
 
-    public const string DESCRIPTION = 'JSON-Schnittstelle für die native Android-App „webtreesAnd“ – liest und schreibt mit den Rechten des angemeldeten Benutzers.';
+    public const string DESCRIPTION = 'JSON-Schnittstelle für die native Android-App „wtAnd“ – liest und schreibt mit den Rechten des angemeldeten Benutzers.';
 
     // Eine Textdatei mit der neuesten Versionsnummer; webtrees zeigt damit in der Modulverwaltung einen Update-Hinweis.
-    private const string LATEST_VERSION_URL = 'https://raw.githubusercontent.com/thobgg/webtreesand-api/main/latest-version.txt';
-    private const string SUPPORT_URL        = 'https://github.com/thobgg/webtreesand-api';
+    private const string LATEST_VERSION_URL = 'https://raw.githubusercontent.com/thobgg/api4webtrees/main/latest-version.txt';
+    private const string SUPPORT_URL        = 'https://github.com/thobgg/api4webtrees';
 
     // Hier liegt die App zum Herunterladen (Seite "App" in webtrees).
-    private const string APP_DOWNLOAD_URL   = 'https://github.com/thobgg/webtreesAnd/releases/latest';
+    private const string APP_DOWNLOAD_URL   = 'https://github.com/thobgg/wtAnd/releases/latest';
 
     // Koppeln: der Einmal-Code gilt so viele Sekunden und genau einmal. Gespeichert wird nur sein Hash.
     private const int    PAIR_SECONDS       = 600;
@@ -91,8 +91,8 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
     private const string HINT_SETTING       = 'webtreesand_hint';
 
     // Eine zweite App, die derselben Schnittstelle folgt (z. B. fuer iOS): der Verwalter traegt sie in den
-    // Einstellungen ein, dann erscheint sie neben webtreesAnd auf der Seite "App" und beim Koppeln.
-    // Leerer Name = keine zweite App. Das Schema ist der Teil vor "://" des Koppel-Links (webtreesAnd: "webtreesand").
+    // Einstellungen ein, dann erscheint sie neben wtAnd auf der Seite "App" und beim Koppeln.
+    // Leerer Name = keine zweite App. Das Schema ist der Teil vor "://" des Koppel-Links (wtAnd: "webtreesand").
     private const string APP2_NAME_SETTING    = 'app2_name';
     private const string APP2_ANDROID_SETTING = 'app2_android_url';
     private const string APP2_IOS_SETTING     = 'app2_ios_url';
@@ -121,7 +121,7 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
 
     public function title(): string
     {
-        return 'WebtreesAnd API';
+        return 'api4webtrees';
     }
 
     public function description(): string
@@ -150,7 +150,7 @@ class WebtreesAndApiModule extends AbstractModule implements ModuleCustomInterfa
 
     public function customModuleVersion(): string
     {
-        return '1.2.0';
+        return '1.3.0';
     }
 
     public function customModuleLatestVersionUrl(): string

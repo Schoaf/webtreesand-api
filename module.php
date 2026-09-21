@@ -1,15 +1,15 @@
 <?php
 
 /**
- * WebtreesAnd API - JSON-Schnittstelle fuer die native Android-App webtreesAnd.
+ * api4webtrees - JSON-Schnittstelle fuer die native Android-App wtAnd.
  *
- * Installation: diesen Ordner nach modules_v4/webtreesand-api kopieren. Der webtrees-Kern bleibt unveraendert.
- * Die Modulklasse liegt daneben, ihre Teile (Traits, Helfer) unter src/ - siehe Kopf von WebtreesAndApiModule.php.
+ * Installation: diesen Ordner nach modules_v4/api4webtrees kopieren. Der webtrees-Kern bleibt unveraendert.
+ * Die Modulklasse liegt daneben, ihre Teile (Traits, Helfer) unter src/ - siehe Kopf von Api4WebtreesModule.php.
  */
 
 declare(strict_types=1);
 
-namespace WebtreesAnd\Api;
+namespace Api4Webtrees;
 
 use function is_file;
 use function spl_autoload_register;
@@ -29,6 +29,6 @@ spl_autoload_register(static function (string $class): void {
     }
 });
 
-require_once __DIR__ . '/WebtreesAndApiModule.php';
+require_once __DIR__ . '/Api4WebtreesModule.php';
 
-return new WebtreesAndApiModule();
+return new Api4WebtreesModule();

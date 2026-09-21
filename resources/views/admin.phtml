@@ -32,7 +32,7 @@ use Fisharebest\Webtrees\I18N;
     <div class="row g-4 mb-4">
         <div class="col-lg-5">
             <h2 class="h4"><?= I18N::translate('App installieren') ?></h2>
-            <p><?= I18N::translate('Die App webtreesAnd gibt es bei GitHub. Angemeldete Familienmitglieder sehen oben auf der Seite einen Hinweis auf die App, bis sie sie verbunden oder den Hinweis weggeklickt haben. Danach führt der Link „App für Android“ in der Fußzeile zur Seite „App“.') ?></p>
+            <p><?= I18N::translate('Die App wtAnd gibt es bei GitHub. Angemeldete Familienmitglieder sehen oben auf der Seite einen Hinweis auf die App, bis sie sie verbunden oder den Hinweis weggeklickt haben. Danach führt der Link „App für Android“ in der Fußzeile zur Seite „App“.') ?></p>
             <p><a class="btn btn-secondary" href="<?= e($download_url) ?>"><?= I18N::translate('App herunterladen') ?></a></p>
             <?php if ($download_qr !== '') : ?>
                 <div style="max-width: 10rem; background: #fff; padding: .5rem;"><?= $download_qr ?></div>
@@ -74,7 +74,7 @@ use Fisharebest\Webtrees\I18N;
     </div>
 
     <h2 class="h4"><?= I18N::translate('Weitere App (optional)') ?></h2>
-    <p><?= I18N::translate('Eine zweite App, die derselben Schnittstelle folgt – etwa für iPhone und iPad. Ist hier ein Name eingetragen, erscheint sie neben webtreesAnd auf der Seite „App“ und beim Verbinden. Leer lassen, wenn es keine gibt.') ?></p>
+    <p><?= I18N::translate('Eine zweite App, die derselben Schnittstelle folgt – etwa für iPhone und iPad. Ist hier ein Name eingetragen, erscheint sie neben wtAnd auf der Seite „App“ und beim Verbinden. Leer lassen, wenn es keine gibt.') ?></p>
     <div class="row g-3 mb-4" style="max-width: 50rem;">
         <div class="col-md-6">
             <label class="form-label" for="app2_name"><?= I18N::translate('Name der App') ?></label>
@@ -83,7 +83,7 @@ use Fisharebest\Webtrees\I18N;
         <div class="col-md-6">
             <label class="form-label" for="app2_scheme"><?= I18N::translate('Schema des Verbinden-Links') ?></label>
             <input class="form-control" type="text" name="app2_scheme" id="app2_scheme" maxlength="31" placeholder="meineapp" value="<?= e($app2_raw['scheme']) ?>">
-            <div class="form-text"><?= I18N::translate('Der Teil vor „://“. Die App muss den Link schema://connect?url=…&amp;code=…&amp;tree=…&amp;user=… annehmen, genau wie webtreesAnd. Ohne Schema gibt es für diese App nur den Download, kein Verbinden per Tipp.') ?></div>
+            <div class="form-text"><?= I18N::translate('Der Teil vor „://“. Die App muss den Link schema://connect?url=…&amp;code=…&amp;tree=…&amp;user=… annehmen, genau wie wtAnd. Ohne Schema gibt es für diese App nur den Download, kein Verbinden per Tipp.') ?></div>
         </div>
         <div class="col-md-6">
             <label class="form-label" for="app2_android_url"><?= I18N::translate('Download für Android (https)') ?></label>

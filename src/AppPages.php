@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace WebtreesAnd\Api;
+namespace Api4Webtrees;
 
 use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\Contracts\UserInterface;
@@ -131,7 +131,7 @@ trait AppPages
         $android = $checkUrl($android);
         $ios     = $checkUrl($ios);
 
-        // Ein eigenes URL-Schema: Buchstaben, Ziffern, + . - ; nicht das von webtreesAnd und keins, das ein Browser selbst versteht.
+        // Ein eigenes URL-Schema: Buchstaben, Ziffern, + . - ; nicht das von wtAnd und keins, das ein Browser selbst versteht.
         if ($scheme !== '' && (preg_match('/^[a-z][a-z0-9+.-]{1,30}$/', $scheme) !== 1 || in_array($scheme, ['webtreesand', 'http', 'https', 'javascript', 'data', 'file', 'intent'], true))) {
             $rejected[] = $scheme;
             $scheme     = '';
@@ -183,7 +183,7 @@ trait AppPages
         }
 
         return $this->viewResponse($this->name() . '::app', [
-            'title'        => I18N::translate('webtreesAnd – die App für diesen Stammbaum'),
+            'title'        => I18N::translate('wtAnd – die App für diesen Stammbaum'),
             'tree'         => $tree,
             'logged_in'    => Auth::check(),
             'secure'       => $secure,
@@ -219,7 +219,7 @@ trait AppPages
     public function getConnectAction(ServerRequestInterface $request): ResponseInterface
     {
         return $this->viewResponse($this->name() . '::connect', [
-            'title'        => I18N::translate('Mit webtreesAnd verbinden'),
+            'title'        => I18N::translate('Mit wtAnd verbinden'),
             'tree'         => null,
             'base_url'     => Validator::attributes($request)->string('base_url'),
             'download_url' => self::APP_DOWNLOAD_URL,
@@ -264,7 +264,7 @@ trait AppPages
         }
 
         Auth::login($user);
-        Log::addAuthenticationLog('Login (webtreesAnd, QR-Code): ' . $user->userName() . '/' . $user->realName());
+        Log::addAuthenticationLog('Login (wtAnd, QR-Code): ' . $user->userName() . '/' . $user->realName());
         $user->setPreference(UserInterface::PREF_TIMESTAMP_ACTIVE, (string) time());
         $user->setPreference(self::HINT_SETTING, 'connected');
 

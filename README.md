@@ -1,8 +1,8 @@
-# WebtreesAnd API
+# api4webtrees
 
 **English** · [Deutsch](README.de.md)
 
-A [webtrees](https://webtrees.net/) module that gives the native Android app **[webtreesAnd](https://github.com/thobgg/WebtreesAnd)**
+A [webtrees](https://webtrees.net/) module that gives the native Android app **[wtAnd](https://github.com/thobgg/wtAnd)**
 a JSON interface for reading **and** writing. It is an ordinary custom module: it lives in
 `modules_v4/`, the webtrees core is not modified.
 
@@ -18,10 +18,10 @@ arrive as pending changes in the same webtrees installation.
 | Access | read and write, always with the rights of the signed-in webtrees user |
 | License | GPL-3.0 |
 
-## The app: webtreesAnd
+## The app: wtAnd
 
-The module is the server side of **[webtreesAnd](https://github.com/thobgg/WebtreesAnd)**, a native Android app
-(Kotlin, no WebView) for phone and tablet. [Download the APK](https://github.com/thobgg/WebtreesAnd/releases/latest)
+The module is the server side of **[wtAnd](https://github.com/thobgg/wtAnd)**, a native Android app
+(Kotlin, no WebView) for phone and tablet. [Download the APK](https://github.com/thobgg/wtAnd/releases/latest)
 (signed). Outside the Play Store, Android asks once to allow your browser to install apps.
 
 | Tablet: tree and profile side by side | Phone: the profile as a timeline |
@@ -43,15 +43,17 @@ webtrees page in the same session. All pictures show the fictional demo tree “
 ## Installation
 
 1. Download the ZIP from the [latest release](../../releases/latest).
-2. Unpack it into `modules_v4/` of your webtrees installation, so that you get `modules_v4/webtreesand-api/module.php`.
+2. Unpack it into `modules_v4/` of your webtrees installation, so that you get `modules_v4/api4webtrees/module.php`.
 3. Done. The module is active and listed under *Control panel → Modules → All modules*.
+
+Coming from version 1.2.0 or older: **delete the old `modules_v4/webtreesand-api` folder**, it was renamed in 1.3.0.
 
 To update, replace the folder. To uninstall, delete it. The module creates no database tables. It stores
 one module setting (which trees the app may reach) and, per user, only the hash of a pairing code while it is valid.
 
 ## Settings
 
-*Control panel → Modules → All modules → WebtreesAnd API → wrench icon* (tip: type “API” into the search box of the
+*Control panel → Modules → All modules → api4webtrees → wrench icon* (tip: type “API” into the search box of the
 module list). The page offers the app download, the status (https, upload limit) and the most important switch:
 **which family trees the app may reach.** Trees that are not ticked cannot be reached through this module at all,
 for any user, whatever their rights in webtrees. Default: all trees.
@@ -141,8 +143,8 @@ Image addresses (`thumb`, `file`) are webtrees' signed media routes and need the
 
 Any client can use the interface with the normal sign-in above. A second app can also take part in the one-tap
 connection if a manager enters it under *Settings → Another app* with its name, download addresses (https only) and its own URL
-scheme; it then appears next to webtreesAnd on the “App” page and when connecting. The contract is the one
-webtreesAnd uses:
+scheme; it then appears next to wtAnd on the “App” page and when connecting. The contract is the one
+wtAnd uses:
 
 1. The “App” page and the “Connect” page open `<scheme>://connect?url=<base URL>&code=<48 hex>&tree=<tree name>&user=<user name>`
    in the app. `tree` and `user` are hints for the display; `url` is the webtrees base URL.
@@ -256,10 +258,10 @@ An error – HTTP 200, the intended code in `status`:
 
 ### Code layout
 
-Start with the header of `WebtreesAndApiModule.php`: it is the entry point and lists which part of the module lives
+Start with the header of `Api4WebtreesModule.php`: it is the entry point and lists which part of the module lives
 in which file under `src/`.
 
 ### Releases
 
-`./build-release.sh` builds `webtreesand-api-vX.Y.Z.zip` from the last commit. `latest-version.txt`
+`./build-release.sh` builds `api4webtrees-vX.Y.Z.zip` from the last commit. `latest-version.txt`
 on the main branch feeds the update notice in the webtrees control panel.
