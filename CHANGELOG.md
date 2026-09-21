@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.1 – 2026-09-21
+- **Fix: `Anniversaries` stops working on webtrees 2.3.** In 2.2 `Registry::timestampFactory()->now()` returns a
+  `Timestamp`, which has `julianDay()`. From 2.3 it returns a `CarbonImmutable`, where that call throws
+  “Method julianDay does not exist.” Today's Julian day is now computed with the Gregorian calendar class that
+  webtrees ships and uses itself, which works on both versions. Found and fixed by Andreas Scharf.
+- **Fix: language files other than `en.php` were never loaded.** `customTranslations()` returned English for every
+  language except German, so a contributed translation had no effect. It now takes `resources/lang/<tag>.php`,
+  falls back to the language without the region (`nl-BE` → `nl`) and only then to English.
+- **Dutch translation**, contributed by TheDutchJewel – which is how the loader bug came to light.
+- `build-release.sh` now compares the keys of every language file against `en.php` and names stale and missing
+  ones. A stale key falls back to German without a word of warning, and nobody notices.
+
 ## 1.3.0 – 2026-09-21
 - **Renamed.** The module is now `api4webtrees`, the app `wtAnd`. Only names and texts have changed – the API level
   stays 8, every address and every answer is unchanged, and the module keeps its settings.
