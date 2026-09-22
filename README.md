@@ -226,7 +226,8 @@ Taken from the demo tree, shortened (`…`). Addresses are abbreviated to `<base
     …
   ],
   "parentFamilies": [ … ],
-  "spouseFamilies": [ … ],
+  "spouseFamilies": [ { …, "children": [ { …, "marriages": [ { "family": "F12", "spouse": "Dorothea Wichmann",
+                        "date": { "text": "1893", "year": 1893, "jd": 2412413 }, "place": null } ] } ] } ],
   "media": [
     { "xref": "X88", "title": "Testbild", "mime": "image/png", "isImage": true,
       "thumb": "<base>/…/media-thumbnail&xref=X88&…", "file": "<base>/…/media-download&xref=X88&…",

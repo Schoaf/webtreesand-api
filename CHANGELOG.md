@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0 – 2026-09-22
+API level 10. One new field; existing answers keep all their fields.
+- **`spouseFamilies[].children[].marriages`**: the marriages of each child – `family`, `spouse` (name, empty if
+  private), `date`, `place`; `date` is `null` for an undated marriage. wtAnd 1.16 lists a son's or daughter's
+  wedding in the parent's timeline, next to the births of the children.
+
 ## 1.4.0 – 2026-09-22
 API level 9. One new field; existing answers keep all their fields.
 - **`media[].path`**: the file's path inside the tree's media folder (`Familienfotos/hochzeit-1928.jpg`),

@@ -76,7 +76,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     // 4: Anniversaries, DeleteRecord, Unlink; Ortskoordinaten auch aus der webtrees-Ortstabelle
     // 3: ?lang=<Sprache> fuer Beschriftungen und Datumsangaben der Antwort
     // 2: MediaList, Individual.relationship (relativeTo), Info.trees[].individuals, Pedigree.ancestors[].hasParents
-    public const int    API_VERSION = 9;
+    public const int    API_VERSION = 10;
 
     public const string DESCRIPTION = 'JSON-Schnittstelle für die native Android-App „wtAnd“ – liest und schreibt mit den Rechten des angemeldeten Benutzers.';
 
@@ -213,7 +213,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
     public function customModuleVersion(): string
     {
-        return '1.4.0';
+        return '1.5.0';
     }
 
     public function customModuleLatestVersionUrl(): string

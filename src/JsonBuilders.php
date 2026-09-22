@@ -83,7 +83,19 @@ trait JsonBuilders
 
         $children = [];
         foreach ($family->children() as $child) {
-            $children[] = $this->personSummary($child);
+            // Die Heiraten der Kinder gehoeren in die Lebenslinie der Eltern (ab Stufe 10): je Partnerfamilie des
+            // Kindes Partner und Heirat; ohne Datum bleibt date null, die Heirat zaehlt trotzdem.
+            $marriages = [];
+            foreach ($child->spouseFamilies() as $child_family) {
+                $spouse      = $child_family->spouse($child);
+                $marriages[] = [
+                    'family' => $child_family->xref(),
+                    'spouse' => $spouse instanceof Individual && $spouse->canShowName() ? $this->plain($spouse->fullName()) : '',
+                    'date'   => $this->dateJson($child_family->getMarriageDate()),
+                    'place'  => $this->placeJson($child_family->getMarriagePlace(), null, null),
+                ];
+            }
+            $children[] = $this->personSummary($child) + ['marriages' => $marriages];
         }
 
         return [
