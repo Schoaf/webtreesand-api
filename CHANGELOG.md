@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0 – 2026-09-22
+API level 9. One new field; existing answers keep all their fields.
+- **`media[].path`**: the file's path inside the tree's media folder (`Familienfotos/hochzeit-1928.jpg`),
+  `null` for media linked by URL. Lets an app name the same file to another module – wtAnd 1.13 uses it to edit
+  the EXIF details of a person's photo through the [Sammlungen](https://github.com/thobgg/webtrees-sammlungen)
+  module, the way it already does for archive pictures.
+
 ## 1.3.2 – 2026-09-21
 - **Fix: the app could not connect after the 1.3.0 rename.** webtrees names a custom module after its folder
   (`_api4webtrees_`) and ignores what `setName()` in the module says. So the address did change with 1.3.0 after

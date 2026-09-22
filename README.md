@@ -139,7 +139,8 @@ Rules for clients:
    (webtrees rejects a login POST that carries no cookie yet)
 3. `GET …/Info` – `user.loggedIn` tells whether it worked
 
-Image addresses (`thumb`, `file`) are webtrees' signed media routes and need the same cookie.
+Image addresses (`thumb`, `file`) are webtrees' signed media routes and need the same cookie. `path` (level 9) is the
+file's path inside the tree's media folder, for naming the same file to another module; `null` for media linked by URL.
 
 ### Connecting other apps
 
@@ -229,7 +230,8 @@ Taken from the demo tree, shortened (`…`). Addresses are abbreviated to `<base
   "media": [
     { "xref": "X88", "title": "Testbild", "mime": "image/png", "isImage": true,
       "thumb": "<base>/…/media-thumbnail&xref=X88&…", "file": "<base>/…/media-download&xref=X88&…",
-      "url": "<base>/…/media/X88/Testbild", "factId": "8de7a5f0af3478f4da6ef3bf0b9c684b", "primary": true }
+      "url": "<base>/…/media/X88/Testbild", "path": "testbild.png",
+      "factId": "8de7a5f0af3478f4da6ef3bf0b9c684b", "primary": true }
   ]
 }
 ```

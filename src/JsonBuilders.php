@@ -216,6 +216,9 @@ trait JsonBuilders
                 'thumb'   => $thumb,
                 'file'    => $full,
                 'url'     => $media->url(),
+                // Pfad der Datei im Medienordner des Baums (ab Stufe 9) - damit eine App die Datei bei anderen Modulen
+                // benennen kann, etwa um ueber Sammlungen EXIF zu schreiben. null bei Internetadressen.
+                'path'    => $media_file->isExternal() ? null : $media_file->filename(),
             ];
         }
 
