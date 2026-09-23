@@ -54,11 +54,19 @@ trait JsonBuilders
     {
         $media_file = $individual->findHighlightedMediaFile();
         $thumb      = $media_file !== null && $media_file->isImage() ? $media_file->imageUrl(200, 200, 'crop') : null;
+        // Vor- und Nachname getrennt (Nachname samt Namenszusatz wie "de' Medici"): der Desktop-Client zeigt
+        // "Nachname, Vorname" wie ein Register; sortName von webtrees laesst den Zusatz weg.
+        $names   = $individual->getAllNames();
+        $primary = $names[$individual->getPrimaryName()] ?? [];
+        $given   = str_contains($primary['givn'] ?? '', '@') ? '' : $this->plain($primary['givn'] ?? '');
+        $surname = str_contains($primary['surname'] ?? '', '@') ? '' : $this->plain($primary['surname'] ?? '');
 
         return [
             'xref'     => $individual->xref(),
             'name'     => $this->plain($individual->fullName()),
             'sortName' => $individual->sortName(),
+            'given'    => $individual->canShowName() ? $given : '',
+            'surname'  => $individual->canShowName() ? $surname : '',
             'sex'      => $individual->sex(),
             'isDead'   => $individual->isDead(),
             'private'  => !$individual->canShow(),

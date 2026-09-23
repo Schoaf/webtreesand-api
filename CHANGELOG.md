@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- **`given` and `surname`** on every person (surname including its prefix, e.g. "de' Medici"), for register-style names
+  "Surname, Given" in the desktop client. Empty for private persons or unknown names.
 - **`Pedigree` allows 7 generations** (was 6), for the navigator of the desktop client. API level unchanged; older clients keep asking for up to 6.
 
 ## 1.5.1 – 2026-09-23
