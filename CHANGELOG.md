@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.1 – 2026-09-23
+**Bug fix – please update.** Since 1.5.0 the `spouse` of a family in the Individual answer could be wrong: the loop that
+collects the children's marriages overwrote it, so the app showed the partner of the last child (e.g. a son-in-law)
+instead of the actual spouse. `husband`/`wife` were always correct. API level 10, unchanged.
+
 ## 1.6.0 – 2026-09-23
 API level 10, unchanged. Two additions for the desktop client; existing answers keep all their fields.
 - **`given` and `surname`** on every person (surname including its prefix, e.g. "de' Medici"), for register-style names

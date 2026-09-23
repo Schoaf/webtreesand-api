@@ -94,11 +94,13 @@ trait JsonBuilders
             // Die Heiraten der Kinder gehoeren in die Lebenslinie der Eltern (ab Stufe 10): je Partnerfamilie des
             // Kindes Partner und Heirat; ohne Datum bleibt date null, die Heirat zaehlt trotzdem.
             $marriages = [];
+            // Eigener Variablenname: $spouse ist der Partner DIESER Familie und wird unten noch gebraucht -
+            // bis 1.6.0 hat die Schleife ihn ueberschrieben, die App zeigte dann den Partner des letzten Kindes (Fehler 1.5.0-1.6.0).
             foreach ($child->spouseFamilies() as $child_family) {
-                $spouse      = $child_family->spouse($child);
-                $marriages[] = [
+                $child_spouse = $child_family->spouse($child);
+                $marriages[]  = [
                     'family' => $child_family->xref(),
-                    'spouse' => $spouse instanceof Individual && $spouse->canShowName() ? $this->plain($spouse->fullName()) : '',
+                    'spouse' => $child_spouse instanceof Individual && $child_spouse->canShowName() ? $this->plain($child_spouse->fullName()) : '',
                     'date'   => $this->dateJson($child_family->getMarriageDate()),
                     'place'  => $this->placeJson($child_family->getMarriagePlace(), null, null),
                 ];
