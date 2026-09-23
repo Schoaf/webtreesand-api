@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.1 – 2026-09-23
+API level 10, unchanged. Only a link has changed.
+- **The app's repository is now [app4webtrees](https://github.com/thobgg/app4webtrees).** The download button on
+  the “App” page points there. The Android app keeps its name wtAnd; a desktop client for Linux and Windows is in
+  the works. The old address still forwards, so older versions of this module keep working.
+
 ## 1.5.0 – 2026-09-22
 API level 10. One new field; existing answers keep all their fields.
 - **`spouseFamilies[].children[].marriages`**: the marriages of each child – `family`, `spouse` (name, empty if
