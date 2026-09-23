@@ -166,7 +166,7 @@ Nothing else in the module is specific to one app: the JSON endpoints, rights an
 | `Individuals` | yes | `q`, `page`, `scope?` | people by sort name, 50 per page, `nextPage`. `q` searches names; with `scope=all` every word must appear somewhere in the person's visible facts (`Huber Wien` finds the Hubers with Wien as birth place, residence …); error `too-many-results` when webtrees refuses the search |
 | `Individual` | yes | `xref`, `relativeTo?` | person, facts (`known: false` marks vendor tags webtrees has no definition for), parent and spouse families, media, `relationship` to `relativeTo` (default: the user's own record), e.g. “great-grandmother”. Each fact date carries `gedcom` (`"ABT 1850"`) next to the display `text`, for pre-filling an edit form; each media entry carries `factId` and `primary` (the photo webtrees shows for the person) |
 | `Family` | yes | `xref` | family with facts, children, media |
-| `Pedigree` | yes | `xref`, `generations` (1–6) | ancestors with ahnentafel number `n`; `hasParents` tells a client that the branch can be expanded further |
+| `Pedigree` | yes | `xref`, `generations` (1–7) | ancestors with ahnentafel number `n`; `hasParents` tells a client that the branch can be expanded further |
 | `Descendants` | yes | `xref`, `generations` (1–4) | descendants as a tree |
 | `Pending` | yes | – | moderators only: records with pending changes (`new`, `changed`, `deleted`), who changed them and when |
 | `Anniversaries` | yes | `days` (1–60, default 14) | births, marriages and deaths whose anniversary falls into the next days, with the number of years |

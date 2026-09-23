@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- **`Pedigree` allows 7 generations** (was 6), for the navigator of the desktop client. API level unchanged; older clients keep asking for up to 6.
+
 ## 1.5.1 – 2026-09-23
 API level 10, unchanged. Only a link has changed.
 - **The app's repository is now [app4webtrees](https://github.com/thobgg/app4webtrees).** The download button on

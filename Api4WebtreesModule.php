@@ -108,7 +108,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     private const int PAGE_SIZE           = 50;
     private const int MEDIA_PAGE_SIZE     = 60;
     private const int PLACES_LIMIT        = 20;
-    private const int MAX_PEDIGREE_GEN    = 6;
+    private const int MAX_PEDIGREE_GEN    = 7;
     private const int MAX_DESCENDANTS_GEN = 4;
 
     // Diese Tags sind Verknuepfungen oder Verwaltungsdaten, keine Ereignisse.
