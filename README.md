@@ -2,7 +2,7 @@
 
 **English** · [Deutsch](README.de.md)
 
-A [webtrees](https://webtrees.net/) module that gives the native Android app **[wtAnd](https://github.com/thobgg/wtAnd)**
+A [webtrees](https://webtrees.net/) module that gives the native Android app **[wtAnd](https://github.com/thobgg/app4webtrees)**
 a JSON interface for reading **and** writing. It is an ordinary custom module: it lives in
 `modules_v4/`, the webtrees core is not modified.
 
@@ -20,8 +20,8 @@ arrive as pending changes in the same webtrees installation.
 
 ## The app: wtAnd
 
-The module is the server side of **[wtAnd](https://github.com/thobgg/wtAnd)**, a native Android app
-(Kotlin, no WebView) for phone and tablet. [Download the APK](https://github.com/thobgg/wtAnd/releases/latest)
+The module is the server side of **[wtAnd](https://github.com/thobgg/app4webtrees)**, a native Android app
+(Kotlin, no WebView) for phone and tablet. [Download the APK](https://github.com/thobgg/app4webtrees/releases/latest)
 (signed). Outside the Play Store, Android asks once to allow your browser to install apps.
 
 | Tablet: tree and profile side by side | Phone: the profile as a timeline |
