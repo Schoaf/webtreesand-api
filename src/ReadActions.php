@@ -306,6 +306,38 @@ trait ReadActions
      * Jahrestage der naechsten Tage: ?days=<1..60> (Standard 14) - Geburts-, Heirats- und Todestage.
      * Nutzt den Kalenderdienst von webtrees; es erscheint nur, was der Benutzer sehen darf.
      */
+    /**
+     * Merkliste (ab Stufe 11): Personen, die sich der angemeldete Benutzer in diesem Baum gemerkt hat. Liegt als
+     * Benutzereinstellung je Baum in webtrees (kein Modul, kein GEDCOM, keine Freigabe) und gilt fuer alle Clients.
+     */
+    public function getBookmarksAction(ServerRequestInterface $request): ResponseInterface
+    {
+        if (!Auth::check()) {
+            return $this->error(403, 'not-logged-in');
+        }
+
+        $tree = Validator::attributes($request)->tree();
+        $data = [];
+
+        foreach ($this->bookmarkXrefs($tree) as $xref) {
+            $individual = Registry::individualFactory()->make($xref, $tree);
+
+            if ($individual instanceof Individual && $individual->canShow()) {
+                $data[] = $this->personSummary($individual);
+            }
+        }
+
+        return response(['data' => $data]);
+    }
+
+    /** @return list<string> */
+    private function bookmarkXrefs(Tree $tree): array
+    {
+        $raw = $tree->getUserPreference(Auth::user(), self::BOOKMARKS_PREF);
+
+        return $raw === '' ? [] : array_values(array_filter(explode(',', $raw)));
+    }
+
     public function getAnniversariesAction(ServerRequestInterface $request): ResponseInterface
     {
         $tree  = Validator::attributes($request)->tree();

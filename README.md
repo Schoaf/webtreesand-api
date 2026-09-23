@@ -169,6 +169,7 @@ Nothing else in the module is specific to one app: the JSON endpoints, rights an
 | `Pedigree` | yes | `xref`, `generations` (1–7) | ancestors with ahnentafel number `n`; `hasParents` tells a client that the branch can be expanded further |
 | `Descendants` | yes | `xref`, `generations` (1–4) | descendants as a tree |
 | `Pending` | yes | – | moderators only: records with pending changes (`new`, `changed`, `deleted`), who changed them and when |
+| `Bookmarks` | yes | – | the signed-in user's bookmark list for this tree (persons); stored as a user preference per tree, level 11 |
 | `Anniversaries` | yes | `days` (1–60, default 14) | births, marriages and deaths whose anniversary falls into the next days, with the number of years |
 | `MediaList` | yes | `page` | all media objects of the tree, newest first, 60 per page, each with up to three linked people |
 | `Tags` | yes | `type` (`INDI`/`FAM`) | labelled list of facts a client can offer for adding |

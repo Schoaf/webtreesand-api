@@ -765,6 +765,38 @@ trait WriteActions
     /**
      * @param array<string,mixed> $extra
      */
+    /**
+     * Merkliste aendern (ab Stufe 11): Rumpf { xref, add: true|false }. Antwort wie Bookmarks (die ganze Liste).
+     */
+    public function postBookmarksAction(ServerRequestInterface $request): ResponseInterface
+    {
+        if (!Auth::check()) {
+            return $this->error(403, 'not-logged-in');
+        }
+
+        $tree = Validator::attributes($request)->tree();
+        $body = $this->body($request);
+        $xref = $this->str($body, 'xref');
+        $add  = (bool) ($body['add'] ?? true);
+
+        $individual = Registry::individualFactory()->make($xref, $tree);
+
+        if (!$individual instanceof Individual || !$individual->canShow()) {
+            return $this->error(404, 'not-found');
+        }
+
+        $xrefs = $this->bookmarkXrefs($tree);
+        $xrefs = array_values(array_filter($xrefs, static fn (string $x): bool => $x !== $xref));
+
+        if ($add) {
+            $xrefs[] = $xref;
+        }
+
+        $tree->setUserPreference(Auth::user(), self::BOOKMARKS_PREF, implode(',', array_slice($xrefs, -500)));
+
+        return $this->getBookmarksAction($request);
+    }
+
     private function written(GedcomRecord $record, array $extra = [], int $status = 200): ResponseInterface
     {
         $pending = DB::table('change')

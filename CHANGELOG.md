@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.0 – 2026-09-23
+API level 11.
+- **`Bookmarks`** (GET) and **`Bookmarks`** (POST `{ xref, add }`): a bookmark list of persons per signed-in user and
+  tree. Stored as a webtrees user preference – no extra module, nothing in the GEDCOM, no pending change. The
+  desktop client wtWin shows it as "Merkliste"; any client may use it. Guests get `not-logged-in`.
+
 ## 1.6.1 – 2026-09-23
 **Bug fix – please update.** Since 1.5.0 the `spouse` of a family in the Individual answer could be wrong: the loop that
 collects the children's marriages overwrote it, so the app showed the partner of the last child (e.g. a son-in-law)
