@@ -2,6 +2,16 @@
 
 **English** · [Deutsch](README.de.md)
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/thobgg/app4webtrees/main/docs/icon/icon-512.png" alt="wtAnd logo" width="112">
+</p>
+
+<p align="center">
+  <a href="https://github.com/thobgg/api4webtrees/releases/latest"><img src="https://img.shields.io/badge/webtrees-module%20ZIP-1F5F99?style=for-the-badge" alt="webtrees module api4webtrees (ZIP)"></a>
+  <a href="https://github.com/thobgg/app4webtrees/releases/latest"><img src="https://img.shields.io/badge/Android-wtAnd%20APK-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android: wtAnd (APK)"></a>
+  <a href="https://github.com/thobgg/app4webtrees/releases/latest"><img src="https://img.shields.io/badge/Linux-wtTux%20.deb-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux: wtTux (.deb)"></a>
+</p>
+
 A [webtrees](https://webtrees.net/) module that gives the native Android app **[wtAnd](https://github.com/thobgg/app4webtrees)**
 a JSON interface for reading **and** writing. It is an ordinary custom module: it lives in
 `modules_v4/`, the webtrees core is not modified.
