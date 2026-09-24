@@ -17,12 +17,12 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./
-          # Keep the existing folder name on the server - the module computes
-          # its route slug from basename(__DIR__), so deploying into the same
-          # webtreesand-api/ folder (not the new api4webtrees/ name upstream
-          # uses) keeps the app's hardcoded _webtreesand-api_ route working
-          # with no app-side change needed.
-          server-dir: ./modules_v4/webtreesand-api/
+          # Deploys into a NEW folder matching upstream's rename (module
+          # computes its route from basename(__DIR__)) - the app now sends
+          # _api4webtrees_ to match. The old modules_v4/webtreesand-api/
+          # folder is left on the server; delete it manually once this new
+          # module is confirmed working (see deploy notes).
+          server-dir: ./modules_v4/api4webtrees/
           exclude: |
             **/.git*
             **/.git*/**
