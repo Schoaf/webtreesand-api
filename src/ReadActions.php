@@ -237,23 +237,80 @@ trait ReadActions
 
         $parents = [];
         foreach ($individual->childFamilies() as $family) {
-            $parents[] = $this->familyJson($family, null);
+            $parents[] = $this->familyJson($family, null, true);
         }
 
         $spouses = [];
         foreach ($individual->spouseFamilies() as $family) {
-            $spouses[] = $this->familyJson($family, $individual);
+            $spouses[] = $this->familyJson($family, $individual, true);
         }
 
         return response([
-            'person'         => $this->personSummary($individual),
-            'relationship'   => $this->relationship($request, $individual),
-            'canEdit'        => $individual->canEdit(),
-            'facts'          => $this->factsJson($individual),
-            'parentFamilies' => $parents,
-            'spouseFamilies' => $spouses,
-            'media'          => $this->mediaJson($individual),
+            'person'                => $this->personSummary($individual, true),
+            'relationship'          => $this->relationship($request, $individual),
+            'canEdit'               => $individual->canEdit(),
+            'facts'                 => $this->factsJson($individual),
+            'parentFamilies'        => $parents,
+            'spouseFamilies'        => $spouses,
+            'siblings'              => $this->siblingsJson($individual),
+            'extraChildrenByParent' => $this->extraChildrenByParent($individual),
+            'media'                 => $this->mediaJson($individual),
         ]);
+    }
+
+    /**
+     * Vollgeschwister ueber die erste (primaere) Eltern-Familie - fuer die Stammbaum-Ansicht der App. Adoptiv-/
+     * Pflegefamilien (weitere Eintraege in childFamilies()) sind hier noch nicht beruecksichtigt.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private function siblingsJson(Individual $individual): array
+    {
+        $family = $individual->childFamilies()->first();
+
+        if (!$family instanceof Family) {
+            return [];
+        }
+
+        $siblings = [];
+        foreach ($family->children() as $child) {
+            if ($child->xref() !== $individual->xref()) {
+                $siblings[] = $this->personSummary($child, true);
+            }
+        }
+
+        return $siblings;
+    }
+
+    /**
+     * Kinder, die ein Elternteil (aus der primaeren Eltern-Familie) mit ANDEREN Partnern hat - fuer den
+     * Stiefkind-Hinweis der Stammbaum-Ansicht. Beide Elternteile sind hier schon geladen (aus derselben
+     * childFamilies()-Abfrage), also kein zusaetzlicher Request.
+     *
+     * @return array{father:int,mother:int}
+     */
+    private function extraChildrenByParent(Individual $individual): array
+    {
+        $family = $individual->childFamilies()->first();
+        $result = ['father' => 0, 'mother' => 0];
+
+        if (!$family instanceof Family) {
+            return $result;
+        }
+
+        foreach (['father' => $family->husband(), 'mother' => $family->wife()] as $role => $parent) {
+            if (!$parent instanceof Individual) {
+                continue;
+            }
+
+            foreach ($parent->spouseFamilies() as $other_family) {
+                if ($other_family->xref() !== $family->xref()) {
+                    $result[$role] += $other_family->children()->count();
+                }
+            }
+        }
+
+        return $result;
     }
 
     /**

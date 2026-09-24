@@ -77,7 +77,10 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     // 3: ?lang=<Sprache> fuer Beschriftungen und Datumsangaben der Antwort
     // 2: MediaList, Individual.relationship (relativeTo), Info.trees[].individuals, Pedigree.ancestors[].hasParents
     // 11: Bookmarks (Merkliste je Benutzer und Baum, Benutzereinstellung), given/surname je Person
-    public const int    API_VERSION = 11;
+    // 12: Individual.siblings, Individual.extraChildrenByParent; parentFamilies/spouseFamilies gewinnen
+    //     husband/wife/spouse/children[].hasParents/childrenCount/partnersCount und .maritalStatus (fuer die
+    //     App's Stammbaum-Ansicht) - Individuals (Liste/Suche) bleibt unveraendert, weiterhin ohne diese Zaehler
+    public const int    API_VERSION = 12;
 
     /** Benutzereinstellung je Baum: die Merkliste als Liste von Personenkennungen. */
     private const string BOOKMARKS_PREF = 'api4webtrees_bookmarks';

@@ -10,6 +10,7 @@ use Fisharebest\Webtrees\Date;
 use Fisharebest\Webtrees\Elements\UnknownElement;
 use Fisharebest\Webtrees\Fact;
 use Fisharebest\Webtrees\Family;
+use Fisharebest\Webtrees\Gedcom;
 use Fisharebest\Webtrees\GedcomRecord;
 use Fisharebest\Webtrees\Individual;
 use Fisharebest\Webtrees\Media;
@@ -48,9 +49,14 @@ trait JsonBuilders
      * Kurzform einer Person. Fuer nicht sichtbare Personen liefert webtrees selbst
      * "Privat" als Namen und leere Daten - hier wird nichts zusaetzlich preisgegeben.
      *
+     * $with_counts: haengt hasParents/childrenCount/partnersCount an - fuer die Stammbaum-Ansicht der App, die
+     * diese drei Zaehler fuer jede sichtbare Person im Umfeld braucht. Standardmaessig aus (false), weil
+     * personSummary() auch von der Personenliste/-suche aufgerufen wird, wo das pro Treffer unnoetige
+     * Datenbankzugriffe waeren.
+     *
      * @return array<string,mixed>
      */
-    private function personSummary(Individual $individual): array
+    private function personSummary(Individual $individual, bool $with_counts = false): array
     {
         $media_file = $individual->findHighlightedMediaFile();
         $thumb      = $media_file !== null && $media_file->isImage() ? $media_file->imageUrl(200, 200, 'crop') : null;
@@ -61,7 +67,7 @@ trait JsonBuilders
         $given   = str_contains($primary['givn'] ?? '', '@') ? '' : $this->plain($primary['givn'] ?? '');
         $surname = str_contains($primary['surname'] ?? '', '@') ? '' : $this->plain($primary['surname'] ?? '');
 
-        return [
+        $summary = [
             'xref'     => $individual->xref(),
             'name'     => $this->plain($individual->fullName()),
             'sortName' => $individual->sortName(),
@@ -76,14 +82,26 @@ trait JsonBuilders
             'thumb'    => $thumb,
             'url'      => $individual->url(),
         ];
+
+        if ($with_counts) {
+            $summary['hasParents']    = $individual->childFamilies()->isNotEmpty();
+            $summary['partnersCount'] = $individual->spouseFamilies()->count();
+            $summary['childrenCount'] = $individual->spouseFamilies()->reduce(
+                static fn (int $carry, Family $family): int => $carry + $family->children()->count(),
+                0,
+            );
+        }
+
+        return $summary;
     }
 
     /**
      * @param Individual|null $relative_to bei Partnerfamilien: die Person, deren Partner gesucht wird
+     * @param bool            $with_counts siehe personSummary() - wird an husband/wife/spouse/children durchgereicht
      *
      * @return array<string,mixed>
      */
-    private function familyJson(Family $family, Individual|null $relative_to): array
+    private function familyJson(Family $family, Individual|null $relative_to, bool $with_counts = false): array
     {
         $husband = $family->husband();
         $wife    = $family->wife();
@@ -105,20 +123,52 @@ trait JsonBuilders
                     'place'  => $this->placeJson($child_family->getMarriagePlace(), null, null),
                 ];
             }
-            $children[] = $this->personSummary($child) + ['marriages' => $marriages];
+            $children[] = $this->personSummary($child, $with_counts) + ['marriages' => $marriages];
         }
 
         return [
-            'xref'     => $family->xref(),
-            'name'     => $this->plain($family->fullName()),
-            'url'      => $family->url(),
-            'husband'  => $husband instanceof Individual ? $this->personSummary($husband) : null,
-            'wife'     => $wife instanceof Individual ? $this->personSummary($wife) : null,
-            'spouse'   => $spouse instanceof Individual ? $this->personSummary($spouse) : null,
-            'marriage' => $this->eventJson($family->getMarriageDate(), $family->getMarriagePlace()),
-            'facts'    => $this->factsJson($family),
-            'children' => $children,
+            'xref'          => $family->xref(),
+            'name'          => $this->plain($family->fullName()),
+            'url'           => $family->url(),
+            'husband'       => $husband instanceof Individual ? $this->personSummary($husband, $with_counts) : null,
+            'wife'          => $wife instanceof Individual ? $this->personSummary($wife, $with_counts) : null,
+            'spouse'        => $spouse instanceof Individual ? $this->personSummary($spouse, $with_counts) : null,
+            'marriage'      => $this->eventJson($family->getMarriageDate(), $family->getMarriagePlace()),
+            'maritalStatus' => $this->maritalStatus($family),
+            'facts'         => $this->factsJson($family),
+            'children'      => $children,
         ];
+    }
+
+    /**
+     * verheiratet/Partnerschaft/geschieden/beendet/verwitwet/unbekannt - aus den Family-Facts abgeleitet, wie in
+     * der Stammbaum-Ansicht der App gebraucht. Geschieden vs. beendet unterscheidet sich daran, ob je eine
+     * Heirat (MARR) vorlag; verwitwet nur, wenn die Beziehung nicht schon vorher endete.
+     */
+    private function maritalStatus(Family $family): string
+    {
+        if ($family->facts(Gedcom::DIVORCE_EVENTS)->isNotEmpty()) {
+            return $family->facts(['MARR'])->isNotEmpty() ? 'divorced' : 'ended';
+        }
+
+        $husband      = $family->husband();
+        $wife         = $family->wife();
+        $partner_dead = ($husband instanceof Individual && $husband->isDead())
+            || ($wife instanceof Individual && $wife->isDead());
+
+        if ($partner_dead) {
+            return 'widowed';
+        }
+
+        if ($family->facts(['MARR'])->isNotEmpty()) {
+            return 'married';
+        }
+
+        if ($husband instanceof Individual && $wife instanceof Individual) {
+            return 'partnership';
+        }
+
+        return 'unknown';
     }
 
     /**
