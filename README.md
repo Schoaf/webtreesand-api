@@ -92,6 +92,14 @@ The module deliberately has no login and no permission system of its own:
   log and moderation (“pending changes”) therefore work exactly as in the web interface. Every POST
   passes webtrees' CSRF check.
 
+## Behind SSO or password protection
+
+If a sign-in sits in front of webtrees (Authelia, Authentik, oauth2-proxy, Cloudflare Access, basic auth), the app
+cannot get through; wtAnd and wtWin say so from their next version. Fix: in the sign-in service, let through only
+requests whose `route` contains `_api4webtrees_`, `media-thumbnail` or `media-download`, not the whole site. The webtrees
+login still protects everything behind it. Then connect the app via the “App” page: you sign in through SSO in the
+browser, and the app needs no password.
+
 ## One media folder per tree
 
 If several trees are used by different groups of people, give each tree its **own media folder**

@@ -94,6 +94,14 @@ Das Modul hat bewusst keine eigene Anmeldung und keine eigene Rechteverwaltung:
 der Daten. Hat der Benutzer „Änderungen automatisch annehmen“, sind sie sofort gültig; sonst warten
 sie wie jede andere Bearbeitung auf die Freigabe durch einen Moderator.
 
+## Hinter SSO oder Passwortschutz
+
+Sitzt vor webtrees eine eigene Anmeldung (Authelia, Authentik, oauth2-proxy, Cloudflare Access, Basic-Auth), kommt die
+App nicht durch; wtAnd und wtWin melden das ab der nächsten Version so. Abhilfe: im Anmeldedienst nur die Anfragen
+freigeben, deren `route` `_api4webtrees_`, `media-thumbnail` oder `media-download` enthält, nicht die ganze Seite.
+Dahinter schützt weiter der webtrees-Login. Die App dann über die Seite „App“ verbinden: Die Anmeldung läuft im Browser
+über das SSO, die App braucht kein Passwort.
+
 ## Ein Medienordner je Stammbaum
 
 Nutzen verschiedene Personengruppen verschiedene Bäume, sollte jeder Baum einen **eigenen Medienordner**
