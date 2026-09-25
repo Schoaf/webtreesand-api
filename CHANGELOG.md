@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.0 – unreleased
+API level 11, unchanged.
+- **`Descendants` allows 10 generations** (was 4), for printable descendant charts in the desktop client. The answer
+  keeps its form; `generations` reports the depth actually delivered, so clients can tell an older module (4) and
+  fetch the rest piece by piece.
+
 ## 1.7.0 – 2026-09-23
 API level 11.
 - **`Bookmarks`** (GET) and **`Bookmarks`** (POST `{ xref, add }`): a bookmark list of persons per signed-in user and

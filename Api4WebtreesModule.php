@@ -113,7 +113,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     private const int MEDIA_PAGE_SIZE     = 60;
     private const int PLACES_LIMIT        = 20;
     private const int MAX_PEDIGREE_GEN    = 7;
-    private const int MAX_DESCENDANTS_GEN = 4;
+    private const int MAX_DESCENDANTS_GEN = 10;
 
     // Diese Tags sind Verknuepfungen oder Verwaltungsdaten, keine Ereignisse.
     // (HUSB/WIFE/CHIL sind die Verknuepfungen innerhalb eines Familien-Datensatzes.)
@@ -217,7 +217,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
     public function customModuleVersion(): string
     {
-        return '1.7.0';
+        return '1.8.0';
     }
 
     public function customModuleLatestVersionUrl(): string

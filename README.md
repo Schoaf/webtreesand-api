@@ -185,7 +185,7 @@ Nothing else in the module is specific to one app: the JSON endpoints, rights an
 | `Individual` | yes | `xref`, `relativeTo?` | person, facts (`known: false` marks vendor tags webtrees has no definition for), parent and spouse families, media, `relationship` to `relativeTo` (default: the user's own record), e.g. “great-grandmother”. Each fact date carries `gedcom` (`"ABT 1850"`) next to the display `text`, for pre-filling an edit form; each media entry carries `factId` and `primary` (the photo webtrees shows for the person) |
 | `Family` | yes | `xref` | family with facts, children, media |
 | `Pedigree` | yes | `xref`, `generations` (1–7) | ancestors with ahnentafel number `n`; `hasParents` tells a client that the branch can be expanded further |
-| `Descendants` | yes | `xref`, `generations` (1–4) | descendants as a tree |
+| `Descendants` | yes | `xref`, `generations` (1–10, before 1.8.0: 1–4) | descendants as a tree |
 | `Pending` | yes | – | moderators only: records with pending changes (`new`, `changed`, `deleted`), who changed them and when |
 | `Bookmarks` | yes | – | the signed-in user's bookmark list for this tree (persons); stored as a user preference per tree, level 11 |
 | `Anniversaries` | yes | `days` (1–60, default 14) | births, marriages and deaths whose anniversary falls into the next days, with the number of years |
