@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.8.0 – 2026-09-26
+API level 12. New fields only; existing answers keep all their fields.
+- **`Individual.stepFamilies`**: the families of the parents with other partners – their children are the
+  half-siblings. Same form as `parentFamilies`, plus `parent` (the shared parent); `spouse` is the other partner.
+  webtrees shows the same in its "Families" tab.
+- **`hasParents`, `partnersCount`, `childrenCount`** for the person and everyone in its parent, spouse and step
+  families (`Individual` only, not in lists or search): whether a view can expand from there without fetching each
+  person. Suggested by Andreas Scharf for his own app.
+- **`Descendants` allows 10 generations** (was 4), for printable descendant charts in the desktop client. The answer
+  keeps its form; `generations` reports the depth actually delivered, so clients can tell an older module (4) and
+  fetch the rest piece by piece.
+
 ## 1.7.0 – 2026-09-23
 API level 11.
 - **`Bookmarks`** (GET) and **`Bookmarks`** (POST `{ xref, add }`): a bookmark list of persons per signed-in user and

@@ -245,72 +245,26 @@ trait ReadActions
             $spouses[] = $this->familyJson($family, $individual, true);
         }
 
+        // Familien der Eltern mit anderen Partnern (ab Stufe 12): ihre Kinder sind die Halbgeschwister. Wie der Reiter
+        // "Familien" in webtrees; "parent" ist der gemeinsame Elternteil, "spouse" dessen anderer Partner.
+        $own_parents = $individual->childFamilies()->flatMap(static fn (Family $family) => $family->spouses())
+            ->map(static fn (Individual $parent): string => $parent->xref());
+        $step = [];
+        foreach ($individual->childStepFamilies() as $family) {
+            $parent = $family->spouses()->first(static fn (Individual $spouse): bool => $own_parents->contains($spouse->xref()));
+            $step[] = ['parent' => $parent?->xref()] + $this->familyJson($family, $parent, true);
+        }
+
         return response([
-            'person'                => $this->personSummary($individual, true),
-            'relationship'          => $this->relationship($request, $individual),
-            'canEdit'               => $individual->canEdit(),
-            'facts'                 => $this->factsJson($individual),
-            'parentFamilies'        => $parents,
-            'spouseFamilies'        => $spouses,
-            'siblings'              => $this->siblingsJson($individual),
-            'extraChildrenByParent' => $this->extraChildrenByParent($individual),
-            'media'                 => $this->mediaJson($individual),
+            'person'         => $this->personSummary($individual, true),
+            'relationship'   => $this->relationship($request, $individual),
+            'canEdit'        => $individual->canEdit(),
+            'facts'          => $this->factsJson($individual),
+            'parentFamilies' => $parents,
+            'spouseFamilies' => $spouses,
+            'stepFamilies'   => $step,
+            'media'          => $this->mediaJson($individual),
         ]);
-    }
-
-    /**
-     * Vollgeschwister ueber die erste (primaere) Eltern-Familie - fuer die Stammbaum-Ansicht der App. Adoptiv-/
-     * Pflegefamilien (weitere Eintraege in childFamilies()) sind hier noch nicht beruecksichtigt.
-     *
-     * @return array<int,array<string,mixed>>
-     */
-    private function siblingsJson(Individual $individual): array
-    {
-        $family = $individual->childFamilies()->first();
-
-        if (!$family instanceof Family) {
-            return [];
-        }
-
-        $siblings = [];
-        foreach ($family->children() as $child) {
-            if ($child->xref() !== $individual->xref()) {
-                $siblings[] = $this->personSummary($child, true);
-            }
-        }
-
-        return $siblings;
-    }
-
-    /**
-     * Kinder, die ein Elternteil (aus der primaeren Eltern-Familie) mit ANDEREN Partnern hat - fuer den
-     * Stiefkind-Hinweis der Stammbaum-Ansicht. Beide Elternteile sind hier schon geladen (aus derselben
-     * childFamilies()-Abfrage), also kein zusaetzlicher Request.
-     *
-     * @return array{father:int,mother:int}
-     */
-    private function extraChildrenByParent(Individual $individual): array
-    {
-        $family = $individual->childFamilies()->first();
-        $result = ['father' => 0, 'mother' => 0];
-
-        if (!$family instanceof Family) {
-            return $result;
-        }
-
-        foreach (['father' => $family->husband(), 'mother' => $family->wife()] as $role => $parent) {
-            if (!$parent instanceof Individual) {
-                continue;
-            }
-
-            foreach ($parent->spouseFamilies() as $other_family) {
-                if ($other_family->xref() !== $family->xref()) {
-                    $result[$role] += $other_family->children()->count();
-                }
-            }
-        }
-
-        return $result;
     }
 
     /**

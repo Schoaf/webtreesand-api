@@ -77,9 +77,8 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     // 3: ?lang=<Sprache> fuer Beschriftungen und Datumsangaben der Antwort
     // 2: MediaList, Individual.relationship (relativeTo), Info.trees[].individuals, Pedigree.ancestors[].hasParents
     // 11: Bookmarks (Merkliste je Benutzer und Baum, Benutzereinstellung), given/surname je Person
-    // 12: Individual.siblings, Individual.extraChildrenByParent; parentFamilies/spouseFamilies gewinnen
-    //     husband/wife/spouse/children[].hasParents/childrenCount/partnersCount und .maritalStatus (fuer die
-    //     App's Stammbaum-Ansicht) - Individuals (Liste/Suche) bleibt unveraendert, weiterhin ohne diese Zaehler
+    // 12: Individual.stepFamilies (Familien der Eltern mit anderen Partnern = Halbgeschwister), hasParents/partnersCount/
+    //     childrenCount fuer die Person und alle Personen ihrer Familien in der Individual-Antwort
     public const int    API_VERSION = 12;
 
     /** Benutzereinstellung je Baum: die Merkliste als Liste von Personenkennungen. */
@@ -116,7 +115,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     private const int MEDIA_PAGE_SIZE     = 60;
     private const int PLACES_LIMIT        = 20;
     private const int MAX_PEDIGREE_GEN    = 7;
-    private const int MAX_DESCENDANTS_GEN = 4;
+    private const int MAX_DESCENDANTS_GEN = 10;
 
     // Diese Tags sind Verknuepfungen oder Verwaltungsdaten, keine Ereignisse.
     // (HUSB/WIFE/CHIL sind die Verknuepfungen innerhalb eines Familien-Datensatzes.)
@@ -220,7 +219,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
     public function customModuleVersion(): string
     {
-        return '1.7.0';
+        return '1.8.0';
     }
 
     public function customModuleLatestVersionUrl(): string

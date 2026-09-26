@@ -2,6 +2,16 @@
 
 **English** · [Deutsch](README.de.md)
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/thobgg/app4webtrees/main/docs/icon/icon-512.png" alt="wtAnd logo" width="112">
+</p>
+
+<p align="center">
+  <a href="https://github.com/thobgg/api4webtrees/releases/latest"><img src="https://img.shields.io/badge/webtrees-module%20ZIP-1F5F99?style=for-the-badge" alt="webtrees module api4webtrees (ZIP)"></a>
+  <a href="https://github.com/thobgg/app4webtrees/releases/latest"><img src="https://img.shields.io/badge/Android-wtAnd%20APK-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android: wtAnd (APK)"></a>
+  <a href="https://github.com/thobgg/app4webtrees/releases/latest"><img src="https://img.shields.io/badge/Linux-wtTux%20.deb-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux: wtTux (.deb)"></a>
+</p>
+
 A [webtrees](https://webtrees.net/) module that gives the native Android app **[wtAnd](https://github.com/thobgg/app4webtrees)**
 a JSON interface for reading **and** writing. It is an ordinary custom module: it lives in
 `modules_v4/`, the webtrees core is not modified.
@@ -92,6 +102,14 @@ The module deliberately has no login and no permission system of its own:
   log and moderation (“pending changes”) therefore work exactly as in the web interface. Every POST
   passes webtrees' CSRF check.
 
+## Behind SSO or password protection
+
+If a sign-in sits in front of webtrees (Authelia, Authentik, oauth2-proxy, Cloudflare Access, basic auth), the app
+cannot get through; wtAnd and wtWin say so from their next version. Fix: in the sign-in service, let through only
+requests whose `route` contains `_api4webtrees_`, `media-thumbnail` or `media-download`, not the whole site. The webtrees
+login still protects everything behind it. Then connect the app via the “App” page: you sign in through SSO in the
+browser, and the app needs no password.
+
 ## One media folder per tree
 
 If several trees are used by different groups of people, give each tree its **own media folder**
@@ -164,10 +182,10 @@ Nothing else in the module is specific to one app: the JSON endpoints, rights an
 | - | - | - | - |
 | `Info` | – | – | versions, `api` level, user, visible trees with role, rights, number of individuals and (for moderators) of records with pending changes, `maxUpload` in bytes, CSRF token, `trees[].lastChange` (number of the latest change in the tree: a different value than last time means “reload”; compare for equality only, a new GEDCOM import resets it) |
 | `Individuals` | yes | `q`, `page`, `scope?` | people by sort name, 50 per page, `nextPage`. `q` searches names; with `scope=all` every word must appear somewhere in the person's visible facts (`Huber Wien` finds the Hubers with Wien as birth place, residence …); error `too-many-results` when webtrees refuses the search |
-| `Individual` | yes | `xref`, `relativeTo?` | person, facts (`known: false` marks vendor tags webtrees has no definition for), parent and spouse families, media, `relationship` to `relativeTo` (default: the user's own record), e.g. “great-grandmother”. Each fact date carries `gedcom` (`"ABT 1850"`) next to the display `text`, for pre-filling an edit form; each media entry carries `factId` and `primary` (the photo webtrees shows for the person) |
+| `Individual` | yes | `xref`, `relativeTo?` | person, facts (`known: false` marks vendor tags webtrees has no definition for), parent and spouse families, `stepFamilies` (the parents' families with other partners, i.e. half-siblings; `parent` names the shared parent), media, `relationship` to `relativeTo` (default: the user's own record), e.g. “great-grandmother”. Each fact date carries `gedcom` (`"ABT 1850"`) next to the display `text`, for pre-filling an edit form; each media entry carries `factId` and `primary` (the photo webtrees shows for the person). The person and everyone in these families carry `hasParents`, `partnersCount`, `childrenCount` |
 | `Family` | yes | `xref` | family with facts, children, media |
 | `Pedigree` | yes | `xref`, `generations` (1–7) | ancestors with ahnentafel number `n`; `hasParents` tells a client that the branch can be expanded further |
-| `Descendants` | yes | `xref`, `generations` (1–4) | descendants as a tree |
+| `Descendants` | yes | `xref`, `generations` (1–10, before 1.8.0: 1–4) | descendants as a tree |
 | `Pending` | yes | – | moderators only: records with pending changes (`new`, `changed`, `deleted`), who changed them and when |
 | `Bookmarks` | yes | – | the signed-in user's bookmark list for this tree (persons); stored as a user preference per tree, level 11 |
 | `Anniversaries` | yes | `days` (1–60, default 14) | births, marriages and deaths whose anniversary falls into the next days, with the number of years |

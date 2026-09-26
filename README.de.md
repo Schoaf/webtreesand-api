@@ -2,6 +2,16 @@
 
 [English](README.md) · **Deutsch**
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/thobgg/app4webtrees/main/docs/icon/icon-512.png" alt="wtAnd-Logo" width="112">
+</p>
+
+<p align="center">
+  <a href="https://github.com/thobgg/api4webtrees/releases/latest"><img src="https://img.shields.io/badge/webtrees-Modul%20ZIP-1F5F99?style=for-the-badge" alt="webtrees-Modul api4webtrees (ZIP)"></a>
+  <a href="https://github.com/thobgg/app4webtrees/releases/latest"><img src="https://img.shields.io/badge/Android-wtAnd%20APK-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android: wtAnd (APK)"></a>
+  <a href="https://github.com/thobgg/app4webtrees/releases/latest"><img src="https://img.shields.io/badge/Linux-wtTux%20.deb-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux: wtTux (.deb)"></a>
+</p>
+
 Ein Modul für [webtrees](https://webtrees.net/), das der nativen Android-App **[wtAnd](https://github.com/thobgg/app4webtrees)** eine
 JSON-Schnittstelle zum Lesen **und** Schreiben gibt. Es ist ein gewöhnliches Zusatzmodul: Es liegt
 in `modules_v4/`, der webtrees-Kern wird nicht verändert.
@@ -93,6 +103,14 @@ Das Modul hat bewusst keine eigene Anmeldung und keine eigene Rechteverwaltung:
 Änderungen aus der App stehen **sofort in der webtrees-Datenbank**; die App hält keine eigene Kopie
 der Daten. Hat der Benutzer „Änderungen automatisch annehmen“, sind sie sofort gültig; sonst warten
 sie wie jede andere Bearbeitung auf die Freigabe durch einen Moderator.
+
+## Hinter SSO oder Passwortschutz
+
+Sitzt vor webtrees eine eigene Anmeldung (Authelia, Authentik, oauth2-proxy, Cloudflare Access, Basic-Auth), kommt die
+App nicht durch; wtAnd und wtWin melden das ab der nächsten Version so. Abhilfe: im Anmeldedienst nur die Anfragen
+freigeben, deren `route` `_api4webtrees_`, `media-thumbnail` oder `media-download` enthält, nicht die ganze Seite.
+Dahinter schützt weiter der webtrees-Login. Die App dann über die Seite „App“ verbinden: Die Anmeldung läuft im Browser
+über das SSO, die App braucht kein Passwort.
 
 ## Ein Medienordner je Stammbaum
 
