@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.3 – unreleased
+API level 17, unchanged. **The page “App” helps at the PC too.** It reads the browser's operating system and shows the
+matching program first: on Windows wtWin, on Linux wtTux, on phones wtAnd as before; the others fold away under
+“Other devices”. For the PC there are two steps: a download button for the newest `.exe` or `.deb` (looked up on
+GitHub only when clicked; otherwise it opens the release page), with the one sentence needed for the Windows
+warning, and the address of this family tree with a “Copy address” button – which also works over `http://` at home.
+wtWin/wtTux 1.20 pick up the copied address by themselves.
+
 ## 1.9.2 – 2026-09-26
 API level 17, unchanged. **Apps at home without HTTPS** (for nas4webtrees, where webtrees runs under
 `http://<nas-ip>:8095`): the page “App” now offers the connect button and QR code also over `http://` inside the home

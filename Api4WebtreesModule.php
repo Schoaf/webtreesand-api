@@ -97,6 +97,9 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
     // Hier liegt die App zum Herunterladen (Seite "App" in webtrees).
     private const string APP_DOWNLOAD_URL   = 'https://github.com/thobgg/app4webtrees/releases/latest';
+    // Die Dateinamen im Release tragen die Version (wtWin-1.19.99.exe) - die Seite "App" fragt beim Klick die GitHub-API
+    // nach der neuesten Datei. Klappt das nicht, fuehrt der Knopf zur Release-Seite (APP_DOWNLOAD_URL).
+    private const string APP_RELEASE_API    = 'https://api.github.com/repos/thobgg/app4webtrees/releases/latest';
 
     // Koppeln: der Einmal-Code gilt so viele Sekunden und genau einmal. Gespeichert wird nur sein Hash.
     private const int    PAIR_SECONDS       = 600;
@@ -228,7 +231,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
     public function customModuleVersion(): string
     {
-        return '1.9.2';
+        return '1.9.3';
     }
 
     public function customModuleLatestVersionUrl(): string

@@ -18,12 +18,67 @@ use Fisharebest\Webtrees\I18N;
  * @var string                                                           $app2_qr
  * @var string                                                           $deep_link2
  * @var int                                                              $minutes
+ * @var string                                                           $device       windows, linux, android, ios, other
+ * @var string                                                           $base_url
+ * @var string                                                           $release_api
  */
+
+$json = static fn (mixed $value): string => json_encode($value, JSON_THROW_ON_ERROR | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+
+// Das Programm fuer den PC: Windows (wtWin, .exe) oder Linux (wtTux, .deb). Zwei Schritte - herunterladen, Adresse kopieren.
+$pc = static function (string $os) use ($download_url, $base_url, $secure, $home): void {
+    $name  = $os === 'windows' ? 'wtWin' : 'wtTux';
+    $asset = $os === 'windows' ? '\\.exe$' : '_amd64\\.deb$';
+    ?>
+    <div class="row g-4 mb-4">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h3 class="card-title h5"><?= I18N::translate('1. Herunterladen') ?></h3>
+                    <p><?= $os === 'windows'
+                        ? I18N::translate('%s ist das Programm für den Windows-PC.', $name)
+                        : I18N::translate('%s ist das Programm für den Linux-PC (Ubuntu, Debian, Mint).', $name) ?></p>
+                    <p><a class="btn btn-primary" data-asset="<?= e($asset) ?>" href="<?= e($download_url) ?>"><?= $os === 'windows' ? I18N::translate('%s für Windows herunterladen', $name) : I18N::translate('%s für Linux herunterladen', $name) ?></a></p>
+                    <p class="text-muted small"><?= $os === 'windows'
+                        ? I18N::translate('Die Datei doppelt anklicken. Warnt Windows („Der Computer wurde durch Windows geschützt“), auf „Weitere Informationen“ und dann „Trotzdem ausführen“ klicken.')
+                        : I18N::translate('Die .deb-Datei doppelt anklicken und installieren – oder im Terminal: sudo apt install ./Dateiname.deb') ?></p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h3 class="card-title h5"><?= I18N::translate('2. Verbinden') ?></h3>
+                    <p class="mb-1"><?= I18N::translate('Die Adresse dieses Stammbaums:') ?></p>
+                    <div class="input-group mb-2">
+                        <input type="text" class="form-control form-control-lg font-monospace" readonly value="<?= e($base_url) ?>" data-copy-source aria-label="<?= I18N::translate('Adresse') ?>">
+                        <button type="button" class="btn btn-primary" data-copy><?= I18N::translate('Adresse kopieren') ?></button>
+                    </div>
+                    <p class="small text-success d-none" data-copy-ok><?= I18N::translate('Kopiert.') ?></p>
+                    <p class="small text-danger d-none" data-copy-fail><?= I18N::translate('Kopieren ging nicht – die Adresse ist markiert, bitte mit Strg+C kopieren.') ?></p>
+                    <?php if ($secure) : ?>
+                        <p><?= I18N::translate('Dann %s starten: Es übernimmt die kopierte Adresse von selbst (sonst mit Strg+V einfügen). Danach mit deinem webtrees-Benutzernamen und Passwort anmelden.', $name) ?></p>
+                        <?php if ($home) : ?>
+                            <p class="text-muted small"><?= I18N::translate('Unverschlüsselt – nur im Heimnetz. Für unterwegs: HTTPS einrichten.') ?></p>
+                        <?php endif ?>
+                    <?php else : ?>
+                        <p class="text-danger"><?= I18N::translate('Diese Adresse ist unverschlüsselt (http) und liegt nicht im Heimnetz – %s verbindet sich damit nicht. Bitte HTTPS einrichten.', $name) ?></p>
+                    <?php endif ?>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php
+};
+
+$phone_first = !in_array($device, ['windows', 'linux'], true);
+$others      = $phone_first ? ['windows', 'linux'] : ['phone', $device === 'windows' ? 'linux' : 'windows'];
 
 ?>
 
 <h2 class="wt-page-title"><?= e($title) ?></h2>
 
+<?php ob_start() ?>
 <div class="row g-4">
     <div class="col-md-6">
         <div class="card h-100">
@@ -84,3 +139,74 @@ use Fisharebest\Webtrees\I18N;
         </div>
     </div>
 </div>
+<?php $phone = ob_get_clean() ?>
+
+<?php if ($phone_first) : ?>
+    <?= $phone ?>
+<?php else : ?>
+    <?php $pc($device) ?>
+<?php endif ?>
+
+<details class="mt-4">
+    <summary class="h5"><?= I18N::translate('Andere Geräte') ?></summary>
+    <?php foreach ($others as $other) : ?>
+        <h3 class="h5 mt-3"><?= match ($other) {
+            'phone'   => I18N::translate('Android-Handy und -Tablet: wtAnd'),
+            'windows' => I18N::translate('Windows-PC: wtWin'),
+            default   => I18N::translate('Linux-PC: wtTux'),
+        } ?></h3>
+        <?php if ($other === 'phone') : ?>
+            <?= $phone ?>
+        <?php else : ?>
+            <?php $pc($other) ?>
+        <?php endif ?>
+    <?php endforeach ?>
+</details>
+
+<script>
+  (function () {
+    // Download: die neueste Datei aus dem GitHub-Release suchen (Dateinamen tragen die Version). Erst beim Klick, damit
+    // GitHub nur erfaehrt, wer wirklich herunterlaedt. Klappt es nicht, bleibt es bei der Release-Seite.
+    var api = <?= $json($release_api) ?>;
+    document.querySelectorAll('a[data-asset]').forEach(function (link) {
+      link.addEventListener('click', function (event) {
+        if (!window.fetch) { return; }
+        event.preventDefault();
+        var fallback = link.href;
+        var pattern  = new RegExp(link.getAttribute('data-asset'), 'i');
+        var timer    = new Promise(function (resolve, reject) { window.setTimeout(reject, 5000); });
+        Promise.race([fetch(api, { headers: { Accept: 'application/vnd.github+json' } }), timer])
+          .then(function (response) { if (!response.ok) { throw new Error(); } return response.json(); })
+          .then(function (release) {
+            var hit = (release.assets || []).filter(function (a) { return pattern.test(a.name); })[0];
+            window.location.href = hit ? hit.browser_download_url : fallback;
+          })
+          .catch(function () { window.location.href = fallback; });
+      });
+    });
+
+    // Adresse kopieren: navigator.clipboard gibt es nur ueber https - im Heimnetz (http://) der alte Weg ueber die Markierung.
+    document.querySelectorAll('button[data-copy]').forEach(function (button) {
+      var box    = button.closest('.card-body');
+      var input  = box.querySelector('[data-copy-source]');
+      var ok     = box.querySelector('[data-copy-ok]');
+      var fail   = box.querySelector('[data-copy-fail]');
+      var show   = function (good) { ok.classList.toggle('d-none', !good); fail.classList.toggle('d-none', good); };
+      var legacy = function () {
+        input.focus();
+        input.select();
+        var done = false;
+        try { done = document.execCommand('copy'); } catch (e) { done = false; }
+        show(done);
+      };
+      input.addEventListener('focus', function () { input.select(); });
+      button.addEventListener('click', function () {
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(input.value).then(function () { show(true); }, legacy);
+        } else {
+          legacy();
+        }
+      });
+    });
+  })();
+</script>

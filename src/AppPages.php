@@ -185,8 +185,18 @@ trait AppPages
             $deep_link2  = $app2 !== null && $app2['scheme'] !== '' ? $this->deepLink($app2['scheme'], $base_url, $params) : '';
         }
 
+        $device = self::device($request->getHeaderLine('User-Agent'));
+        $title  = match ($device) {
+            'windows' => I18N::translate('%s – das Programm für diesen Stammbaum', 'wtWin'),
+            'linux'   => I18N::translate('%s – das Programm für diesen Stammbaum', 'wtTux'),
+            default   => I18N::translate('wtAnd – die App für diesen Stammbaum'),
+        };
+
         return $this->viewResponse($this->name() . '::app', [
-            'title'        => I18N::translate('wtAnd – die App für diesen Stammbaum'),
+            'title'        => $title,
+            'device'       => $device,
+            'base_url'     => $base_url,
+            'release_api'  => self::APP_RELEASE_API,
             'tree'         => $tree,
             'logged_in'    => Auth::check(),
             'secure'       => $secure,
@@ -315,6 +325,24 @@ trait AppPages
         }
 
         return false;
+    }
+
+    /**
+     * Welches Geraet ruft die Seite auf? Nur fuer die Reihenfolge auf der Seite "App" - das Passende zuerst.
+     * Android meldet sich auch als "Linux", darum zuerst; Mac, ChromeOS und Unbekanntes bekommen die Handy-Ansicht.
+     */
+    public static function device(string $user_agent): string
+    {
+        $ua = strtolower($user_agent);
+
+        return match (true) {
+            str_contains($ua, 'android')                  => 'android',
+            preg_match('/iphone|ipad|ipod/', $ua) === 1   => 'ios',
+            str_contains($ua, 'windows')                  => 'windows',
+            str_contains($ua, 'cros')                     => 'other',
+            str_contains($ua, 'linux')                    => 'linux',
+            default                                       => 'other',
+        };
     }
 
     private function deepLink(string $scheme, string $base_url, array $params): string
