@@ -237,21 +237,32 @@ trait ReadActions
 
         $parents = [];
         foreach ($individual->childFamilies() as $family) {
-            $parents[] = $this->familyJson($family, null);
+            $parents[] = $this->familyJson($family, null, true);
         }
 
         $spouses = [];
         foreach ($individual->spouseFamilies() as $family) {
-            $spouses[] = $this->familyJson($family, $individual);
+            $spouses[] = $this->familyJson($family, $individual, true);
+        }
+
+        // Familien der Eltern mit anderen Partnern (ab Stufe 12): ihre Kinder sind die Halbgeschwister. Wie der Reiter
+        // "Familien" in webtrees; "parent" ist der gemeinsame Elternteil, "spouse" dessen anderer Partner.
+        $own_parents = $individual->childFamilies()->flatMap(static fn (Family $family) => $family->spouses())
+            ->map(static fn (Individual $parent): string => $parent->xref());
+        $step = [];
+        foreach ($individual->childStepFamilies() as $family) {
+            $parent = $family->spouses()->first(static fn (Individual $spouse): bool => $own_parents->contains($spouse->xref()));
+            $step[] = ['parent' => $parent?->xref()] + $this->familyJson($family, $parent, true);
         }
 
         return response([
-            'person'         => $this->personSummary($individual),
+            'person'         => $this->personSummary($individual, true),
             'relationship'   => $this->relationship($request, $individual),
             'canEdit'        => $individual->canEdit(),
             'facts'          => $this->factsJson($individual),
             'parentFamilies' => $parents,
             'spouseFamilies' => $spouses,
+            'stepFamilies'   => $step,
             'media'          => $this->mediaJson($individual),
         ]);
     }

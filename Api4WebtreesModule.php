@@ -77,7 +77,9 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     // 3: ?lang=<Sprache> fuer Beschriftungen und Datumsangaben der Antwort
     // 2: MediaList, Individual.relationship (relativeTo), Info.trees[].individuals, Pedigree.ancestors[].hasParents
     // 11: Bookmarks (Merkliste je Benutzer und Baum, Benutzereinstellung), given/surname je Person
-    public const int    API_VERSION = 11;
+    // 12: Individual.stepFamilies (Familien der Eltern mit anderen Partnern = Halbgeschwister), hasParents/partnersCount/
+    //     childrenCount fuer die Person und alle Personen ihrer Familien in der Individual-Antwort
+    public const int    API_VERSION = 12;
 
     /** Benutzereinstellung je Baum: die Merkliste als Liste von Personenkennungen. */
     private const string BOOKMARKS_PREF = 'api4webtrees_bookmarks';

@@ -48,9 +48,13 @@ trait JsonBuilders
      * Kurzform einer Person. Fuer nicht sichtbare Personen liefert webtrees selbst
      * "Privat" als Namen und leere Daten - hier wird nichts zusaetzlich preisgegeben.
      *
+     * $with_counts (ab Stufe 12, nur in der Individual-Antwort): hasParents, partnersCount, childrenCount - ob eine
+     * Ansicht von dieser Person aus weiter aufklappen kann, ohne sie einzeln abzurufen. Nicht in Listen und Suche,
+     * dort waeren es je Treffer unnoetige Datenbankzugriffe. Gezaehlt wird nur, was der Benutzer sehen darf.
+     *
      * @return array<string,mixed>
      */
-    private function personSummary(Individual $individual): array
+    private function personSummary(Individual $individual, bool $with_counts = false): array
     {
         $media_file = $individual->findHighlightedMediaFile();
         $thumb      = $media_file !== null && $media_file->isImage() ? $media_file->imageUrl(200, 200, 'crop') : null;
@@ -61,7 +65,7 @@ trait JsonBuilders
         $given   = str_contains($primary['givn'] ?? '', '@') ? '' : $this->plain($primary['givn'] ?? '');
         $surname = str_contains($primary['surname'] ?? '', '@') ? '' : $this->plain($primary['surname'] ?? '');
 
-        return [
+        $summary = [
             'xref'     => $individual->xref(),
             'name'     => $this->plain($individual->fullName()),
             'sortName' => $individual->sortName(),
@@ -76,14 +80,23 @@ trait JsonBuilders
             'thumb'    => $thumb,
             'url'      => $individual->url(),
         ];
+
+        if ($with_counts) {
+            $summary['hasParents']    = $individual->childFamilies()->isNotEmpty();
+            $summary['partnersCount'] = $individual->spouseFamilies()->count();
+            $summary['childrenCount'] = $individual->spouseFamilies()->sum(static fn (Family $family): int => $family->children()->count());
+        }
+
+        return $summary;
     }
 
     /**
      * @param Individual|null $relative_to bei Partnerfamilien: die Person, deren Partner gesucht wird
+     * @param bool            $with_counts siehe personSummary() - fuer Eltern, Partner und Kinder der Familie
      *
      * @return array<string,mixed>
      */
-    private function familyJson(Family $family, Individual|null $relative_to): array
+    private function familyJson(Family $family, Individual|null $relative_to, bool $with_counts = false): array
     {
         $husband = $family->husband();
         $wife    = $family->wife();
@@ -105,16 +118,16 @@ trait JsonBuilders
                     'place'  => $this->placeJson($child_family->getMarriagePlace(), null, null),
                 ];
             }
-            $children[] = $this->personSummary($child) + ['marriages' => $marriages];
+            $children[] = $this->personSummary($child, $with_counts) + ['marriages' => $marriages];
         }
 
         return [
             'xref'     => $family->xref(),
             'name'     => $this->plain($family->fullName()),
             'url'      => $family->url(),
-            'husband'  => $husband instanceof Individual ? $this->personSummary($husband) : null,
-            'wife'     => $wife instanceof Individual ? $this->personSummary($wife) : null,
-            'spouse'   => $spouse instanceof Individual ? $this->personSummary($spouse) : null,
+            'husband'  => $husband instanceof Individual ? $this->personSummary($husband, $with_counts) : null,
+            'wife'     => $wife instanceof Individual ? $this->personSummary($wife, $with_counts) : null,
+            'spouse'   => $spouse instanceof Individual ? $this->personSummary($spouse, $with_counts) : null,
             'marriage' => $this->eventJson($family->getMarriageDate(), $family->getMarriagePlace()),
             'facts'    => $this->factsJson($family),
             'children' => $children,
