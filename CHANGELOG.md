@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.4 – 2026-09-27
+API level 17, unchanged. **wtWin and wtTux connect with one click.** On the page “App” at the PC, step 2 is now a
+button “Connect with wtWin” (or wtTux): it puts the connect link with the one-time code on the clipboard and also opens
+it as `wtwin://connect?…` / `wttux://connect?…`. wtWin/wtTux 1.21 take it over by themselves and ask once for
+confirmation – no address, username or password to type. “Copy address” stays below as the manual way. The page reloads
+by itself when you come back after the code has run out (e.g. after download and installation). The note after
+signing in and the footer now also depend on the device: at the PC they point to wtWin/wtTux, and the note remembers
+phone and PC separately – whoever has connected wtAnd still hears about wtWin. The page “App” shows wtWin and wtAnd
+open (on a phone wtAnd first) and wtTux folded below, opened when the page is visited from a Linux PC.
+
 ## 1.9.3 – 2026-09-27
 API level 17, unchanged. **The page “App” helps at the PC too.** It reads the browser's operating system and shows the
 matching program first: on Windows wtWin, on Linux wtTux, on phones wtAnd as before; the others fold away under

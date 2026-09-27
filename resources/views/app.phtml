@@ -21,20 +21,24 @@ use Fisharebest\Webtrees\I18N;
  * @var string                                                           $device       windows, linux, android, ios, other
  * @var string                                                           $base_url
  * @var string                                                           $release_api
+ * @var array{windows:string,linux:string}                               $deep_pc      wtwin://connect?... bzw. wttux://...
  */
 
 $json = static fn (mixed $value): string => json_encode($value, JSON_THROW_ON_ERROR | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
 
-// Das Programm fuer den PC: Windows (wtWin, .exe) oder Linux (wtTux, .deb). Zwei Schritte - herunterladen, Adresse kopieren.
-$pc = static function (string $os) use ($download_url, $base_url, $secure, $home): void {
+// Das Programm fuer den PC: Windows (wtWin, .exe) oder Linux (wtTux, .deb). Zwei Schritte - herunterladen, verbinden.
+// Verbinden (Stufe 2, 27.09.2026): der Knopf legt den Verbinden-Link in die Zwischenablage und oeffnet ihn. Das Programm
+// uebernimmt ihn von selbst - ohne Adresse, Benutzername und Passwort. "Adresse kopieren" bleibt als Rueckfall.
+$pc = static function (string $os) use ($download_url, $base_url, $secure, $home, $logged_in, $deep_pc, $minutes): void {
     $name  = $os === 'windows' ? 'wtWin' : 'wtTux';
     $asset = $os === 'windows' ? '\\.exe$' : '_amd64\\.deb$';
+    $link  = $deep_pc[$os] ?? '';
     ?>
     <div class="row g-4 mb-4">
         <div class="col-md-6">
             <div class="card h-100">
                 <div class="card-body">
-                    <h3 class="card-title h5"><?= I18N::translate('1. Herunterladen') ?></h3>
+                    <h3 class="card-title h5"><?= I18N::translate('1. Herunterladen und installieren') ?></h3>
                     <p><?= $os === 'windows'
                         ? I18N::translate('%s ist das Programm für den Windows-PC.', $name)
                         : I18N::translate('%s ist das Programm für den Linux-PC (Ubuntu, Debian, Mint).', $name) ?></p>
@@ -42,6 +46,7 @@ $pc = static function (string $os) use ($download_url, $base_url, $secure, $home
                     <p class="text-muted small"><?= $os === 'windows'
                         ? I18N::translate('Die Datei doppelt anklicken. Warnt Windows („Der Computer wurde durch Windows geschützt“), auf „Weitere Informationen“ und dann „Trotzdem ausführen“ klicken.')
                         : I18N::translate('Die .deb-Datei doppelt anklicken und installieren – oder im Terminal: sudo apt install ./Dateiname.deb') ?></p>
+                    <p class="text-muted small mb-0"><?= I18N::translate('Schon installiert? Dann gleich weiter mit Schritt 2.') ?></p>
                 </div>
             </div>
         </div>
@@ -49,17 +54,32 @@ $pc = static function (string $os) use ($download_url, $base_url, $secure, $home
             <div class="card h-100">
                 <div class="card-body">
                     <h3 class="card-title h5"><?= I18N::translate('2. Verbinden') ?></h3>
-                    <p class="mb-1"><?= I18N::translate('Die Adresse dieses Stammbaums:') ?></p>
+                    <?php if ($logged_in && $secure && $link !== '') : ?>
+                        <p><?= I18N::translate('Ein Klick genügt – Adresse und Passwort musst du in %s nicht eintippen.', $name) ?></p>
+                        <p><button type="button" class="btn btn-primary btn-lg" data-connect="<?= e($link) ?>"><?= I18N::translate('Mit %s verbinden', $name) ?></button></p>
+                        <div class="alert alert-success d-none" data-connect-ok>
+                            <?= I18N::translate('%1$s übernimmt die Verbindung jetzt von selbst und fragt einmal nach. Ist %1$s noch nicht geöffnet, starte es jetzt.', $name) ?>
+                        </div>
+                        <p class="small text-danger d-none" data-connect-fail><?= I18N::translate('Das hat nicht geklappt – bitte unten „Adresse kopieren“ nehmen und in %s mit Benutzername und Passwort anmelden.', $name) ?></p>
+                        <p class="text-muted small"><?= I18N::translate('Der Code gilt %1$s Minuten und nur ein einziges Mal. Er verbindet %2$s mit deinem Konto – gib ihn nicht weiter.', I18N::number($minutes), $name) ?></p>
+                        <hr>
+                        <p class="small mb-1"><?= I18N::translate('Oder von Hand – die Adresse dieses Stammbaums:') ?></p>
+                    <?php else : ?>
+                        <?php if (!$logged_in) : ?>
+                            <p><?= I18N::translate('Melde dich an – dann verbindet ein Klick %s mit deinem Konto.', $name) ?></p>
+                        <?php endif ?>
+                        <p class="mb-1"><?= I18N::translate('Die Adresse dieses Stammbaums:') ?></p>
+                    <?php endif ?>
                     <div class="input-group mb-2">
-                        <input type="text" class="form-control form-control-lg font-monospace" readonly value="<?= e($base_url) ?>" data-copy-source aria-label="<?= I18N::translate('Adresse') ?>">
-                        <button type="button" class="btn btn-primary" data-copy><?= I18N::translate('Adresse kopieren') ?></button>
+                        <input type="text" class="form-control font-monospace" readonly value="<?= e($base_url) ?>" data-copy-source aria-label="<?= I18N::translate('Adresse') ?>">
+                        <button type="button" class="btn btn-outline-primary" data-copy><?= I18N::translate('Adresse kopieren') ?></button>
                     </div>
                     <p class="small text-success d-none" data-copy-ok><?= I18N::translate('Kopiert.') ?></p>
                     <p class="small text-danger d-none" data-copy-fail><?= I18N::translate('Kopieren ging nicht – die Adresse ist markiert, bitte mit Strg+C kopieren.') ?></p>
                     <?php if ($secure) : ?>
-                        <p><?= I18N::translate('Dann %s starten: Es übernimmt die kopierte Adresse von selbst (sonst mit Strg+V einfügen). Danach mit deinem webtrees-Benutzernamen und Passwort anmelden.', $name) ?></p>
+                        <p class="small"><?= I18N::translate('Dann %s starten: Es übernimmt die kopierte Adresse von selbst (sonst mit Strg+V einfügen). Danach mit deinem webtrees-Benutzernamen und Passwort anmelden.', $name) ?></p>
                         <?php if ($home) : ?>
-                            <p class="text-muted small"><?= I18N::translate('Unverschlüsselt – nur im Heimnetz. Für unterwegs: HTTPS einrichten.') ?></p>
+                            <p class="text-muted small"><?= I18N::translate('Unverschlüsselt – nur im Heimnetz.') ?> <a href="https://github.com/thobgg/nas4webtrees#access-from-outside" target="_blank" rel="noopener"><?= I18N::translate('Von unterwegs erreichbar machen: Anleitung') ?></a></p>
                         <?php endif ?>
                     <?php else : ?>
                         <p class="text-danger"><?= I18N::translate('Diese Adresse ist unverschlüsselt (http) und liegt nicht im Heimnetz – %s verbindet sich damit nicht. Bitte HTTPS einrichten.', $name) ?></p>
@@ -71,8 +91,9 @@ $pc = static function (string $os) use ($download_url, $base_url, $secure, $home
     <?php
 };
 
-$phone_first = !in_array($device, ['windows', 'linux'], true);
-$others      = $phone_first ? ['windows', 'linux'] : ['phone', $device === 'windows' ? 'linux' : 'windows'];
+// Reihenfolge (Thomas, 27.09.2026): wtWin und wtAnd offen, am Handy wtAnd zuerst, sonst wtWin (Hauptzielgruppe).
+// wtTux eingeklappt darunter - aufgeklappt, wenn die Seite von einem Linux-PC kommt.
+$phone_first = in_array($device, ['android', 'ios'], true);
 
 ?>
 
@@ -118,7 +139,7 @@ $others      = $phone_first ? ['windows', 'linux'] : ['phone', $device === 'wind
                     <p><?= I18N::translate('Melde dich an, um die App mit deinem Konto zu verbinden.') ?></p>
                 <?php elseif (!$secure) : ?>
                     <p><?= I18N::translate('Das Verbinden per Code ist nur über eine verschlüsselte Verbindung (https) möglich. In der App kannst du dich stattdessen mit Adresse, Benutzername und Passwort anmelden.') ?></p>
-                <?php else : ?>
+                <?php elseif ($phone_first) : ?>
                     <p><?= I18N::translate('Ein Tipp genügt – Adresse und Passwort musst du in der App nicht eintippen.') ?></p>
                     <p>
                         <a class="btn btn-primary" href="<?= e($deep_link) ?>"><?= $deep_link2 === '' ? I18N::translate('Jetzt verbinden') : I18N::translate('Mit wtAnd verbinden') ?></a>
@@ -130,8 +151,16 @@ $others      = $phone_first ? ['windows', 'linux'] : ['phone', $device === 'wind
                         <p class="text-muted small mb-1"><?= I18N::translate('Am Computer? Dann diesen Code mit der Handy-Kamera scannen:') ?></p>
                         <div style="max-width: 13rem; background: #fff; padding: .5rem;"><?= $connect_qr ?></div>
                     <?php endif ?>
+                <?php else : ?>
+                    <?php /* Am PC fuehrt der App-Link ins Leere (kein Programm nimmt webtreesand:// an) - nur der QR-Code fuers Handy. */ ?>
+                    <?php if ($connect_qr !== '') : ?>
+                        <p><?= I18N::translate('Diesen Code mit der Handy-Kamera scannen – die App verbindet sich dann von selbst, ohne Adresse und Passwort.') ?></p>
+                        <div style="max-width: 13rem; background: #fff; padding: .5rem;"><?= $connect_qr ?></div>
+                    <?php else : ?>
+                        <p><?= I18N::translate('Öffne diese Seite auf dem Handy und tippe dort auf „Jetzt verbinden“.') ?></p>
+                    <?php endif ?>
                     <?php if ($home) : ?>
-                        <p class="text-muted small mt-2"><?= I18N::translate('Unverschlüsselt – nur im Heimnetz. Für unterwegs: HTTPS einrichten.') ?></p>
+                        <p class="text-muted small mt-2"><?= I18N::translate('Unverschlüsselt – nur im Heimnetz.') ?> <a href="https://github.com/thobgg/nas4webtrees#access-from-outside" target="_blank" rel="noopener"><?= I18N::translate('Von unterwegs erreichbar machen: Anleitung') ?></a></p>
                     <?php endif ?>
                     <p class="text-muted small mt-2"><?= I18N::translate('Der Code gilt %s Minuten und nur ein einziges Mal. Er verbindet die App mit deinem Konto – gib ihn nicht weiter.', I18N::number($minutes)) ?></p>
                 <?php endif ?>
@@ -141,26 +170,18 @@ $others      = $phone_first ? ['windows', 'linux'] : ['phone', $device === 'wind
 </div>
 <?php $phone = ob_get_clean() ?>
 
-<?php if ($phone_first) : ?>
-    <?= $phone ?>
-<?php else : ?>
-    <?php $pc($device) ?>
-<?php endif ?>
+<?php foreach ($phone_first ? ['phone', 'windows'] : ['windows', 'phone'] as $section) : ?>
+    <h3 class="h4 mt-4 mb-3"><?= $section === 'phone' ? I18N::translate('Android-Handy und -Tablet: wtAnd') : I18N::translate('Windows-PC: wtWin') ?></h3>
+    <?php if ($section === 'phone') : ?>
+        <?= $phone ?>
+    <?php else : ?>
+        <?php $pc('windows') ?>
+    <?php endif ?>
+<?php endforeach ?>
 
-<details class="mt-4">
-    <summary class="h5"><?= I18N::translate('Andere Geräte') ?></summary>
-    <?php foreach ($others as $other) : ?>
-        <h3 class="h5 mt-3"><?= match ($other) {
-            'phone'   => I18N::translate('Android-Handy und -Tablet: wtAnd'),
-            'windows' => I18N::translate('Windows-PC: wtWin'),
-            default   => I18N::translate('Linux-PC: wtTux'),
-        } ?></h3>
-        <?php if ($other === 'phone') : ?>
-            <?= $phone ?>
-        <?php else : ?>
-            <?php $pc($other) ?>
-        <?php endif ?>
-    <?php endforeach ?>
+<details class="mt-4"<?= $device === 'linux' ? ' open' : '' ?>>
+    <summary class="h4"><?= I18N::translate('Auch für Linux: wtTux') ?></summary>
+    <div class="mt-3"><?php $pc('linux') ?></div>
 </details>
 
 <script>
@@ -185,28 +206,68 @@ $others      = $phone_first ? ['windows', 'linux'] : ['phone', $device === 'wind
       });
     });
 
-    // Adresse kopieren: navigator.clipboard gibt es nur ueber https - im Heimnetz (http://) der alte Weg ueber die Markierung.
+    // Text in die Zwischenablage: navigator.clipboard gibt es nur ueber https - im Heimnetz (http://) der alte Weg ueber
+    // ein markiertes Textfeld. Muss direkt im Klick passieren, sonst verweigert der Browser das Kopieren.
+    var copyText = function (text, done) {
+      var legacy = function () {
+        var area = document.createElement('textarea');
+        area.value = text;
+        area.setAttribute('readonly', '');
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        document.body.removeChild(area);
+        done(ok);
+      };
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(function () { done(true); }, legacy);
+      } else {
+        legacy();
+      }
+    };
+
+    // Der Einmal-Code gilt nur begrenzt. Wer erst herunterlaedt und installiert, kommt vielleicht spaeter zurueck -
+    // dann die Seite neu laden (neuer Code), bevor jemand auf einen abgelaufenen Knopf klickt.
+    var born   = Date.now();
+    var maxAge = Math.max(60, <?= $json($minutes) ?> * 60 - 60) * 1000;
+    var stale  = function () { return Date.now() - born > maxAge; };
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && stale() && document.querySelector('[data-connect]')) { window.location.reload(); }
+    });
+
+    // Mit wtWin/wtTux verbinden: Link in die Zwischenablage (das Programm wartet darauf) und zusaetzlich oeffnen - in einem
+    // unsichtbaren Rahmen, damit ein noch unbekanntes Schema keine Fehlerseite zeigt.
+    document.querySelectorAll('button[data-connect]').forEach(function (button) {
+      var box  = button.closest('.card-body');
+      var ok   = box.querySelector('[data-connect-ok]');
+      var fail = box.querySelector('[data-connect-fail]');
+      button.addEventListener('click', function () {
+        if (stale()) { window.location.reload(); return; }
+        var link = button.getAttribute('data-connect');
+        copyText(link, function (copied) {
+          ok.classList.toggle('d-none', !copied);
+          fail.classList.toggle('d-none', copied);
+        });
+        var frame = document.createElement('iframe');
+        frame.style.display = 'none';
+        frame.src = link;
+        document.body.appendChild(frame);
+        window.setTimeout(function () { document.body.removeChild(frame); }, 3000);
+      });
+    });
+
+    // Adresse kopieren: wie oben; klappt es nicht, bleibt die Adresse zum Kopieren mit Strg+C markiert.
     document.querySelectorAll('button[data-copy]').forEach(function (button) {
       var box    = button.closest('.card-body');
       var input  = box.querySelector('[data-copy-source]');
       var ok     = box.querySelector('[data-copy-ok]');
       var fail   = box.querySelector('[data-copy-fail]');
-      var show   = function (good) { ok.classList.toggle('d-none', !good); fail.classList.toggle('d-none', good); };
-      var legacy = function () {
-        input.focus();
-        input.select();
-        var done = false;
-        try { done = document.execCommand('copy'); } catch (e) { done = false; }
-        show(done);
-      };
+      var show   = function (good) { ok.classList.toggle('d-none', !good); fail.classList.toggle('d-none', good); if (!good) { input.focus(); input.select(); } };
       input.addEventListener('focus', function () { input.select(); });
-      button.addEventListener('click', function () {
-        if (navigator.clipboard && window.isSecureContext) {
-          navigator.clipboard.writeText(input.value).then(function () { show(true); }, legacy);
-        } else {
-          legacy();
-        }
-      });
+      button.addEventListener('click', function () { copyText(input.value, show); });
     });
   })();
 </script>

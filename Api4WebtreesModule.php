@@ -110,6 +110,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
     // Benutzereinstellung: Hinweis auf die App nicht mehr zeigen - 'connected' (App verbunden) oder 'dismissed'.
     private const string HINT_SETTING       = 'webtreesand_hint';
+    private const string HINT_DESK_SETTING  = 'wtdesk_hint';
 
     // Eine zweite App, die derselben Schnittstelle folgt (z. B. fuer iOS): der Verwalter traegt sie in den
     // Einstellungen ein, dann erscheint sie neben wtAnd auf der Seite "App" und beim Koppeln.
@@ -231,7 +232,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
     public function customModuleVersion(): string
     {
-        return '1.9.3';
+        return '1.9.4';
     }
 
     public function customModuleLatestVersionUrl(): string
@@ -272,9 +273,10 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
         return view($this->name() . '::footer', [
             'app_url'   => $this->actionUrl('App', $tree->name()),
-            'hint'      => Auth::user()->getPreference(self::HINT_SETTING) === '' && $action !== 'App' && $action !== 'Connect',
+            'hint'      => Auth::user()->getPreference(self::hintKey($request->getHeaderLine('User-Agent'))) === '' && $action !== 'App' && $action !== 'Connect',
             'hint_url'  => $this->actionUrl('HintOff', $tree->name()),
             'page_url'  => (string) $request->getUri(),
+            'device'    => self::device($request->getHeaderLine('User-Agent')),
         ]);
     }
 

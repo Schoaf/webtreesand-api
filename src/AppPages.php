@@ -171,6 +171,7 @@ trait AppPages
         $connect_url = '';
         $deep_link   = '';
         $deep_link2  = '';
+        $deep_pc     = ['windows' => '', 'linux' => ''];
         $app2        = $this->secondApp();
 
         if (Auth::check() && $secure) {
@@ -183,14 +184,14 @@ trait AppPages
             $connect_url = $this->actionUrl('Connect', null) . '#' . http_build_query($params);
             $deep_link   = $this->deepLink('webtreesand', $base_url, $params);
             $deep_link2  = $app2 !== null && $app2['scheme'] !== '' ? $this->deepLink($app2['scheme'], $base_url, $params) : '';
+            // wtWin/wtTux: derselbe Link mit eigenem Schema. Der Knopf legt ihn in die Zwischenablage (das Programm liest
+            // sie, solange es auf eine Verbindung wartet) und oeffnet ihn zusaetzlich - das Programm meldet sich dafuer
+            // beim ersten Start selbst als Empfaenger an.
+            $deep_pc     = ['windows' => $this->deepLink('wtwin', $base_url, $params), 'linux' => $this->deepLink('wttux', $base_url, $params)];
         }
 
         $device = self::device($request->getHeaderLine('User-Agent'));
-        $title  = match ($device) {
-            'windows' => I18N::translate('%s – das Programm für diesen Stammbaum', 'wtWin'),
-            'linux'   => I18N::translate('%s – das Programm für diesen Stammbaum', 'wtTux'),
-            default   => I18N::translate('wtAnd – die App für diesen Stammbaum'),
-        };
+        $title  = I18N::translate('Dein Stammbaum am PC und auf dem Handy');
 
         return $this->viewResponse($this->name() . '::app', [
             'title'        => $title,
@@ -209,17 +210,18 @@ trait AppPages
             'app2'         => $app2,
             'app2_qr'      => $app2 === null ? '' : $this->qrSvg($app2['android'] !== '' ? $app2['android'] : $app2['ios']),
             'deep_link2'   => $deep_link2,
+            'deep_pc'      => $deep_pc,
             'minutes'      => intdiv(self::PAIR_SECONDS, 60),
         ]);
     }
 
     /**
-     * "Nicht mehr anzeigen" im Hinweis auf die App: gilt fuer diesen Benutzer, auf allen Geraeten.
+     * "Nicht mehr anzeigen" im Hinweis auf die App: gilt fuer diesen Benutzer, auf allen Geraeten derselben Art (Handy bzw. PC).
      */
     public function postHintOffAction(ServerRequestInterface $request): ResponseInterface
     {
         if (Auth::check()) {
-            Auth::user()->setPreference(self::HINT_SETTING, 'dismissed');
+            Auth::user()->setPreference(self::hintKey($request->getHeaderLine('User-Agent')), 'dismissed');
         }
 
         return redirect(Validator::parsedBody($request)->isLocalUrl()->string('url', $this->actionUrl('App', null)));
@@ -280,7 +282,7 @@ trait AppPages
         Auth::login($user);
         Log::addAuthenticationLog('Login (wtAnd, QR-Code): ' . $user->userName() . '/' . $user->realName());
         $user->setPreference(UserInterface::PREF_TIMESTAMP_ACTIVE, (string) time());
-        $user->setPreference(self::HINT_SETTING, 'connected');
+        $user->setPreference(self::hintKey($request->getHeaderLine('User-Agent')), 'connected');
 
         return response(['ok' => true, 'tree' => $tree_name, 'user' => $user->userName()]);
     }
@@ -343,6 +345,15 @@ trait AppPages
             str_contains($ua, 'linux')                    => 'linux',
             default                                       => 'other',
         };
+    }
+
+    /**
+     * Der Hinweis nach dem Anmelden merkt sich Handy und PC getrennt: wer wtAnd verbunden hat, soll trotzdem von wtWin
+     * erfahren (und umgekehrt). Die Apps melden sich mit wtAnd/…, wtWin/… (Windows) bzw. wtTux/… (Linux).
+     */
+    private static function hintKey(string $user_agent): string
+    {
+        return in_array(self::device($user_agent), ['windows', 'linux'], true) ? self::HINT_DESK_SETTING : self::HINT_SETTING;
     }
 
     private function deepLink(string $scheme, string $base_url, array $params): string

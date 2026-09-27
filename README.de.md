@@ -77,15 +77,26 @@ iPhone und iPad. Bleiben die Felder leer, ändert sich nichts. Siehe [Andere App
 
 ## Für Familienmitglieder: die Seite „App“
 
-Angemeldete Benutzer finden im Menü den Eintrag **App**. Die Seite bietet zwei Schritte:
+Angemeldete Benutzer sehen oben auf der Seite einen Hinweis mit einem Knopf zur Seite „App“ – am Windows- oder Linux-PC
+**„Den Stammbaum als Programm auf dem PC“** (wtWin/wtTux), am Handy **„Den Stammbaum aufs Handy“** (wtAnd). Handy und PC
+werden getrennt gemerkt: Der Hinweis verschwindet für diese Geräteart, sobald ihre App verbunden ist (oder nach *Nicht
+mehr anzeigen*); danach führen die Links in der Fußzeile dorthin. Die Seite zeigt wtWin und wtAnd (am Handy wtAnd zuerst)
+und darunter eingeklappt wtTux, aufgeklappt beim Aufruf von einem Linux-PC. Jeweils zwei Schritte:
 
-1. **App installieren:** Ein Knopf und ein QR-Code führen zum Download.
-2. **Mit dem eigenen Konto verbinden:** Ein Tipp (oder ein QR-Code, wenn man am Computer sitzt) übergibt der App
-   Serveradresse, Stammbaum und einen Einmal-Code. Es gibt nichts einzutippen, und das Passwort erreicht das Handy nie.
+1. **Installieren:** ein Knopf zur neuesten Datei (`.exe`, `.deb` oder APK), fürs Handy auch als QR-Code.
+2. **Mit dem eigenen Konto verbinden – nichts eintippen, das Passwort erreicht das Gerät nie:**
+   - **PC:** Der Knopf *Mit wtWin verbinden* legt den Verbinden-Link mit einem Einmal-Code in die Zwischenablage und
+     öffnet ihn als `wtwin://connect?…` (unter Linux `wttux://`). wtWin/wtTux (ab 1.21) übernehmen ihn aus der
+     Zwischenablage, solange sie auf eine Verbindung warten, oder bekommen ihn vom Browser – sie melden sich beim ersten
+     Start selbst für ihr Schema an, ohne Administratorrechte. Sie fragen einmal nach, dann ist der Baum offen. Ist die
+     Seite älter als der Code, lädt sie sich beim Zurückkommen selbst neu (etwa nach Download und Installation).
+   - **Handy:** ein Tipp, oder am Computer ein QR-Code für die Handy-Kamera.
+   - Von Hand bleibt *Adresse kopieren*: Die Programme setzen sie selbst ein, danach mit Benutzername und Passwort anmelden.
 
 Der Einmal-Code wird nur dem angemeldeten Benutzer gezeigt, gilt 10 Minuten und genau einmal und wird nur über https
-angeboten. Gespeichert wird nur sein Hash. Verwalter können den Menüpunkt unter *Verwaltung → Module → Menüs*
-verschieben oder abschalten.
+angeboten – oder über http im Heimnetz (private Adressen, `.local`, `.lan`, `.fritz.box` …), nach derselben Regel, nach
+der die Apps http zulassen. Gespeichert wird nur sein Hash. Das Modul nicht unter *Verwaltung → Module → Fußzeilen*
+abschalten: Das schaltet in webtrees das ganze Modul ab, samt Schnittstelle.
 
 ## Datenschutz und Rechte
 

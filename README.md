@@ -77,17 +77,26 @@ With the fields empty nothing changes. See [Connecting other apps](#connecting-o
 
 ## For family members: the “App” page
 
-Signed-in users see a note **“The family tree on your phone”** at the top of the page with a button to the “App” page.
-The note disappears for good once their app is connected (or when they click *Do not show again*); after that the
-link **App for Android** in the footer leads there, for example for a new phone. The page offers two steps:
+Signed-in users see a note at the top of the page with a button to the “App” page – at a Windows or Linux PC
+**“The family tree as a program on your PC”** (wtWin/wtTux), on a phone **“The family tree on your phone”** (wtAnd).
+Phone and PC are remembered separately: the note disappears for that kind of device once its app is connected (or when
+they click *Do not show again*); after that the links in the footer lead there. The page shows wtWin and wtAnd (on a
+phone wtAnd first) and wtTux folded below, opened when visited from a Linux PC. Each has two steps:
 
-1. **Install the app:** a button and a QR code lead to the download.
-2. **Connect your account:** one tap (or a QR code when sitting at a computer) hands the server address, the tree and
-   a one-time code to the app. There is nothing to type, and the password never reaches the phone.
+1. **Install:** a button to the newest download (`.exe`, `.deb` or APK), for the phone also as a QR code.
+2. **Connect your account – nothing to type, the password never reaches the device:**
+   - **PC:** the button *Connect with wtWin* puts the connect link with a one-time code on the clipboard and opens it
+     as `wtwin://connect?…` (`wttux://` on Linux). wtWin/wtTux (from 1.21) take it from the clipboard while they wait
+     for a connection, or receive it from the browser – they register themselves for their scheme at first start,
+     without admin rights. They ask once for confirmation, then the tree opens. If the page is older than the code,
+     it reloads by itself when you come back to it (e.g. after download and installation).
+   - **Phone:** one tap, or at a computer a QR code for the phone camera.
+   - By hand, *Copy address* is still there: the programs fill it in by themselves, then sign in with username and password.
 
 The one-time code is shown only to the signed-in user, is valid for 10 minutes and exactly once, and is only offered over
-https. Only its hash is stored. Do not untick the module under *Control panel → Modules → Footers*: in webtrees that switches
-off the whole module, including the API.
+https – or over http inside the home network (private addresses, `.local`, `.lan`, `.fritz.box` …), the same rule by which
+the apps accept http. Only its hash is stored. Do not untick the module under *Control panel → Modules → Footers*: in
+webtrees that switches off the whole module, including the API.
 
 ## Privacy and permissions
 
