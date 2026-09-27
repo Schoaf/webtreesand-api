@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.9.3 – unreleased
+## 1.9.3 – 2026-09-27
 API level 17, unchanged. **The page “App” helps at the PC too.** It reads the browser's operating system and shows the
 matching program first: on Windows wtWin, on Linux wtTux, on phones wtAnd as before; the others fold away under
 “Other devices”. For the PC there are two steps: a download button for the newest `.exe` or `.deb` (looked up on
