@@ -1,0 +1,28 @@
+# Tests gegen ein echtes webtrees (tests/test_api.py) bei jedem Push und Pull Request.
+# api4webtrees traegt wtAnd, wtWin/wtTux, nas4webtrees und die lokale Fassung - ein Fehler traefe alle.
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  api:
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ["8.3", "8.4"]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: ctype, curl, gd, iconv, intl, json, mbstring, pdo, pdo_sqlite, pdo_mysql, session, xml, zip, zlib
+          ini-values: memory_limit=512M
+      - name: Tests
+        run: python3 -W ignore tests/test_api.py
+      - name: PHP-Protokoll bei Fehler
+        if: failure()
+        run: tail -100 tests/.work/php.log || true

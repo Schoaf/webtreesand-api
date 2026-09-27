@@ -1,0 +1,66 @@
+0 HEAD
+1 SOUR api4webtrees-tests
+1 GEDC
+2 VERS 5.5.1
+2 FORM LINEAGE-LINKED
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME Theodor /Offen/
+1 SEX M
+1 BIRT
+2 DATE 1 MAR 1800
+2 PLAC Offenbach
+1 DEAT
+2 DATE 5 JUN 1870
+1 OCCU Schmied
+1 OCCU Markerberuf
+2 RESN privacy
+1 RELI katholisch
+2 RESN locked
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Anna /Offen/
+1 SEX F
+1 BIRT
+2 DATE 1805
+1 DEAT
+2 DATE 1880
+1 FAMS @F1@
+0 @I4@ INDI
+1 NAME Karl /Offen/
+1 SEX M
+1 BIRT
+2 DATE 1830
+1 DEAT
+2 DATE 1900
+1 FAMC @F1@
+1 FAMS @F2@
+0 @I5@ INDI
+1 NAME Konrad /Markername/
+1 SEX M
+1 RESN confidential
+1 BIRT
+2 DATE 1835
+2 PLAC Markerkonfidenzort
+1 DEAT
+2 DATE 1890
+1 NOTE Markerkonfidenz-Notiz
+1 FAMC @F1@
+0 @I3@ INDI
+1 NAME Lebhart /Markerlebend/
+1 SEX M
+1 BIRT
+2 DATE 12 APR 1990
+2 PLAC Markerlebendort
+1 FAMC @F2@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR
+2 DATE 1828
+1 CHIL @I4@
+1 CHIL @I5@
+0 @F2@ FAM
+1 HUSB @I4@
+1 CHIL @I3@
+0 TRLR

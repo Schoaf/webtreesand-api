@@ -4,3 +4,7 @@ cookies.txt
 guest.txt
 # Lokale Arbeitsdateien, nie ins Repo
 tmp/
+# Testumgebung (tests/umgebung.py)
+tests/.work/
+tests/.cache/
+tests/__pycache__/
