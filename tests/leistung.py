@@ -9,6 +9,8 @@ Aufrufen. Dazu der komplette Export (alle Seiten), den die Apps zum Offline-Spei
 import datetime
 import os
 import re
+import shutil
+import subprocess
 import statistics
 import sys
 import time
@@ -39,6 +41,27 @@ def export_gesamt(s, baum):
             break
         seite = a.json["nextPage"]
     return time.perf_counter() - t, seiten, personen, len(a.text)
+
+
+def gramps_messen(ged):
+    """Zum Vergleich dieselbe Datei in Gramps (freie Software), wenn installiert: einlesen und als GEDCOM ausgeben.
+    Eigener GRAMPSHOME im Arbeitsordner - vorhandene Gramps-Stammbaeume bleiben unberuehrt."""
+    if not shutil.which("gramps"):
+        return None
+    heim = os.path.join(umgebung.ARBEIT, "gramps-home")
+    shutil.rmtree(heim, ignore_errors=True)
+    os.makedirs(heim)
+    env = dict(os.environ, GRAMPSHOME=heim)
+    name = os.path.basename(ged)
+    t = time.perf_counter()
+    subprocess.run(["gramps", "-y", "-C", name, "-i", ged], env=env, capture_output=True)
+    einlesen = time.perf_counter() - t
+    t = time.perf_counter()
+    subprocess.run(["gramps", "-y", "-O", name, "-e", ged + ".gramps-export.ged"], env=env, capture_output=True)
+    ausgeben = time.perf_counter() - t
+    version = subprocess.run(["gramps", "-v"], env=env, capture_output=True, text=True).stdout
+    version = re.search(r"^\s*gramps\s*:\s*(\S+)", version, re.I | re.M)
+    return einlesen, ausgeben, version.group(1) if version else "?"
 
 
 def main(groessen):
@@ -99,9 +122,18 @@ def main(groessen):
                 p = " ".join(f"{k}={v}" for k, v in params.items())
                 klein = f" `{aa.text[:70]}`" if len(aa.text) < 300 else ""
                 print(f"| {aktion}{warnung} | {p}{klein} | {ta:.2f} | {tg:.2f} | {len(aa.text) / 1024:.0f} |")
+            export = {}
             for wer, s in sitzungen.items():
                 t, seiten, personen, _ = export_gesamt(s, baum)
+                export[wer] = t
                 print(f"| Export, all pages ({wer}) | {seiten} pages, {personen} individuals | {t:.1f} s in total | | |")
+            gramps = gramps_messen(ged)
+            if gramps:
+                print(f"\nFor comparison, the same file in Gramps {gramps[2]} (free software, SQLite, command line):\n")
+                print("| | webtrees + api4webtrees | Gramps |")
+                print("|---|---:|---:|")
+                print(f"| Read the GEDCOM file | {import_s:.1f} s | {gramps[0]:.1f} s |")
+                print(f"| Read everything once (API export, all pages / GEDCOM export) | {export['Admin']:.1f} s | {gramps[1]:.1f} s |")
     finally:
         u.abbauen()
     import platform, subprocess
