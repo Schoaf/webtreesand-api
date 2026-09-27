@@ -133,6 +133,8 @@ einen Baums die Dateien des anderen und können sie verknüpfen.
 
 ## Für Entwickler
 
+Vollständige Beschreibung aller Routen, Antwortschemas und Leistungszahlen (englisch): **[docs/API.md](docs/API.md)** (maschinenlesbar: [docs/openapi.json](docs/openapi.json), aus echten Antworten erzeugt und von den Tests geprüft).
+
 Die vollständige Beschreibung der Schnittstelle (Adressen, Anmeldung, alle Aktionen, Fehlercodes)
 steht in der [englischen README](README.md#for-developers).
 

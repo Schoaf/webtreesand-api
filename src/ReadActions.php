@@ -375,40 +375,56 @@ trait ReadActions
         $facts = Registry::container()->get(CalendarService::class)
             ->getEventsList($today, $today + $days - 1, 'BIRT MARR DEAT', false, 'anniv', $tree);
 
-        $data = [];
+        // Grosse Baeume haben an jedem Tag Hunderte Jahrestage laengst Verstorbener (Leistungscheck 27.09.2026:
+        // 50.000 Personen, 14 Tage = 5,5 MB in 4 s). Darum erst billig auswaehlen, dann nur die ersten ANNIV_LIMIT
+        // ausfuehrlich beschreiben: je Tag Lebende zuerst, dann runde Jahrestage (25, 50, 75 ...), dann der Rest.
+        $candidates = [];
 
         foreach ($facts as $fact) {
             $record = $fact->record();
 
-            if (!$record->canShow() || !$fact->canShow() || $fact->anniv <= 0) {
+            if ($fact->anniv <= 0 || !$record->canShow() || !$fact->canShow()) {
                 continue;
             }
 
-            $person = $record instanceof Individual ? $record : null;
+            $living = $record instanceof Individual
+                ? !$record->isDead()
+                : $record instanceof Family && $record->spouses()->every(static fn (Individual $spouse): bool => !$spouse->isDead());
+
+            $candidates[] = [$fact->jd - $today, $living ? 0 : 1, $fact->anniv % 25 === 0 ? 0 : 1, $record->xref(), $fact];
+        }
+
+        usort($candidates, static fn (array $a, array $b): int => array_slice($a, 0, 4) <=> array_slice($b, 0, 4));
+
+        $data = [];
+
+        foreach (array_slice($candidates, 0, self::ANNIV_LIMIT) as [$in_days, , , , $fact]) {
+            $record = $fact->record();
             $couple = [];
 
             if ($record instanceof Family) {
                 foreach ($record->spouses() as $spouse) {
-                    $couple[] = $this->personSummary($spouse);
+                    $couple[] = $this->personShort($spouse);
                 }
             }
 
             $data[] = [
-                'inDays'  => $fact->jd - $today,
+                'inDays'  => $in_days,
                 'tag'     => $this->shortTag($fact->tag()),
                 'label'   => $this->factLabel($fact),
                 'years'   => $fact->anniv,
                 'date'    => $this->dateJson($fact->date()),
                 'xref'    => $record->xref(),
                 'name'    => $this->plain($record->fullName()),
-                'person'  => $person instanceof Individual ? $this->personSummary($person) : null,
+                'person'  => $record instanceof Individual ? $this->personShort($record) : null,
                 'couple'  => $couple,
             ];
         }
 
+        // Innerhalb eines Tages alphabetisch, wie bisher.
         usort($data, static fn (array $a, array $b): int => [$a['inDays'], $a['name']] <=> [$b['inDays'], $b['name']]);
 
-        return response(['days' => $days, 'data' => $data]);
+        return response(['days' => $days, 'data' => $data, 'total' => count($candidates), 'more' => count($candidates) > count($data)]);
     }
 
     /**

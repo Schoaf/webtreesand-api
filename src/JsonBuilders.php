@@ -57,6 +57,28 @@ trait JsonBuilders
      *
      * @return array<string,mixed>
      */
+    /**
+     * Kurzform fuer lange Listen (Jahrestage): nur, was eine Zeile mit Bild braucht. Die Felder sind dieselben wie in
+     * personSummary(), Clients lesen sie mit demselben Modell (fehlende Felder bleiben leer).
+     *
+     * @return array<string,mixed>
+     */
+    private function personShort(Individual $individual): array
+    {
+        $media_file = $individual->findHighlightedMediaFile();
+
+        return [
+            'xref'     => $individual->xref(),
+            'name'     => $this->plain($individual->fullName()),
+            'sex'      => $individual->sex(),
+            'isDead'   => $individual->isDead(),
+            'private'  => !$individual->canShow(),
+            'lifespan' => $this->plain($individual->lifespan()),
+            'thumb'    => $media_file !== null && $media_file->isImage() ? $media_file->imageUrl(200, 200, 'crop') : null,
+            'url'      => $individual->url(),
+        ];
+    }
+
     private function personSummary(Individual $individual, bool $with_counts = false): array
     {
         $media_file = $individual->findHighlightedMediaFile();

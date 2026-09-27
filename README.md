@@ -129,6 +129,8 @@ of another.
 
 ## For developers
 
+Complete reference of all routes, answer schemas and performance figures: **[docs/API.md](docs/API.md)** (machine-readable: [docs/openapi.json](docs/openapi.json), generated from real answers and checked by the tests).
+
 ### Addresses
 
 The module uses webtrees' built-in module route and registers no routes of its own (the routing API

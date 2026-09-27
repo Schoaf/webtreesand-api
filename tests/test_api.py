@@ -5,10 +5,12 @@ Kern ist der Leck-Test: Die Testdaten tragen Markierungswoerter in allem, was ei
 Person, vertrauliche Person, Ereignis mit RESN privacy, privater Baum). Jede Rolle ruft jede Leseroute auf - kein
 Markierungswort darf in irgendeiner Antwort stehen. So faellt ein Leck auf, egal ueber welches Feld es kaeme.
 """
+import datetime
 import json
 import sys
 import unittest
 
+import manifest
 import umgebung
 
 U = None
@@ -79,6 +81,10 @@ class Lecktest(unittest.TestCase):
             for aktion, b, params in leseaufrufe(baum):
                 a = s.get(aktion, b, **params)
                 self.assertLess(a.status, 500, f"{benutzer or 'Gast'}: {aktion} {b} {params} -> {a}")
+                # Jede Antwort muss zum Manifest passen (docs/openapi.json, neu erzeugen: tests/manifest.py).
+                if a.json is not None and a.json.get("ok") is not False:
+                    abweichung = manifest.pruefen(a.json, manifest.schema_fuer("get", aktion))
+                    self.assertEqual([], abweichung[:5], f"Manifest veraltet? {aktion} {params} (tests/manifest.py)")
                 # Die Suche nennt das Suchwort in der Antwort - das ist kein Leck.
                 text = a.text.replace(json.dumps(params.get("q", "")), '""')
                 for wort in verboten:
@@ -167,6 +173,21 @@ class Schreiben(unittest.TestCase):
                                                   "dead": True, "birthDate": "1850"})
         self.assertEqual(True, a.json["ok"], a)
         self.assertIn("Testperson", s.get("Individual", "testbaum", xref=a.json["xref"]).text)
+
+    def test_jahrestag_heute(self):
+        heute = datetime.date.today()
+        datum = f"{heute.day} {'JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC'.split()[heute.month - 1]} {heute.year - 100}"
+        s = U.sitzung("admin")
+        neu = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Hundert", "surname": "Jahre", "sex": "M",
+                                                    "birthDate": datum, "dead": True})
+        self.assertEqual(True, neu.json["ok"], neu)
+        a = U.sitzung().get("Anniversaries", "testbaum", days=1)
+        treffer = [e for e in a.json["data"] if e["xref"] == neu.json["xref"]]
+        self.assertEqual(1, len(treffer), a)
+        self.assertEqual((0, 100, "BIRT"), (treffer[0]["inDays"], treffer[0]["years"], treffer[0]["tag"]))
+        self.assertEqual(neu.json["xref"], treffer[0]["person"]["xref"])
+        self.assertIn("more", a.json)
+        self.assertLessEqual(len(a.json["data"]), a.json["total"])
 
     def test_ungueltiger_koppelcode(self):
         s = U.sitzung()

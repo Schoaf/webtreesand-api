@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.9.6 – 2026-09-27
+API level 17, unchanged. **Anniversaries stay small on large trees.** A tree with 50,000 individuals has hundreds of
+anniversaries of long-dead people every day; 14 days came to 5.5 MB in 4 s. Now at most 100 entries are returned –
+per day living people first, then round anniversaries (25, 50, 75 …) – with short person entries (`xref`, `name`,
+`sex`, `isDead`, `private`, `lifespan`, `thumb`, `url`); new fields `total` and `more`. 14 days on 50,000 individuals:
+45 KB in 1.5 s. Clients read the answer as before.
+**Documentation and tests:** [docs/API.md](docs/API.md) and [docs/openapi.json](docs/openapi.json) describe every route,
+generated from real answers; `tests/` checks privacy (no role sees more than webtrees shows it), writing rights, CSRF
+and that every answer matches the documentation, on every push. Performance figures for 10,000 and 50,000 individuals
+are in the documentation.
+
 ## 1.9.5 – 2026-09-27
 API level 17, unchanged. **Apple devices get an honest note.** There is no program for Mac, iPhone and iPad yet, so
 the page “App” now says so and recommends the browser instead of showing the Android app first; the note after signing

@@ -123,6 +123,8 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     private const int PAGE_SIZE           = 50;
     private const int MEDIA_PAGE_SIZE     = 60;
     private const int PLACES_LIMIT        = 20;
+    // Jahrestage je Abruf (die Apps zeigen 8); mehr meldet "more": true.
+    private const int ANNIV_LIMIT         = 100;
     private const int MAX_PEDIGREE_GEN    = 12;
     private const int MAX_DESCENDANTS_GEN = 10;
     // Relationship: so viele gleich kurze Wege hoechstens (Ahnenschwund kann viele ergeben)
@@ -232,7 +234,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
     public function customModuleVersion(): string
     {
-        return '1.9.5';
+        return '1.9.6';
     }
 
     public function customModuleLatestVersionUrl(): string

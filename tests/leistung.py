@@ -6,6 +6,7 @@
 Gemessen wird als Admin (sieht alles) und als Gast (Privatsphaere-Pruefung je Person), je Route der Median aus drei
 Aufrufen. Dazu der komplette Export (alle Seiten), den die Apps zum Offline-Speichern abrufen.
 """
+import datetime
 import os
 import re
 import statistics
@@ -42,6 +43,11 @@ def export_gesamt(s, baum):
 
 def main(groessen):
     u = umgebung.Umgebung().aufbauen()
+    # Alles, was print() ausgibt, landet auch in docs/leistung.md (steht dann in docs/API.md).
+    ausgabe = []
+    global print
+    _print = print
+    print = lambda *a, **k: (_print(*a, **k), ausgabe.append(" ".join(str(x) for x in a)))  # noqa: E731
     try:
         for n in groessen:
             baum = f"gross{n}"
@@ -51,8 +57,8 @@ def main(groessen):
             t = time.perf_counter()
             umgebung.wt("tree-import", baum, ged)
             import_s = time.perf_counter() - t
-            print(f"\n## {baum}: {n} Personen, {familien} Familien, Import {import_s:.1f} s "
-                  f"({os.path.getsize(ged) / 1e6:.1f} MB GEDCOM)\n")
+            print(f"\n## {n} individuals, {familien} families – GEDCOM import {import_s:.1f} s "
+                  f"({os.path.getsize(ged) / 1e6:.1f} MB)\n")
 
             tief = f"I{n - 5}"  # juengste Generation: lange Ahnenreihe
             # Ein entfernter Nachfahre von I1 (letzter im Nachfahrenbaum), damit die Wegsuche wirklich laeuft.
@@ -80,24 +86,32 @@ def main(groessen):
                 ("MediaList", baum, {}),
                 ("Pending", baum, {}),
             ]
-            sitzungen = {"Admin": u.sitzung("admin"), "Gast": u.sitzung()}
-            print("| Route | Parameter | Admin s | Gast s | Admin KB |")
+            sitzungen = {"Admin": u.sitzung("admin"), "Visitor": u.sitzung()}
+            print("| Route | Parameters | Admin s | Visitor s | Size KB |")
             print("|---|---|---:|---:|---:|")
             for aktion, b, params in aufrufe:
                 werte = {}
                 for wer, s in sitzungen.items():
                     werte[wer] = messen(s, aktion, b, **params)
                 ta, aa = werte["Admin"]
-                tg, _ = werte["Gast"]
+                tg, _ = werte["Visitor"]
                 warnung = " ⚠" if max(ta, tg) > LANGSAM or aa.status >= 500 else ""
                 p = " ".join(f"{k}={v}" for k, v in params.items())
                 klein = f" `{aa.text[:70]}`" if len(aa.text) < 300 else ""
                 print(f"| {aktion}{warnung} | {p}{klein} | {ta:.2f} | {tg:.2f} | {len(aa.text) / 1024:.0f} |")
             for wer, s in sitzungen.items():
                 t, seiten, personen, _ = export_gesamt(s, baum)
-                print(f"| Export komplett ({wer}) | {seiten} Seiten, {personen} Personen | {t:.1f} s gesamt | | |")
+                print(f"| Export, all pages ({wer}) | {seiten} pages, {personen} individuals | {t:.1f} s in total | | |")
     finally:
         u.abbauen()
+    import platform, subprocess
+    php = subprocess.run([umgebung.PHP, "-r", "echo PHP_VERSION;"], capture_output=True, text=True).stdout
+    kopf = ["## Performance", "",
+            f"Measured {datetime.date.today()} with `tests/leistung.py` (generated trees, webtrees {os.environ.get('WEBTREES', '2.2.6')}, "
+            f"SQLite, PHP {php} built-in server, {platform.processor() or platform.machine()} PC). Median of three calls in seconds; "
+            "Visitor = not signed in (privacy checks per individual); size = answer for the admin.", ""]
+    with open(os.path.join(umgebung.MODUL, "docs", "leistung.md"), "w") as f:
+        f.write("\n".join(kopf + [z.replace("## ", "### ") for z in ausgabe]) + "\n")
 
 
 if __name__ == "__main__":
