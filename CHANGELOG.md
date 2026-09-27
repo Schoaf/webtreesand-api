@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.5 – 2026-09-27
+API level 17, unchanged. **Apple devices get an honest note.** There is no program for Mac, iPhone and iPad yet, so
+the page “App” now says so and recommends the browser instead of showing the Android app first; the note after signing
+in is not shown there. The footer names wtWin for everyone (“Program for the PC: wtWin · App for Android”) – wtTux is
+on the page “App”, opened for Linux PCs.
+
 ## 1.9.4 – 2026-09-27
 API level 17, unchanged. **wtWin and wtTux connect with one click.** On the page “App” at the PC, step 2 is now a
 button “Connect with wtWin” (or wtTux): it puts the connect link with the one-time code on the clipboard and also opens

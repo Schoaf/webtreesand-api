@@ -99,5 +99,7 @@ return [
     'Der Code gilt %1$s Minuten und nur ein einziges Mal. Er verbindet %2$s mit deinem Konto – gib ihn nicht weiter.' => 'The code is valid for %1$s minutes and only once. It connects %2$s to your account – do not pass it on.',
     'Unverschlüsselt – nur im Heimnetz.' => 'Unencrypted – home network only.',
     'Von unterwegs erreichbar machen: Anleitung' => 'Reach it from outside: instructions',
+    'Für Mac, iPhone und iPad gibt es noch kein eigenes Programm.' => 'There is no program for Mac, iPhone and iPad yet.',
+    'Nutze webtrees einfach hier im Browser – er funktioniert auf jedem Gerät. Hast du zusätzlich einen Windows-PC oder ein Android-Handy, findest du die Programme darunter.' => 'Simply use webtrees here in the browser – it works on every device. If you also have a Windows PC or an Android phone, you will find the programs below.',
     self::DESCRIPTION => 'JSON interface for the native Android app “wtAnd” – reads and writes with the rights of the signed-in user.',
 ];

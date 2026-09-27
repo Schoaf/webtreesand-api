@@ -232,7 +232,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
     public function customModuleVersion(): string
     {
-        return '1.9.4';
+        return '1.9.5';
     }
 
     public function customModuleLatestVersionUrl(): string
@@ -273,7 +273,9 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
         return view($this->name() . '::footer', [
             'app_url'   => $this->actionUrl('App', $tree->name()),
-            'hint'      => Auth::user()->getPreference(self::hintKey($request->getHeaderLine('User-Agent'))) === '' && $action !== 'App' && $action !== 'Connect',
+            // Apple-Geraete: kein Hinweis, es gibt fuer sie (noch) kein Programm.
+            'hint'      => !in_array(self::device($request->getHeaderLine('User-Agent')), ['mac', 'ios'], true)
+                && Auth::user()->getPreference(self::hintKey($request->getHeaderLine('User-Agent'))) === '' && $action !== 'App' && $action !== 'Connect',
             'hint_url'  => $this->actionUrl('HintOff', $tree->name()),
             'page_url'  => (string) $request->getUri(),
             'device'    => self::device($request->getHeaderLine('User-Agent')),

@@ -93,7 +93,8 @@ $pc = static function (string $os) use ($download_url, $base_url, $secure, $home
 
 // Reihenfolge (Thomas, 27.09.2026): wtWin und wtAnd offen, am Handy wtAnd zuerst, sonst wtWin (Hauptzielgruppe).
 // wtTux eingeklappt darunter - aufgeklappt, wenn die Seite von einem Linux-PC kommt.
-$phone_first = in_array($device, ['android', 'ios'], true);
+$apple       = $device === 'mac' || ($device === 'ios' && ($app2['ios'] ?? '') === '');
+$phone_first = $device === 'android' || $device === 'other' || ($device === 'ios' && !$apple);
 
 ?>
 
@@ -169,6 +170,14 @@ $phone_first = in_array($device, ['android', 'ios'], true);
     </div>
 </div>
 <?php $phone = ob_get_clean() ?>
+
+<?php if ($apple) : ?>
+    <?php /* Fuer Mac, iPhone und iPad gibt es noch kein Programm (27.09.2026) - ehrlich sagen statt Handy-Ansicht mit Android-App. */ ?>
+    <div class="alert alert-info">
+        <strong><?= I18N::translate('Für Mac, iPhone und iPad gibt es noch kein eigenes Programm.') ?></strong><br>
+        <?= I18N::translate('Nutze webtrees einfach hier im Browser – er funktioniert auf jedem Gerät. Hast du zusätzlich einen Windows-PC oder ein Android-Handy, findest du die Programme darunter.') ?>
+    </div>
+<?php endif ?>
 
 <?php foreach ($phone_first ? ['phone', 'windows'] : ['windows', 'phone'] as $section) : ?>
     <h3 class="h4 mt-4 mb-3"><?= $section === 'phone' ? I18N::translate('Android-Handy und -Tablet: wtAnd') : I18N::translate('Windows-PC: wtWin') ?></h3>

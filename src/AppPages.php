@@ -331,7 +331,8 @@ trait AppPages
 
     /**
      * Welches Geraet ruft die Seite auf? Nur fuer die Reihenfolge auf der Seite "App" - das Passende zuerst.
-     * Android meldet sich auch als "Linux", darum zuerst; Mac, ChromeOS und Unbekanntes bekommen die Handy-Ansicht.
+     * Android meldet sich auch als "Linux", darum zuerst. Mac (auch iPads im Desktop-Modus melden sich so) bekommt einen
+     * eigenen Hinweis - fuer Apple gibt es noch kein Programm; ChromeOS und Unbekanntes die Handy-Ansicht.
      */
     public static function device(string $user_agent): string
     {
@@ -340,6 +341,7 @@ trait AppPages
         return match (true) {
             str_contains($ua, 'android')                  => 'android',
             preg_match('/iphone|ipad|ipod/', $ua) === 1   => 'ios',
+            str_contains($ua, 'macintosh')                => 'mac',
             str_contains($ua, 'windows')                  => 'windows',
             str_contains($ua, 'cros')                     => 'other',
             str_contains($ua, 'linux')                    => 'linux',

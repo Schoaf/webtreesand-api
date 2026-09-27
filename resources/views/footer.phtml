@@ -51,8 +51,7 @@ $pc = $device === 'windows' ? 'wtWin' : ($device === 'linux' ? 'wtTux' : '');
     </script>
 <?php endif ?>
 <div class="wt-footer wt-footer-webtreesand text-center my-2">
-    <?php if ($pc !== '') : ?>
-        <a href="<?= e($app_url) ?>" rel="nofollow">💻 <?= I18N::translate('Programm für den PC: %s', $pc) ?></a> ·
-    <?php endif ?>
+    <?php /* wtWin fuer alle: wtTux steht auf der Seite "App" (fuer Linux-PCs aufgeklappt) - Thomas, 27.09.2026 */ ?>
+    <a href="<?= e($app_url) ?>" rel="nofollow">💻 <?= I18N::translate('Programm für den PC: %s', 'wtWin') ?></a> ·
     <a href="<?= e($app_url) ?>" rel="nofollow">📱 <?= I18N::translate('App für Android') ?></a>
 </div>
