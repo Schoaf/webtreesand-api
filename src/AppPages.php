@@ -8,19 +8,30 @@ use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\Contracts\UserInterface;
 use Fisharebest\Webtrees\DB;
 use Fisharebest\Webtrees\FlashMessages;
+use Fisharebest\Webtrees\Http\Exceptions\HttpTooManyRequestsException;
+use Fisharebest\Webtrees\Http\RequestHandlers\VerifyEmail;
 use Fisharebest\Webtrees\I18N;
 use Fisharebest\Webtrees\Log;
+use Fisharebest\Webtrees\NoReplyUser;
 use Fisharebest\Webtrees\Registry;
+use Fisharebest\Webtrees\Services\EmailService;
+use Fisharebest\Webtrees\Services\MessageService;
+use Fisharebest\Webtrees\Services\RateLimitService;
 use Fisharebest\Webtrees\Services\TreeService;
 use Fisharebest\Webtrees\Services\UserService;
+use Fisharebest\Webtrees\Site;
+use Fisharebest\Webtrees\SiteUser;
 use Fisharebest\Webtrees\Tree;
+use Fisharebest\Webtrees\TreeUser;
 use Fisharebest\Webtrees\Validator;
+use Illuminate\Support\Str;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Throwable;
 
 use function bin2hex;
 use function class_exists;
+use function date;
 use function explode;
 use function hash;
 use function http_build_query;
@@ -33,15 +44,19 @@ use function mb_substr;
 use function min;
 use function parse_url;
 use function preg_match;
+use function preg_quote;
 use function random_bytes;
 use function redirect;
 use function response;
+use function route;
 use function str_starts_with;
+use function strlen;
 use function strtolower;
 use function strtoupper;
 use function substr;
 use function time;
 use function trim;
+use function view;
 
 use const FILTER_VALIDATE_URL;
 use const PHP_URL_HOST;
@@ -269,6 +284,145 @@ trait AppPages
         $user->setPreference(self::HINT_SETTING, 'connected');
 
         return response(['ok' => true, 'tree' => $tree_name, 'user' => $user->userName()]);
+    }
+
+    /**
+     * Neues Konto anlegen - Rumpf { username, email, realName, password, comments }. Entspricht inhaltlich dem
+     * Webformular (RegisterAction): das Konto entsteht sofort, ist aber erst nach E-Mail-Bestaetigung UND
+     * Freischaltung durch einen Verwalter nutzbar - nur der Weg dorthin ist jetzt die App statt des Browsers
+     * (Apple-Vorgabe 5.1.1: Kontoerstellung muss in der App selbst moeglich sein). Das Webformular bremst Bots
+     * mit einem JavaScript-Zeittrick, der fuer eine native App wirkungslos waere; hier greift stattdessen nur
+     * die serverweite Rate-Begrenzung, die das Webformular ohnehin zusaetzlich hat.
+     */
+    public function postRegisterAction(ServerRequestInterface $request): ResponseInterface
+    {
+        if (Site::getPreference('USE_REGISTRATION_MODULE') !== '1') {
+            return $this->error(403, 'registration-disabled');
+        }
+
+        $tree = Validator::attributes($request)->treeOptional();
+        $body = $this->body($request);
+
+        $username = trim($this->str($body, 'username'));
+        $email    = trim($this->str($body, 'email'));
+        $realname = trim($this->str($body, 'realName'));
+        $password = $this->str($body, 'password');
+        $comments = trim($this->str($body, 'comments'));
+
+        if ($username === '' || $email === '' || $realname === '' || $comments === '' || $password === '') {
+            return $this->error(400, 'missing-fields');
+        }
+
+        if (strlen($password) < 8) {
+            return $this->error(400, 'weak-password');
+        }
+
+        $user_service = Registry::container()->get(UserService::class);
+
+        if ($user_service->findByUserName($username) !== null) {
+            return $this->error(400, 'username-taken');
+        }
+
+        if ($user_service->findByEmail($email) !== null) {
+            return $this->error(400, 'email-taken');
+        }
+
+        $base_url = Validator::attributes($request)->string('base_url');
+
+        // Kein Spam mit fremden Links im Kommentarfeld - wie im Webformular.
+        if (preg_match('/(?!' . preg_quote($base_url, '/') . ')(((?:http|https):\/\/)[a-zA-Z0-9.-]+)/', $comments) === 1) {
+            return $this->error(400, 'comments-link');
+        }
+
+        try {
+            Registry::container()->get(RateLimitService::class)->limitRateForSite(5, 300, 'rate-limit-registration');
+        } catch (HttpTooManyRequestsException) {
+            return $this->error(429, 'rate-limited');
+        }
+
+        Log::addAuthenticationLog('User registration requested for: ' . $username);
+
+        $user  = $user_service->create($username, $realname, $email, $password);
+        $token = Str::random(32);
+
+        $user->setPreference(UserInterface::PREF_LANGUAGE, I18N::languageTag());
+        $user->setPreference(UserInterface::PREF_TIME_ZONE, Site::getPreference('TIMEZONE'));
+        $user->setPreference(UserInterface::PREF_IS_EMAIL_VERIFIED, '');
+        $user->setPreference(UserInterface::PREF_IS_ACCOUNT_APPROVED, '');
+        $user->setPreference(UserInterface::PREF_TIMESTAMP_REGISTERED, date('U'));
+        $user->setPreference(UserInterface::PREF_VERIFICATION_TOKEN, $token);
+        $user->setPreference(UserInterface::PREF_CONTACT_METHOD, MessageService::CONTACT_METHOD_INTERNAL_AND_EMAIL);
+        $user->setPreference(UserInterface::PREF_NEW_ACCOUNT_COMMENT, $comments);
+        $user->setPreference(UserInterface::PREF_IS_VISIBLE_ONLINE, '1');
+        $user->setPreference(UserInterface::PREF_AUTO_ACCEPT_EDITS, '');
+        $user->setPreference(UserInterface::PREF_IS_ADMINISTRATOR, '');
+        $user->setPreference(UserInterface::PREF_TIMESTAMP_ACTIVE, '0');
+
+        $reply_to      = $tree instanceof Tree ? new TreeUser($tree) : new SiteUser();
+        $email_service = Registry::container()->get(EmailService::class);
+
+        $verify_url = route(VerifyEmail::class, [
+            'username' => $user->userName(),
+            'token'    => $token,
+            'tree'     => $tree?->name(),
+        ]);
+
+        /* I18N: %s is a server name/URL */
+        $email_service->send(
+            new SiteUser(),
+            $user,
+            $reply_to,
+            I18N::translate('Your registration at %s', $base_url),
+            view('emails/register-user-text', ['user' => $user, 'base_url' => $base_url, 'verify_url' => $verify_url]),
+            view('emails/register-user-html', ['user' => $user, 'base_url' => $base_url, 'verify_url' => $verify_url])
+        );
+
+        foreach ($user_service->administrators() as $administrator) {
+            I18N::init($administrator->getPreference(UserInterface::PREF_LANGUAGE, 'en-US'));
+
+            /* I18N: %s is a server name/URL */
+            $subject = I18N::translate('New registration at %s', $base_url);
+
+            $body_text = view('emails/register-notify-text', [
+                'user'     => $user,
+                'comments' => $comments,
+                'base_url' => $base_url,
+                'tree'     => $tree,
+            ]);
+
+            $body_html = view('emails/register-notify-html', [
+                'user'     => $user,
+                'comments' => $comments,
+                'base_url' => $base_url,
+                'tree'     => $tree,
+            ]);
+
+            $email_service->send(
+                new SiteUser(),
+                $administrator,
+                new NoReplyUser(),
+                $subject,
+                $body_text,
+                $body_html
+            );
+
+            $mail1_method = $administrator->getPreference(UserInterface::PREF_CONTACT_METHOD);
+            if (
+                $mail1_method !== MessageService::CONTACT_METHOD_EMAIL &&
+                $mail1_method !== MessageService::CONTACT_METHOD_MAILTO &&
+                $mail1_method !== MessageService::CONTACT_METHOD_NONE
+            ) {
+                DB::table('message')->insert([
+                    'sender'     => $user->email(),
+                    'ip_address' => $request->getAttribute('client-ip'),
+                    'user_id'    => $administrator->id(),
+                    'subject'    => $subject,
+                    'body'       => $body_text,
+                ]);
+            }
+        }
+
+        return response(['ok' => true]);
     }
 
     /**
