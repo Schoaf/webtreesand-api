@@ -120,7 +120,7 @@ def main(groessen):
                 tg, _ = werte["Visitor"]
                 warnung = " ⚠" if max(ta, tg) > LANGSAM or aa.status >= 500 else ""
                 p = " ".join(f"{k}={v}" for k, v in params.items())
-                klein = f" `{aa.text[:70]}`" if len(aa.text) < 300 else ""
+                klein = " (empty answer)" if len(aa.text) < 300 else ""
                 print(f"| {aktion}{warnung} | {p}{klein} | {ta:.2f} | {tg:.2f} | {len(aa.text) / 1024:.0f} |")
             export = {}
             for wer, s in sitzungen.items():

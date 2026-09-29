@@ -14,5 +14,6 @@ Läuft in GitHub Actions und vor jedem Release (`build-release.sh`).
 
 `python3 tests/leistung.py 10000 50000` erzeugt große Bäume (`grossbaum.py`, immer gleich), spielt sie ein und misst
 jede Leseroute als Admin und Gast. Eine Messung, kein Test – nicht in GitHub Actions. Stand 27.09.2026 (webtrees 2.2.6,
-PHP 8.5, SQLite): bei 50.000 Personen fast alle Routen unter 0,1 s, Volltextsuche 0,6 s, Export komplett 66 s
-(240 Seiten); Ausreißer Anniversaries: 14 Tage 3,9 s / 5,5 MB, 60 Tage 18 s / 25 MB.
+PHP 8.5, SQLite): bei 50.000 Personen fast alle Routen unter 0,1 s, Volltextsuche 0,6 s, Export komplett 67 s
+(240 Seiten); langsamste Route Anniversaries: 14 Tage 1,5 s, 60 Tage 6,3 s (seit 1.9.6 höchstens 100 Einträge, 45 KB).
+Die Tabellen stehen in `docs/leistung.md`.
