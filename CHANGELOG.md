@@ -17,6 +17,9 @@ publication, abbreviation, text, note, repository with call number); `Repositori
 (POST) creates or renames one. `Media` accepts `type` (`document` for scans of records, default `photo`) and works
 with a source's `xref` too. Unused sources (`uses: 0`) can be removed with `DeleteRecord`. Test:
 `test_quelle_und_archiv_pflegen`.
+**Documents on sources and citations:** `Media` takes `link: false` to create the media object without linking it to
+the record, so a client can attach it to a citation (`Citation`, `media`) or to a source (`Source`, `media`, which
+replaces the list of linked media). Unlinking keeps the media object and the file, as in webtrees.
 
 Also: **Changing a name no longer loses its details.** Until now, editing a name through `Fact`
 removed the nickname (`NICK`) and the name prefixes (`NPFX`, `SPFX`) along with the parts derived from the name. Now

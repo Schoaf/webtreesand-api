@@ -7,6 +7,7 @@ Markierungswort darf in irgendeiner Antwort stehen. So faellt ein Leck auf, egal
 """
 import datetime
 import json
+import urllib.request
 import sys
 import unittest
 
@@ -291,6 +292,22 @@ class Schreiben(unittest.TestCase):
         self.assertEqual("title-missing", s.post("Source", "testbaum", {"author": "x"}).json["error"])
         self.assertEqual("repository-not-found", s.post("Source", "testbaum", {"title": "x", "repository": "R999"}).json["error"])
         self.assertEqual("not-editable", U.sitzung("mitglied").post("Source", "testbaum", {"title": "x"}).json["error"])
+        # Medium ohne Verknuepfung hochladen (link=false), dann an die Quelle und an einen Verweis haengen
+        rumpf, art = manifest.multipart({"title": "Scan", "type": "document", "link": "false"}, ("scan.png", manifest.PNG, "image/png"))
+        req = urllib.request.Request(s.url("/module/_api4webtrees_/Media/testbaum", xref="I1"), data=rumpf, method="POST")
+        req.add_header("Content-Type", art); req.add_header("X-CSRF-TOKEN", s.csrf)
+        m = s._senden(req).json
+        self.assertEqual(True, m["ok"], m)
+        self.assertNotIn(m["media"], json.dumps(self.fakten(s, "I1")), "link=false darf die Person nicht verknuepfen")
+        self.assertEqual(True, s.post("Source", "testbaum", {"media": [m["media"]]}, xref=quelle).json["ok"])
+        self.assertEqual(["Scan"], [x["title"] for x in s.get("Source", "testbaum", xref=quelle).json["media"]])
+        self.assertEqual(True, s.post("Source", "testbaum", {"media": []}, xref=quelle).json["ok"])
+        self.assertEqual([], s.get("Source", "testbaum", xref=quelle).json["media"])
+        geburt = next(f for f in self.fakten(s, "I2") if f.get("tag") == "DEAT")
+        a = s.post("Citation", "testbaum", {"factId": geburt["id"], "index": 0, "media": [m["media"]]}, xref="I2")
+        self.assertEqual(True, a.json["ok"], a)
+        tod = next(f for f in self.fakten(s, "I2") if f.get("tag") == "DEAT")["sources"][0]
+        self.assertEqual(("Begräbnisse 1880", ["Scan"]), (tod["page"], [x["title"] for x in tod["media"]]))
         # unbenutzte Quelle loeschen
         self.assertEqual(0, next(x["uses"] for x in s.get("Sources", "testbaum").json["sources"] if x["xref"] == quelle))
         self.assertEqual(True, s.post("DeleteRecord", "testbaum", {}, xref=quelle).json["ok"])

@@ -376,9 +376,10 @@ trait WriteActions
 
     /**
      * Quelle anlegen oder aendern (ab Stufe 18): ohne ?xref neu (title Pflicht), mit ?xref=S1 aendern.
-     * Rumpf: { title?, author?, publication?, abbreviation?, text?, note?, repository?, callNumber? }
+     * Rumpf: { title?, author?, publication?, abbreviation?, text?, note?, repository?, callNumber?, media? }
      * Nur genannte Teile werden ersetzt; repository: Kennung eines Archivs ("R1") oder "" (weg), callNumber: Signatur
-     * am (ersten) Archiv. Medien kommen ueber die Route Media mit ?xref=S1 dazu. Antwort: xref der Quelle.
+     * am (ersten) Archiv; media: die verknuepften Medienobjekte (Kennungen, ersetzt die Liste). Eine neue Datei kommt
+     * ueber die Route Media mit ?xref=S1 (verknuepft gleich) oder mit link=false und dann hier. Antwort: xref.
      */
     public function postSourceAction(ServerRequestInterface $request): ResponseInterface
     {
@@ -475,6 +476,16 @@ trait WriteActions
 
                 return $m[1] . ($caln === '' ? '' : "\n2 CALN " . $caln) . $unter;
             }, $rest, 1);
+        }
+
+        if (array_key_exists('media', $body) && is_array($body['media'])) {
+            $rest = (string) preg_replace('/\n1 OBJE @[^\n]*(?:\n[2-9] [^\n]*)*/', '', $rest);
+
+            foreach ($body['media'] as $m) {
+                if (preg_match('/^@?([A-Za-z0-9:_.-]+)@?$/', (string) $m, $mm) === 1) {
+                    $rest .= "\n1 OBJE @" . $mm[1] . '@';
+                }
+            }
         }
 
         return $kopf . $rest;
@@ -927,7 +938,11 @@ trait WriteActions
         // Die Verknuepfung zur Person bleibt eine normale (ggf. ausstehende) Aenderung.
         Registry::container()->get(PendingChangesService::class)->acceptRecord($media);
 
-        $record->createFact('1 OBJE @' . $media->xref() . '@', true);
+        // link=false (ab Stufe 18): nur das Medienobjekt anlegen, ohne Verknuepfung - die App haengt es danach an
+        // einen Quellenverweis (Route Citation, media) oder an eine Quelle (Route Source, media).
+        if (($body['link'] ?? true) !== false && $this->str($body, 'link') !== 'false') {
+            $record->createFact('1 OBJE @' . $media->xref() . '@', true);
+        }
 
         return $this->written($record, ['media' => $media->xref()], 201);
     }
