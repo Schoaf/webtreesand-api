@@ -32,6 +32,7 @@ use function preg_quote;
 use function preg_replace;
 use function response;
 use function str_replace;
+use function str_starts_with;
 use function strlen;
 use function strtoupper;
 use function substr;
@@ -698,16 +699,24 @@ trait WriteActions
                 // Fortsetzungszeilen des alten Werts entfernen
                 $rest = (string) preg_replace('/^(\n2 CONT ?.*)+/', '', $rest);
 
+                // GIVN, SURN und NSFX stehen im Namen selbst und werden unten neu gesetzt. Spitzname und Praefixe
+                // (NICK, NPFX, SPFX) lassen sich nicht aus dem Namen ableiten - sie bleiben, wie alles andere darunter.
                 if ($tag === 'NAME') {
-                    $rest = (string) preg_replace('/\n2 (GIVN|SURN|NPFX|NSFX|SPFX|NICK) .*/', '', $rest);
+                    $rest = (string) preg_replace('/\n2 (GIVN|SURN|NSFX) .*/', '', $rest);
                 }
             }
 
             $gedcom .= $rest;
         }
 
-        if ($tag === 'NAME' && array_key_exists('value', $body) && preg_match('#^([^/]*)/([^/]*)/#', $this->str($body, 'value'), $match) === 1) {
-            $insert = (trim($match[1]) === '' ? '' : "\n2 GIVN " . trim($match[1])) . (trim($match[2]) === '' ? '' : "\n2 SURN " . trim($match[2]));
+        if ($tag === 'NAME' && array_key_exists('value', $body) && preg_match('#^([^/]*)/([^/]*)/(.*)$#s', $this->str($body, 'value'), $match) === 1) {
+            $given = trim($match[1]);
+            // Ein vorhandenes Praefix ("Dr.") steht vorn im Namen, gehoert aber nicht zu den Vornamen.
+            if (preg_match('/\n2 NPFX (.+)/', $gedcom, $npfx) === 1 && str_starts_with($given, trim($npfx[1]) . ' ')) {
+                $given = trim(substr($given, strlen(trim($npfx[1]))));
+            }
+            $insert = ($given === '' ? '' : "\n2 GIVN " . $given) . (trim($match[2]) === '' ? '' : "\n2 SURN " . trim($match[2]))
+                . (trim($match[3]) === '' ? '' : "\n2 NSFX " . trim($match[3]));
             $gedcom = GedcomText::insertAfterFirstLine($gedcom, $insert);
         }
 

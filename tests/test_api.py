@@ -174,6 +174,24 @@ class Schreiben(unittest.TestCase):
         self.assertEqual(True, a.json["ok"], a)
         self.assertIn("Testperson", s.get("Individual", "testbaum", xref=a.json["xref"]).text)
 
+    def test_name_aendern_behaelt_unterangaben(self):
+        # Beim Aendern des Namens darf nichts verloren gehen: Praefix, Spitzname und Notiz bleiben,
+        # GIVN/SURN/NSFX folgen dem neuen Namen.
+        s = U.sitzung("admin")
+        a = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Karl", "surname": "Muster", "sex": "M", "dead": True})
+        xref = a.json["xref"]
+        name = next(f for f in self.fakten(s, xref) if f.get("tag") == "NAME")
+        voll = "1 NAME Dr. Karl /Muster/\n2 NPFX Dr.\n2 GIVN Karl\n2 SURN Muster\n2 NICK Kalle\n2 NOTE Namensnotiz"
+        self.assertEqual(True, s.post("Fact", "testbaum", {"factId": name["id"], "gedcom": voll}, xref=xref).json["ok"])
+        name = next(f for f in self.fakten(s, xref) if f.get("tag") == "NAME")
+        a = s.post("Fact", "testbaum", {"factId": name["id"], "value": "Dr. Karl Heinz /Muster-Meier/ jun."}, xref=xref)
+        self.assertEqual(True, a.json["ok"], a)
+        ged = umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = ?", xref)[0][0]
+        for zeile in ("1 NAME Dr. Karl Heinz /Muster-Meier/ jun.", "2 NPFX Dr.", "2 NICK Kalle", "2 NOTE Namensnotiz",
+                      "2 GIVN Karl Heinz", "2 SURN Muster-Meier", "2 NSFX jun."):
+            self.assertIn(zeile, ged)
+        self.assertNotIn("2 SURN Muster\n", ged + "\n")
+
     def test_jahrestag_heute(self):
         heute = datetime.date.today()
         datum = f"{heute.day} {'JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC'.split()[heute.month - 1]} {heute.year - 100}"

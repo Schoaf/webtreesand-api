@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+API level 17, unchanged. **Changing a name no longer loses its details.** Until now, editing a name through `Fact`
+removed the nickname (`NICK`) and the name prefixes (`NPFX`, `SPFX`) along with the parts derived from the name. Now
+only `GIVN`, `SURN` and `NSFX` are rebuilt from the new name (`NSFX` is new: the text after the surname, e.g. "jun."),
+everything else under the name stays; a prefix such as "Dr." is no longer counted among the given names. Test:
+`test_name_aendern_behaelt_unterangaben`.
+
 ## 1.9.6 – 2026-09-27
 API level 17, unchanged. **Anniversaries stay small on large trees.** A tree with 50,000 individuals has hundreds of
 anniversaries of long-dead people every day; 14 days came to 5.5 MB in 4 s. Now at most 100 entries are returned –
