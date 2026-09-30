@@ -43,6 +43,7 @@ use function preg_quote;
 use function preg_replace;
 use function preg_replace_callback;
 use function response;
+use function str_contains;
 use function str_replace;
 use function str_starts_with;
 use function strlen;
@@ -945,6 +946,49 @@ trait WriteActions
         }
 
         return $this->written($record, ['media' => $media->xref()], 201);
+    }
+
+    /**
+     * Medienobjekt aus einer Datei, die schon im Medienordner liegt (ab Stufe 18) - etwa ein Kirchenbuchscan aus dem
+     * Archiv (Modul Sammlungen): ?xref=<Datensatz, nur fuer die Rechtepruefung>  Rumpf: { file, title?, type? }
+     * Gibt es zu der Datei schon ein Medienobjekt, kommt dessen Kennung zurueck; sonst entsteht eines - ohne
+     * Verknuepfung. Die Datei bleibt, wo sie ist; verknuepft wird erst, was die App danach ausdruecklich zuordnet.
+     */
+    public function postMediaFromFileAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree = Validator::attributes($request)->tree();
+
+        if (!Auth::canUploadMedia($tree, Auth::user())) {
+            return $this->error(403, 'upload-not-allowed');
+        }
+
+        $body = $this->body($request);
+        $file = trim(str_replace('\\', '/', $this->str($body, 'file')), '/');
+
+        if ($file === '' || str_contains($file, '..') || str_contains($file, "\n")) {
+            return $this->error(400, 'invalid-value');
+        }
+
+        if (!$tree->mediaFilesystem()->fileExists($file)) {
+            return $this->error(404, 'file-not-found');
+        }
+
+        $vorhanden = DB::table('media_file')
+            ->where('m_file', '=', $tree->id())
+            ->where('multimedia_file_refn', '=', $file)
+            ->value('m_id');
+
+        if ($vorhanden !== null) {
+            return response(['ok' => true, 'pending' => false, 'media' => $vorhanden, 'existing' => true]);
+        }
+
+        $title = Registry::elementFactory()->make('OBJE:FILE:TITL')->canonical($this->str($body, 'title'));
+        $type  = in_array($this->str($body, 'type'), ['photo', 'document', 'certificate', 'book', 'newspaper', 'card', 'map', 'tombstone', 'audio', 'video', 'other'], true) ? $this->str($body, 'type') : 'document';
+        $media = $tree->createMediaObject("0 @@ OBJE\n" . Registry::container()->get(MediaFileService::class)->createMediaFileGedcom($file, $type, $title, ''));
+        // Wie beim Hochladen: sofort annehmen, damit Datei und Baum zusammenpassen
+        Registry::container()->get(PendingChangesService::class)->acceptRecord($media);
+
+        return response(['ok' => true, 'pending' => false, 'media' => $media->xref(), 'existing' => false]);
     }
 
     /**

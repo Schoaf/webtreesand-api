@@ -7,6 +7,7 @@ Markierungswort darf in irgendeiner Antwort stehen. So faellt ein Leck auf, egal
 """
 import datetime
 import json
+import os
 import urllib.request
 import sys
 import unittest
@@ -312,6 +313,26 @@ class Schreiben(unittest.TestCase):
         self.assertEqual(0, next(x["uses"] for x in s.get("Sources", "testbaum").json["sources"] if x["xref"] == quelle))
         self.assertEqual(True, s.post("DeleteRecord", "testbaum", {}, xref=quelle).json["ok"])
         self.assertEqual("not-found", s.get("Source", "testbaum", xref=quelle).json["error"])
+
+    def test_medienobjekt_aus_archivdatei(self):
+        # Eine Datei im Medienordner (Archiv) wird auf Wunsch ein Medienobjekt - einmal; ohne Verknuepfung an die Person
+        s = U.sitzung("admin")
+        ordner = os.path.join(umgebung.WT, "data", "media", "kirchenbuch")
+        os.makedirs(ordner, exist_ok=True)
+        open(os.path.join(ordner, "taufe_1833.png"), "wb").write(manifest.PNG)
+        a = s.post("MediaFromFile", "testbaum", {"file": "kirchenbuch/taufe_1833.png", "title": "Taufe 1833"}, xref="I1")
+        self.assertEqual((True, False), (a.json["ok"], a.json["existing"]), a)
+        m = a.json["media"]
+        b = s.post("MediaFromFile", "testbaum", {"file": "kirchenbuch/taufe_1833.png"}, xref="I1")
+        self.assertEqual((m, True), (b.json["media"], b.json["existing"]), b)
+        self.assertNotIn(m, json.dumps(self.fakten(s, "I1")), "darf die Person nicht verknuepfen")
+        self.assertEqual("file-not-found", s.post("MediaFromFile", "testbaum", {"file": "kirchenbuch/gibtsnicht.png"}, xref="I1").json["error"])
+        self.assertEqual("invalid-value", s.post("MediaFromFile", "testbaum", {"file": "../config.ini.php"}, xref="I1").json["error"])
+        self.assertEqual("upload-not-allowed", U.sitzung("mitglied").post("MediaFromFile", "testbaum", {"file": "kirchenbuch/taufe_1833.png"}, xref="I1").json["error"])
+        # Am Verweis haengt es dann wie jedes Medium
+        tod = next(f for f in self.fakten(s, "I2") if f.get("tag") == "DEAT")
+        self.assertEqual(True, s.post("Citation", "testbaum", {"factId": tod["id"], "index": 0, "media": [m]}, xref="I2").json["ok"])
+        self.assertEqual(["Taufe 1833"], [x["title"] for x in next(f for f in self.fakten(s, "I2") if f.get("tag") == "DEAT")["sources"][0]["media"]])
 
     def test_name_aendern_behaelt_unterangaben(self):
         # Beim Aendern des Namens darf nichts verloren gehen: Praefix, Spitzname und Notiz bleiben,

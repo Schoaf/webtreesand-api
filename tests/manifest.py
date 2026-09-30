@@ -88,6 +88,10 @@ ROUTEN = [
      [P("xref", "Source identifier when changing, e.g. `S12`")], "`{title?, author?, publication?, abbreviation?, text?, note?, repository?: \"R1\" | \"\", callNumber?}`"),
     ("post", "Repository", True, 18, "editor", "Create a repository (no `xref`) or rename one (`xref`).",
      [P("xref", "Repository identifier when changing, e.g. `R1`")], "`{name}`"),
+    ("post", "MediaFromFile", True, 18, "editor",
+     "Media object for a file that already lies in the tree's media folder (e.g. a scan from the archive): returns the "
+     "existing object's identifier or creates one, without linking it. `type` defaults to `document`.",
+     [XREF], "`{file, title?, type?}`"),
     ("post", "Citation", True, 18, "editor",
      "Add, change, delete or move a source citation on a fact – or a general citation on the record (no `factId`). "
      "Only the parts named in the body are replaced; everything else on the citation and the fact is kept.",
@@ -228,6 +232,10 @@ def sammeln(u):
     merken("post", "Media", medien)
     m = medien.json.get("media")
     merken("post", "PrimaryMedia", admin.post("PrimaryMedia", "testbaum", {"media": m}, xref="I1"))
+    os.makedirs(os.path.join(umgebung.WT, "data", "media", "archiv"), exist_ok=True)
+    open(os.path.join(umgebung.WT, "data", "media", "archiv", "manifest.png"), "wb").write(PNG)
+    merken("post", "MediaFromFile", admin.post("MediaFromFile", "testbaum", {"file": "archiv/manifest.png", "title": "Manifestscan"}, xref="I1"))
+    merken("post", "MediaFromFile", admin.post("MediaFromFile", "testbaum", {"file": "archiv/manifest.png"}, xref="I1"))
     merken("post", "Bookmarks", admin.post("Bookmarks", "testbaum", {"xref": "I1", "add": True}))
     archiv = admin.post("Repository", "testbaum", {"name": "Manifestarchiv"})
     merken("post", "Repository", archiv)

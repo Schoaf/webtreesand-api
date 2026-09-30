@@ -38,6 +38,7 @@ JSON API for webtrees 2.2, used by wtAnd, wtWin/wtTux and nas4webtrees. Machine-
 | `GET Places/{tree}` | 8 | editor | Place suggestions while typing, like webtrees' own autocomplete. |
 | `POST Fact/{tree}` | 1 | editor | Add or change a fact or event. |
 | `POST Repository/{tree}` | 18 | editor | Create a repository (no `xref`) or rename one (`xref`). |
+| `POST MediaFromFile/{tree}` | 18 | editor | Media object for a file that already lies in the tree's media folder (e.g. |
 | `POST Citation/{tree}` | 18 | editor | Add, change, delete or move a source citation on a fact – or a general citation on the record (no `factId`). |
 | `POST DeleteFact/{tree}` | 1 | editor | Delete a fact or event (not links like FAMC/FAMS). |
 | `POST AddIndividual/{tree}` | 1 | editor | Create an individual and link it as child, spouse, father or mother. |
@@ -255,6 +256,18 @@ Body: `{name}`
 
 Answer fields: `ok`, `pending`, `xref` – full schema in openapi.json.
 
+### `POST MediaFromFile/{tree}`
+
+Media object for a file that already lies in the tree's media folder (e.g. a scan from the archive): returns the existing object's identifier or creates one, without linking it. `type` defaults to `document`.
+
+| parameter | | |
+|---|---|---|
+| `xref` | required | Record identifier, e.g. `I123` |
+
+Body: `{file, title?, type?}`
+
+Answer fields: `existing`, `media`, `ok`, `pending` – full schema in openapi.json.
+
 ### `POST Citation/{tree}`
 
 Add, change, delete or move a source citation on a fact – or a general citation on the record (no `factId`). Only the parts named in the body are replaced; everything else on the citation and the fact is kept.
@@ -410,6 +423,7 @@ Answer fields: `ok`, `tree`, `user` – full schema in openapi.json.
 | 404 | `citation-not-found` |
 | 404 | `fact-not-found` |
 | 404 | `family-not-found` |
+| 404 | `file-not-found` |
 | 404 | `link-not-found` |
 | 404 | `not-found` |
 | 404 | `repository-not-found` |

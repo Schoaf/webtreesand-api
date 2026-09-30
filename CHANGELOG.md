@@ -20,6 +20,10 @@ with a source's `xref` too. Unused sources (`uses: 0`) can be removed with `Dele
 **Documents on sources and citations:** `Media` takes `link: false` to create the media object without linking it to
 the record, so a client can attach it to a citation (`Citation`, `media`) or to a source (`Source`, `media`, which
 replaces the list of linked media). Unlinking keeps the media object and the file, as in webtrees.
+**Files from the archive:** `MediaFromFile` (POST) turns a file that already lies in the media folder – e.g. a parish
+register scan from the *Sammlungen* archive – into a media object, or returns the existing one, without linking it.
+The file stays where it is; the client attaches the object to a source or citation only on the user's explicit
+choice. Test: `test_medienobjekt_aus_archivdatei`.
 
 Also: **Changing a name no longer loses its details.** Until now, editing a name through `Fact`
 removed the nickname (`NICK`) and the name prefixes (`NPFX`, `SPFX`) along with the parts derived from the name. Now

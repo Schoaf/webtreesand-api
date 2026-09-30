@@ -6952,6 +6952,78 @@
     "x-body": "`{name}`"
    }
   },
+  "/module/_api4webtrees_/MediaFromFile/{tree}": {
+   "post": {
+    "operationId": "postMediaFromFile",
+    "summary": "Media object for a file that already lies in the tree's media folder (e.g.",
+    "description": "Media object for a file that already lies in the tree's media folder (e.g. a scan from the archive): returns the existing object's identifier or creates one, without linking it. `type` defaults to `document`.",
+    "x-api-level": 18,
+    "x-minimum-role": "editor",
+    "parameters": [
+     {
+      "name": "tree",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "Tree name (`Info.trees[].name`)"
+     },
+     {
+      "name": "xref",
+      "in": "query",
+      "required": true,
+      "description": "Record identifier, e.g. `I123`",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "X-CSRF-TOKEN",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "`Info.csrf`"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Result – or an error object (`ok: false`, see `Error`)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "existing": {
+           "type": "boolean"
+          },
+          "media": {
+           "type": "string"
+          },
+          "ok": {
+           "type": "boolean"
+          },
+          "pending": {
+           "type": "boolean"
+          }
+         },
+         "required": [
+          "existing",
+          "media",
+          "ok",
+          "pending"
+         ],
+         "additionalProperties": false
+        }
+       }
+      }
+     }
+    },
+    "x-body": "`{file, title?, type?}`"
+   }
+  },
   "/module/_api4webtrees_/Citation/{tree}": {
    "post": {
     "operationId": "postCitation",
@@ -7756,6 +7828,7 @@
        "family-locked",
        "family-not-found",
        "family-required",
+       "file-not-found",
        "invalid-date",
        "invalid-gedcom",
        "invalid-quality",
