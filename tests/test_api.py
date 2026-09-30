@@ -416,7 +416,8 @@ class Schreiben(unittest.TestCase):
         s = U.sitzung("admin")
         admin_url = s.url("/module/_api4webtrees_/Admin")
         formular = s._senden(urllib.request.Request(admin_url)).text
-        self.assertIn('name="apps[]" value="wttux"', formular)
+        alle = re.findall(r'name="apps\[\]" value="([^"]+)"', formular)
+        self.assertIn("wttux", alle)
         csrf = re.search(r'name="_csrf" value="([^"]+)"', formular).group(1)
 
         def speichern(apps):
@@ -431,7 +432,7 @@ class Schreiben(unittest.TestCase):
             self.assertNotIn("wtTux", seite)
             self.assertIn("wtWin", seite)
         finally:
-            speichern(["wtand", "wtwin", "wttux"])
+            speichern(alle)
 
         seite = s._senden(urllib.request.Request(s.url("/module/_api4webtrees_/App/testbaum"))).text
         self.assertIn("wtTux", seite)
