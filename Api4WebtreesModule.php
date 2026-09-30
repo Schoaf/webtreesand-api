@@ -47,6 +47,7 @@ use function strtolower;
  * sich mit webtrees 2.3, die Modul-Route bleibt.
  *
  * Aufgeteilt nach Aufgabe:
+ *   src/Apps.php          die Apps, die das Modul kennt (wtAnd, wtWin, wtTux, ...) - neue kommen per Pull Request dazu
  *   src/AppPages.php      Einstellungen, Seite "App", Koppeln per Einmal-Code
  *   src/ReadActions.php   lesende JSON-Endpunkte (GET)
  *   src/WriteActions.php  schreibende JSON-Endpunkte (POST)
@@ -90,17 +91,11 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     /** Benutzereinstellung je Baum: die Merkliste als Liste von Personenkennungen. */
     private const string BOOKMARKS_PREF = 'api4webtrees_bookmarks';
 
-    public const string DESCRIPTION = 'JSON-Schnittstelle für die native Android-App „wtAnd“ – liest und schreibt mit den Rechten des angemeldeten Benutzers.';
+    public const string DESCRIPTION = 'JSON-Schnittstelle für die Apps wtAnd, wtWin und wtTux – und jeden anderen Client. Liest und schreibt mit den Rechten des angemeldeten Benutzers.';
 
     // Eine Textdatei mit der neuesten Versionsnummer; webtrees zeigt damit in der Modulverwaltung einen Update-Hinweis.
     private const string LATEST_VERSION_URL = 'https://raw.githubusercontent.com/thobgg/api4webtrees/main/latest-version.txt';
     private const string SUPPORT_URL        = 'https://github.com/thobgg/api4webtrees';
-
-    // Hier liegt die App zum Herunterladen (Seite "App" in webtrees).
-    private const string APP_DOWNLOAD_URL   = 'https://github.com/thobgg/app4webtrees/releases/latest';
-    // Die Dateinamen im Release tragen die Version (wtWin-1.19.99.exe) - die Seite "App" fragt beim Klick die GitHub-API
-    // nach der neuesten Datei. Klappt das nicht, fuehrt der Knopf zur Release-Seite (APP_DOWNLOAD_URL).
-    private const string APP_RELEASE_API    = 'https://api.github.com/repos/thobgg/app4webtrees/releases/latest';
 
     // Koppeln: der Einmal-Code gilt so viele Sekunden und genau einmal. Gespeichert wird nur sein Hash.
     private const int    PAIR_SECONDS       = 600;
@@ -113,13 +108,8 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     private const string HINT_SETTING       = 'webtreesand_hint';
     private const string HINT_DESK_SETTING  = 'wtdesk_hint';
 
-    // Eine zweite App, die derselben Schnittstelle folgt (z. B. fuer iOS): der Verwalter traegt sie in den
-    // Einstellungen ein, dann erscheint sie neben wtAnd auf der Seite "App" und beim Koppeln.
-    // Leerer Name = keine zweite App. Das Schema ist der Teil vor "://" des Koppel-Links (wtAnd: "webtreesand").
-    private const string APP2_NAME_SETTING    = 'app2_name';
-    private const string APP2_ANDROID_SETTING = 'app2_android_url';
-    private const string APP2_IOS_SETTING     = 'app2_ios_url';
-    private const string APP2_SCHEME_SETTING  = 'app2_scheme';
+    // Moduleinstellung: Apps aus src/Apps.php, die der Verwalter abgeschaltet hat (Kennungen mit Komma). Leer = alle an.
+    private const string APPS_OFF_SETTING   = 'apps_off';
 
     private const int PAGE_SIZE           = 50;
     private const int MEDIA_PAGE_SIZE     = 60;
@@ -151,8 +141,8 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
     /**
      * Einstellungen aus der Zeit vor der Umbenennung (1.3.0) uebernehmen: webtrees legt sie unter dem Modulnamen ab,
-     * und der hat sich mit dem Ordner geaendert. Ohne diesen Schritt staende nach dem Update wieder "alle Baeume"
-     * und eine zweite App waere vergessen. Laeuft einmal; danach steht unter dem neuen Namen mindestens ein Eintrag.
+     * und der hat sich mit dem Ordner geaendert. Ohne diesen Schritt staende nach dem Update wieder "alle Baeume".
+     * Laeuft einmal; danach steht unter dem neuen Namen mindestens ein Eintrag.
      */
     private function takeOverOldSettings(): void
     {
@@ -235,7 +225,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
     public function customModuleVersion(): string
     {
-        return '1.9.6';
+        return '1.10.0';
     }
 
     public function customModuleLatestVersionUrl(): string
@@ -273,15 +263,21 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
         }
 
         $action = (string) $request->getAttribute('action');
+        $device = self::device($request->getHeaderLine('User-Agent'));
+        $apps   = $this->apps();
+        // Der Hinweis wirbt fuer die App, die zum Geraet passt - gibt es keine (Mac, iPhone ohne passende App), keinen Hinweis.
+        $hint_app = Apps::matching($apps, $device)[0] ?? ($device === 'other' ? Apps::kind($apps, 'phone')[0] ?? null : null);
 
         return view($this->name() . '::footer', [
             'app_url'   => $this->actionUrl('App', $tree->name()),
-            // Apple-Geraete: kein Hinweis, es gibt fuer sie (noch) kein Programm.
-            'hint'      => !in_array(self::device($request->getHeaderLine('User-Agent')), ['mac', 'ios'], true)
+            'hint'      => $hint_app !== null
                 && Auth::user()->getPreference(self::hintKey($request->getHeaderLine('User-Agent'))) === '' && $action !== 'App' && $action !== 'Connect',
+            'hint_app'  => $hint_app,
             'hint_url'  => $this->actionUrl('HintOff', $tree->name()),
             'page_url'  => (string) $request->getUri(),
-            'device'    => self::device($request->getHeaderLine('User-Agent')),
+            // Die Fusszeile nennt je Art die App fuer dieses Geraet, sonst die erste der Liste.
+            'pc_app'    => Apps::matching($apps, $device, 'pc')[0] ?? Apps::kind($apps, 'pc')[0] ?? null,
+            'phone_app' => Apps::matching($apps, $device, 'phone')[0] ?? Apps::kind($apps, 'phone')[0] ?? null,
         ]);
     }
 

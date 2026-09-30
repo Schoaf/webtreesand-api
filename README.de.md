@@ -70,18 +70,20 @@ eintippen). Die Seite bietet den App-Download, den Status (https, Upload-Limit) 
 **welche Stammbäume die App erreichen darf.** Nicht angekreuzte Bäume sind über dieses Modul gar nicht erreichbar,
 für keinen Benutzer und unabhängig von seinen Rechten in webtrees. Standard: alle Bäume.
 
-**Weitere App (optional):** Hier lässt sich eine zweite App eintragen, die derselben Schnittstelle folgt, etwa für
-iPhone und iPad. Bleiben die Felder leer, ändert sich nichts. Siehe [Andere Apps koppeln](#andere-apps-koppeln).
+**Apps:** die Apps, die das Modul kennt (wtAnd, wtWin, wtTux und per Pull Request hinzugekommene), je mit Häkchen.
+Abgehakte verschwinden von der Seite „App“, aus dem Hinweis und der Fußzeile. Standard: alle an. Siehe
+[Apps auf der Seite „App“](#apps-auf-der-seite-app).
 
-![Einstellungsseite: App installieren, Stammbäume für die App, weitere App, Status](docs/einstellungen.png)
+![Einstellungsseite: App installieren, Stammbäume für die App, Apps, Status](docs/einstellungen.png)
 
 ## Für Familienmitglieder: die Seite „App“
 
 Angemeldete Benutzer sehen oben auf der Seite einen Hinweis mit einem Knopf zur Seite „App“ – am Windows- oder Linux-PC
 **„Den Stammbaum als Programm auf dem PC“** (wtWin/wtTux), am Handy **„Den Stammbaum aufs Handy“** (wtAnd). Handy und PC
 werden getrennt gemerkt: Der Hinweis verschwindet für diese Geräteart, sobald ihre App verbunden ist (oder nach *Nicht
-mehr anzeigen*); danach führen die Links in der Fußzeile dorthin. Die Seite zeigt wtWin und wtAnd (am Handy wtAnd zuerst)
-und darunter eingeklappt wtTux, aufgeklappt beim Aufruf von einem Linux-PC. Jeweils zwei Schritte:
+mehr anzeigen*); danach führen die Links in der Fußzeile dorthin. Die Seite zeigt die Apps für das Gerät des Besuchers
+zuerst (eigene vor fremden), wtWin und wtAnd immer aufgeklappt, die übrigen eingeklappt darunter. Auf iPhone, iPad oder
+Mac ohne passende App sagt sie das und empfiehlt den Browser. Je App zwei Schritte:
 
 1. **Installieren:** ein Knopf zur neuesten Datei (`.exe`, `.deb` oder APK), fürs Handy auch als QR-Code.
 2. **Mit dem eigenen Konto verbinden – nichts eintippen, das Passwort erreicht das Gerät nie:**
@@ -138,14 +140,23 @@ Vollständige Beschreibung aller Routen, Antwortschemas und Leistungszahlen (eng
 Die vollständige Beschreibung der Schnittstelle (Adressen, Anmeldung, alle Aktionen, Fehlercodes)
 steht in der [englischen README](README.md#for-developers).
 
-**Andere Apps koppeln:** Jeder Client kann die Schnittstelle mit der normalen Anmeldung benutzen. Eine zweite App kann
-zusätzlich am Verbinden per Tipp teilnehmen, wenn ein Verwalter sie unter *Einstellungen → Weitere App* mit Name,
-Download-Adressen (nur https) und eigenem URL-Schema einträgt; sie erscheint dann neben wtAnd auf der Seite „App“. Der Vertrag ist der von wtAnd: Die Seiten „App“ und „Verbinden“ öffnen
-`<schema>://connect?url=<Basisadresse>&code=<48 Hex>&tree=<Baumname>&user=<Benutzername>` in der App. Die App holt sich
-mit `GET …/Info` Sitzungs-Cookie und `csrf`, dann `POST …/Pair` mit Header `X-CSRF-TOKEN` und Rumpf `{"code": "…"}`;
-Antwort `{"ok":true,"tree":"…","user":"…"}`, die Sitzung ist jetzt als dieser Benutzer angemeldet. Für den Code gelten
-die Regeln [oben](#für-familienmitglieder-die-seite-app), egal welche App ihn einlöst. Sonst ist nichts im Modul
-an eine App gebunden: JSON-Endpunkte, Rechte und Datenschutz sind für jeden Client gleich.
+**Kompatibilität:** Die Schnittstelle wächst nur. Jedes Release mit neuen Routen oder Feldern erhöht die **API-Stufe**
+(`apiVersion` in `Info`, heute 18); bestehende Routen, Parameter und Felder behalten Name, Typ und Bedeutung. Ein Client
+für Stufe N läuft mit jedem Modul ab Stufe N, und ein älterer Client läuft mit einem neueren Modul weiter, er sieht die
+neuen Felder nur nicht. Die Tests prüfen jede Antwort gegen das dokumentierte Schema, ein Feld kann also nicht unbemerkt
+verschwinden. Müsste sich je etwas unverträglich ändern, wäre es eine neue Route, nie eine geänderte.
+
+**Apps auf der Seite „App“:** Jeder Client kann die Schnittstelle mit der normalen Anmeldung benutzen, nichts an den
+JSON-Endpunkten, Rechten oder dem Datenschutz ist an eine App gebunden. Die Seiten „App“ und „Verbinden“, der Hinweis
+und die Fußzeile zeigen die Apps aus `src/Apps.php`. Eine App kommt per Pull Request mit einem Eintrag dazu: Name,
+Autor, Art (Handy oder PC), Geräte, Download-Adressen (https), das URL-Schema fürs Verbinden per Tipp und bei einem
+Store-Link das Badge unter `resources/img`. Bedingung: Die App ist öffentlich installierbar (Store oder Release) und
+nimmt den Koppel-Link an. Die Tests weisen Einträge mit fehlenden Feldern, Links ohne https oder schon vergebenem Schema
+ab. Verwalter können jede App in den Einstellungen abhaken. Der Vertrag fürs Koppeln ist der von wtAnd: Die Seiten
+„App“ und „Verbinden“ öffnen `<schema>://connect?url=<Basisadresse>&code=<48 Hex>&tree=<Baumname>&user=<Benutzername>`
+in der App. Die App holt sich mit `GET …/Info` Sitzungs-Cookie und `csrf`, dann `POST …/Pair` mit Header `X-CSRF-TOKEN`
+und Rumpf `{"code": "…"}`; Antwort `{"ok":true,"tree":"…","user":"…"}`, die Sitzung ist jetzt als dieser Benutzer
+angemeldet. Für den Code gelten die Regeln [oben](#für-familienmitglieder-die-seite-app), egal welche App ihn einlöst.
 
 Einstieg in den Quelltext ist der Kopf von `Api4WebtreesModule.php`: dort steht, welcher Teil des Moduls in
 welcher Datei unter `src/` liegt.

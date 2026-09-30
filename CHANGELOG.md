@@ -1,6 +1,16 @@
 # Changelog
 
 ## Unreleased
+**The apps the module shows now live in the code, not in the settings.** `src/Apps.php` lists them (wtAnd, wtWin,
+wtTux) with name, devices, download, connect scheme and store badge; a further app joins by pull request with one
+entry, once it is publicly installable. The settings offer a tick per app instead of the four free-text fields for
+“Another app” (1.2.0), which nobody could sensibly fill in; values entered there are no longer read. The “App” page
+orders the apps by the visitor's device – matching ones first, own before others, wtWin and wtAnd always open, the rest
+folded – and each app gets its own heading with its devices, so two apps for different devices no longer look like one.
+iPhone, iPad and Mac show the browser note only while no app in the list fits them. The footer names the app for the
+device. The tests check the list (fields, https, unique schemes), so a faulty entry cannot be merged.
+**Compatibility promise** written down in the README: the interface only grows, every addition raises the API level,
+existing routes and fields keep their meaning; a client built for level N works with every module from level N on.
 **API level 18: sources.** New routes `Sources` (all visible sources with author, publication, repository, call
 number and how often they are cited) and `Source` (one source with text, notes, media, repositories and the
 individuals and families citing it, with the facts that carry the citation). Citations on facts now come complete:

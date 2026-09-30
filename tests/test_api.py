@@ -8,6 +8,9 @@ Markierungswort darf in irgendeiner Antwort stehen. So faellt ein Leck auf, egal
 import datetime
 import json
 import os
+import re
+import subprocess
+import urllib.parse
 import urllib.request
 import sys
 import unittest
@@ -366,6 +369,67 @@ class Schreiben(unittest.TestCase):
         self.assertEqual(neu.json["xref"], treffer[0]["person"]["xref"])
         self.assertIn("more", a.json)
         self.assertLessEqual(len(a.json["data"]), a.json["total"])
+
+    def test_app_liste_gueltig(self):
+        """src/Apps.php: jeder Eintrag vollstaendig, https, Schema eindeutig - die Pruefung, die ein Pull Request bestehen muss."""
+        modul = os.path.join(umgebung.HIER, "..")
+        code = 'require "src/Apps.php"; echo json_encode([Api4Webtrees\\Apps::check(), array_keys(Api4Webtrees\\Apps::ALL)]);'
+        fehler, kennungen = json.loads(subprocess.check_output(["php", "-r", code], cwd=modul, text=True))
+        self.assertEqual([], fehler)
+        self.assertEqual(["wtand", "wtwin", "wttux"], kennungen[:3])
+
+    def test_seite_app_je_geraet(self):
+        """Die Seite App zeigt die Apps fuer das Geraet des Besuchers zuerst; Apple ohne passende App bekommt den Browser-Hinweis."""
+        s = U.sitzung("admin")
+
+        def seite(user_agent):
+            req = urllib.request.Request(s.url("/module/_api4webtrees_/App"))
+            req.add_header("User-Agent", user_agent)
+            return s._senden(req).text
+
+        android = seite("Mozilla/5.0 (Linux; Android 14) Mobile")
+        self.assertLess(android.index("wtAnd"), android.index("wtWin"))
+        self.assertLess(android.index("wtWin"), android.index("wtTux"))
+        self.assertIn("webtreesand://connect?", android)
+        self.assertNotIn("noch kein eigenes Programm", android)
+
+        windows = seite("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+        self.assertLess(windows.index("wtWin"), windows.index("wtAnd"))
+        self.assertIn("wtwin://connect?", windows)
+
+        iphone = seite("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)")
+        self.assertIn("noch kein eigenes Programm", iphone)
+
+        # Verbinden-Seite (Ziel des QR-Codes): ein Knopf je Handy-App mit Schema, Download je App.
+        verbinden = s._senden(urllib.request.Request(s.url("/module/_api4webtrees_/Connect"))).text
+        self.assertIn('data-scheme="webtreesand"', verbinden)
+        self.assertIn("wtAnd herunterladen", verbinden)
+        self.assertNotIn("wtWin", verbinden)
+
+    def test_app_abschalten(self):
+        """Einstellungen: eine abgehakte App verschwindet von der Seite App und aus der Fusszeile."""
+        s = U.sitzung("admin")
+        admin_url = s.url("/module/_api4webtrees_/Admin")
+        formular = s._senden(urllib.request.Request(admin_url)).text
+        self.assertIn('name="apps[]" value="wttux"', formular)
+        csrf = re.search(r'name="_csrf" value="([^"]+)"', formular).group(1)
+
+        def speichern(apps):
+            daten = urllib.parse.urlencode([("_csrf", csrf), ("trees[]", "testbaum"), ("trees[]", "geheim")] + [("apps[]", a) for a in apps]).encode()
+            req = urllib.request.Request(admin_url, data=daten, method="POST")
+            req.add_header("Content-Type", "application/x-www-form-urlencoded")
+            return s._senden(req)
+
+        try:
+            self.assertIn(speichern(["wtand", "wtwin"]).status, (302, 303))
+            seite = s._senden(urllib.request.Request(s.url("/module/_api4webtrees_/App/testbaum"))).text
+            self.assertNotIn("wtTux", seite)
+            self.assertIn("wtWin", seite)
+        finally:
+            speichern(["wtand", "wtwin", "wttux"])
+
+        seite = s._senden(urllib.request.Request(s.url("/module/_api4webtrees_/App/testbaum"))).text
+        self.assertIn("wtTux", seite)
 
     def test_ungueltiger_koppelcode(self):
         s = U.sitzung()

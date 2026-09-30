@@ -2,50 +2,138 @@
 
 declare(strict_types=1);
 
+use Api4Webtrees\Apps;
 use Fisharebest\Webtrees\I18N;
 
 /**
- * @var string                                                           $title
- * @var bool                                                             $logged_in
- * @var bool                                                             $secure
- * @var bool                                                             $home
- * @var string                                                           $download_url
- * @var string                                                           $download_qr
- * @var string                                                           $connect_url
- * @var string                                                           $connect_qr
- * @var string                                                           $deep_link
- * @var array{name:string,android:string,ios:string,scheme:string}|null $app2
- * @var string                                                           $app2_qr
- * @var string                                                           $deep_link2
- * @var int                                                              $minutes
- * @var string                                                           $device       windows, linux, android, ios, other
- * @var string                                                           $base_url
- * @var string                                                           $release_api
- * @var array{windows:string,linux:string}                               $deep_pc      wtwin://connect?... bzw. wttux://...
+ * @var string                            $title
+ * @var bool                              $logged_in
+ * @var bool                              $secure
+ * @var bool                              $home
+ * @var list<array<string,mixed>>         $apps          aus src/Apps.php, fuer dieses Geraet sortiert (matches, open)
+ * @var array<string,string>              $device_names  android => "Android-Handy und -Tablet" ...
+ * @var array<string,array<string,string>> $badges       App-Kennung => Geraet => Bild des Store-Badges
+ * @var array<string,string>              $download_qr   App-Kennung => QR-Code des Downloads (Handy-Apps)
+ * @var string                            $connect_url
+ * @var string                            $connect_qr
+ * @var array<string,string>              $deep          App-Kennung => <schema>://connect?... (leer, wenn nicht angemeldet)
+ * @var int                               $minutes
+ * @var string                            $device        windows, linux, mac, android, ios, other
+ * @var string                            $base_url
  */
 
 $json = static fn (mixed $value): string => json_encode($value, JSON_THROW_ON_ERROR | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
 
-// Das Programm fuer den PC: Windows (wtWin, .exe) oder Linux (wtTux, .deb). Zwei Schritte - herunterladen, verbinden.
-// Verbinden (Stufe 2, 27.09.2026): der Knopf legt den Verbinden-Link in die Zwischenablage und oeffnet ihn. Das Programm
-// uebernimmt ihn von selbst - ohne Adresse, Benutzername und Passwort. "Adresse kopieren" bleibt als Rueckfall.
-$pc = static function (string $os) use ($download_url, $base_url, $secure, $home, $logged_in, $deep_pc, $minutes): void {
-    $name  = $os === 'windows' ? 'wtWin' : 'wtTux';
-    $asset = $os === 'windows' ? '\\.exe$' : '_amd64\\.deb$';
-    $link  = $deep_pc[$os] ?? '';
+$devices = static fn (array $app): string => implode(', ', array_map(static fn (string $d): string => $device_names[$d] ?? $d, $app['devices']));
+
+// Download-Knopf oder Store-Badge je Geraet, fuer das es die App gibt.
+$downloads = static function (array $app) use ($badges): void {
+    $several = count($app['download']) > 1;
+
+    foreach ($app['download'] as $device => $url) {
+        $badge = $badges[$app['id']][$device] ?? '';
+
+        if ($badge !== '') {
+            ?><a href="<?= e($url) ?>" class="me-2"><img src="<?= e($badge) ?>" alt="<?= e($app['name']) ?>" style="height: 3rem;"></a><?php
+        } else {
+            $label = !$several ? I18N::translate('App herunterladen') : ($device === 'ios' ? I18N::translate('Für iPhone/iPad') : ($device === 'android' ? I18N::translate('Für Android') : $device));
+            ?><a class="btn btn-primary me-2 mb-1" href="<?= e($url) ?>"><?= e($label) ?></a><?php
+        }
+    }
+};
+
+$phone_first = in_array($device, ['android', 'ios', 'other'], true);
+
+// Handy-App: installieren (Download + QR), dann per Tipp verbinden.
+$phone = static function (array $app) use ($downloads, $download_qr, $logged_in, $secure, $home, $phone_first, $deep, $connect_qr, $minutes, $base_url): void {
+    $name  = $app['name'];
+    $link  = $deep[$app['id']] ?? '';
+    $store = array_filter($app['download'], static fn (string $url): bool => str_contains($url, 'play.google.com') || str_contains($url, 'apps.apple.com')) !== [];
+    ?>
+    <div class="row g-4 mb-4">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h3 class="card-title h5"><?= I18N::translate('1. App installieren') ?></h3>
+                    <p><?= $store
+                        ? I18N::translate('Lade %s aus dem Store auf dein Handy oder Tablet.', $name)
+                        : I18N::translate('Lade %s auf dein Android-Handy oder -Tablet. Beim ersten Mal fragt Android, ob dein Browser Apps installieren darf – das einmal erlauben.', $name) ?></p>
+                    <p><?php $downloads($app) ?></p>
+                    <?php if (($download_qr[$app['id']] ?? '') !== '') : ?>
+                        <p class="text-muted small mb-1"><?= I18N::translate('Am Computer? Dann diesen Code mit der Handy-Kamera scannen:') ?></p>
+                        <div style="max-width: 11rem; background: #fff; padding: .5rem;"><?= $download_qr[$app['id']] ?></div>
+                    <?php endif ?>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h3 class="card-title h5"><?= I18N::translate('2. Mit deinem Konto verbinden') ?></h3>
+                    <?php if (!$logged_in) : ?>
+                        <p><?= I18N::translate('Melde dich an, um die App mit deinem Konto zu verbinden.') ?></p>
+                    <?php elseif ($app['scheme'] === '') : ?>
+                        <?php /* Ohne Koppel-Schema: die App nimmt keinen Verbinden-Link an - Adresse, Benutzername und Passwort. */ ?>
+                        <p><?= I18N::translate('In %s meldest du dich mit dieser Adresse, deinem webtrees-Benutzernamen und Passwort an:', $name) ?></p>
+                        <p class="font-monospace"><?= e($base_url) ?></p>
+                    <?php elseif (!$secure) : ?>
+                        <p><?= I18N::translate('Das Verbinden per Code ist nur über eine verschlüsselte Verbindung (https) möglich. In der App kannst du dich stattdessen mit Adresse, Benutzername und Passwort anmelden.') ?></p>
+                    <?php elseif ($phone_first) : ?>
+                        <p><?= I18N::translate('Ein Tipp genügt – Adresse und Passwort musst du in der App nicht eintippen.') ?></p>
+                        <p><a class="btn btn-primary" href="<?= e($link) ?>"><?= I18N::translate('Mit %s verbinden', $name) ?></a></p>
+                        <?php if ($connect_qr !== '') : ?>
+                            <p class="text-muted small mb-1"><?= I18N::translate('Am Computer? Dann diesen Code mit der Handy-Kamera scannen:') ?></p>
+                            <div style="max-width: 13rem; background: #fff; padding: .5rem;"><?= $connect_qr ?></div>
+                        <?php endif ?>
+                    <?php else : ?>
+                        <?php /* Am PC fuehrt der App-Link ins Leere (kein Programm nimmt das Schema an) - nur der QR-Code fuers Handy. */ ?>
+                        <?php if ($connect_qr !== '') : ?>
+                            <p><?= I18N::translate('Diesen Code mit der Handy-Kamera scannen – die App verbindet sich dann von selbst, ohne Adresse und Passwort.') ?></p>
+                            <div style="max-width: 13rem; background: #fff; padding: .5rem;"><?= $connect_qr ?></div>
+                        <?php else : ?>
+                            <p><?= I18N::translate('Öffne diese Seite auf dem Handy und tippe dort auf „Mit %s verbinden“.', $name) ?></p>
+                        <?php endif ?>
+                        <?php if ($home) : ?>
+                            <p class="text-muted small mt-2"><?= I18N::translate('Unverschlüsselt – nur im Heimnetz.') ?> <a href="https://github.com/thobgg/nas4webtrees#access-from-outside" target="_blank" rel="noopener"><?= I18N::translate('Von unterwegs erreichbar machen: Anleitung') ?></a></p>
+                        <?php endif ?>
+                        <p class="text-muted small mt-2"><?= I18N::translate('Der Code gilt %s Minuten und nur ein einziges Mal. Er verbindet die App mit deinem Konto – gib ihn nicht weiter.', I18N::number($minutes)) ?></p>
+                    <?php endif ?>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php
+};
+
+// Programm fuer den PC: herunterladen (neueste Datei aus dem GitHub-Release), dann verbinden. Der Knopf legt den
+// Verbinden-Link in die Zwischenablage und oeffnet ihn; das Programm uebernimmt ihn von selbst - ohne Adresse,
+// Benutzername und Passwort. "Adresse kopieren" bleibt als Rueckfall.
+$pc = static function (array $app) use ($base_url, $secure, $home, $logged_in, $deep, $minutes): void {
+    $name     = $app['name'];
+    $os       = $app['devices'][0];
+    $download = Apps::download($app, $os);
+    // Liegt der Download in einem GitHub-Release, sucht die Seite beim Klick die neueste Datei per API (siehe Skript unten).
+    $api      = preg_replace('#^https://github\.com/([^/]+/[^/]+)/releases/latest/?$#', 'https://api.github.com/repos/$1/releases/latest', $download);
+    $api      = $api !== $download && $app['asset'] !== '' ? $api : '';
+    $link     = $deep[$app['id']] ?? '';
     ?>
     <div class="row g-4 mb-4">
         <div class="col-md-6">
             <div class="card h-100">
                 <div class="card-body">
                     <h3 class="card-title h5"><?= I18N::translate('1. Herunterladen und installieren') ?></h3>
-                    <p><?= $os === 'windows'
-                        ? I18N::translate('%s ist das Programm für den Windows-PC.', $name)
-                        : I18N::translate('%s ist das Programm für den Linux-PC (Ubuntu, Debian, Mint).', $name) ?></p>
-                    <p><a class="btn btn-primary" data-asset="<?= e($asset) ?>" href="<?= e($download_url) ?>"><?= $os === 'windows' ? I18N::translate('%s für Windows herunterladen', $name) : I18N::translate('%s für Linux herunterladen', $name) ?></a></p>
-                    <p class="text-muted small"><?= $os === 'windows'
-                        ? I18N::translate('Die Datei doppelt anklicken. Warnt Windows („Der Computer wurde durch Windows geschützt“), auf „Weitere Informationen“ und dann „Trotzdem ausführen“ klicken.')
-                        : I18N::translate('Die .deb-Datei doppelt anklicken und installieren – oder im Terminal: sudo apt install ./Dateiname.deb') ?></p>
+                    <p><?= match ($os) {
+                        'windows' => I18N::translate('%s ist das Programm für den Windows-PC.', $name),
+                        'linux'   => I18N::translate('%s ist das Programm für den Linux-PC (Ubuntu, Debian, Mint).', $name),
+                        default   => I18N::translate('%s ist das Programm für den Mac.', $name),
+                    } ?></p>
+                    <p><a class="btn btn-primary" data-api="<?= e($api) ?>" data-asset="<?= e($app['asset']) ?>" href="<?= e($download) ?>"><?= I18N::translate('%s herunterladen', $name) ?></a></p>
+                    <?php if ($os === 'windows') : ?>
+                        <p class="text-muted small"><?= I18N::translate('Die Datei doppelt anklicken. Warnt Windows („Der Computer wurde durch Windows geschützt“), auf „Weitere Informationen“ und dann „Trotzdem ausführen“ klicken.') ?></p>
+                    <?php elseif ($os === 'linux') : ?>
+                        <p class="text-muted small"><?= I18N::translate('Die .deb-Datei doppelt anklicken und installieren – oder im Terminal: sudo apt install ./Dateiname.deb') ?></p>
+                    <?php endif ?>
                     <p class="text-muted small mb-0"><?= I18N::translate('Schon installiert? Dann gleich weiter mit Schritt 2.') ?></p>
                 </div>
             </div>
@@ -91,114 +179,39 @@ $pc = static function (string $os) use ($download_url, $base_url, $secure, $home
     <?php
 };
 
-// Reihenfolge (Thomas, 27.09.2026): wtWin und wtAnd offen, am Handy wtAnd zuerst, sonst wtWin (Hauptzielgruppe).
-// wtTux eingeklappt darunter - aufgeklappt, wenn die Seite von einem Linux-PC kommt.
-$apple       = $device === 'mac' || ($device === 'ios' && ($app2['ios'] ?? '') === '');
-$phone_first = $device === 'android' || $device === 'other' || ($device === 'ios' && !$apple);
+// Apple-Geraet ohne passende App: ehrlich sagen, statt die Android-App zu zeigen.
+$apple = in_array($device, ['mac', 'ios'], true) && array_filter($apps, static fn (array $app): bool => $app['matches']) === [];
 
 ?>
 
 <h2 class="wt-page-title"><?= e($title) ?></h2>
 
-<?php ob_start() ?>
-<div class="row g-4">
-    <div class="col-md-6">
-        <div class="card h-100">
-            <div class="card-body">
-                <h3 class="card-title h5"><?= I18N::translate('1. App installieren') ?></h3>
-                <p><?= I18N::translate('Lade die App auf dein Android-Handy oder -Tablet. Beim ersten Mal fragt Android, ob dein Browser Apps installieren darf – das einmal erlauben.') ?></p>
-                <p><a class="btn btn-primary" href="<?= e($download_url) ?>"><?= I18N::translate('App herunterladen') ?></a></p>
-                <?php if ($download_qr !== '') : ?>
-                    <p class="text-muted small mb-1"><?= I18N::translate('Am Computer? Dann diesen Code mit der Handy-Kamera scannen:') ?></p>
-                    <div style="max-width: 11rem; background: #fff; padding: .5rem;"><?= $download_qr ?></div>
-                <?php endif ?>
-
-                <?php if ($app2 !== null && ($app2['android'] !== '' || $app2['ios'] !== '')) : ?>
-                    <hr>
-                    <p><?= I18N::translate('Oder %s:', e($app2['name'])) ?></p>
-                    <p>
-                        <?php if ($app2['android'] !== '') : ?>
-                            <a class="btn btn-outline-primary" href="<?= e($app2['android']) ?>"><?= I18N::translate('Für Android') ?></a>
-                        <?php endif ?>
-                        <?php if ($app2['ios'] !== '') : ?>
-                            <a class="btn btn-outline-primary" href="<?= e($app2['ios']) ?>"><?= I18N::translate('Für iPhone/iPad') ?></a>
-                        <?php endif ?>
-                    </p>
-                    <?php if ($app2_qr !== '') : ?>
-                        <div style="max-width: 11rem; background: #fff; padding: .5rem;"><?= $app2_qr ?></div>
-                    <?php endif ?>
-                <?php endif ?>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-md-6">
-        <div class="card h-100">
-            <div class="card-body">
-                <h3 class="card-title h5"><?= I18N::translate('2. Mit deinem Konto verbinden') ?></h3>
-                <?php if (!$logged_in) : ?>
-                    <p><?= I18N::translate('Melde dich an, um die App mit deinem Konto zu verbinden.') ?></p>
-                <?php elseif (!$secure) : ?>
-                    <p><?= I18N::translate('Das Verbinden per Code ist nur über eine verschlüsselte Verbindung (https) möglich. In der App kannst du dich stattdessen mit Adresse, Benutzername und Passwort anmelden.') ?></p>
-                <?php elseif ($phone_first) : ?>
-                    <p><?= I18N::translate('Ein Tipp genügt – Adresse und Passwort musst du in der App nicht eintippen.') ?></p>
-                    <p>
-                        <a class="btn btn-primary" href="<?= e($deep_link) ?>"><?= $deep_link2 === '' ? I18N::translate('Jetzt verbinden') : I18N::translate('Mit wtAnd verbinden') ?></a>
-                        <?php if ($deep_link2 !== '') : ?>
-                            <a class="btn btn-outline-primary" href="<?= e($deep_link2) ?>"><?= I18N::translate('Mit %s verbinden', e($app2['name'] ?? '')) ?></a>
-                        <?php endif ?>
-                    </p>
-                    <?php if ($connect_qr !== '') : ?>
-                        <p class="text-muted small mb-1"><?= I18N::translate('Am Computer? Dann diesen Code mit der Handy-Kamera scannen:') ?></p>
-                        <div style="max-width: 13rem; background: #fff; padding: .5rem;"><?= $connect_qr ?></div>
-                    <?php endif ?>
-                <?php else : ?>
-                    <?php /* Am PC fuehrt der App-Link ins Leere (kein Programm nimmt webtreesand:// an) - nur der QR-Code fuers Handy. */ ?>
-                    <?php if ($connect_qr !== '') : ?>
-                        <p><?= I18N::translate('Diesen Code mit der Handy-Kamera scannen – die App verbindet sich dann von selbst, ohne Adresse und Passwort.') ?></p>
-                        <div style="max-width: 13rem; background: #fff; padding: .5rem;"><?= $connect_qr ?></div>
-                    <?php else : ?>
-                        <p><?= I18N::translate('Öffne diese Seite auf dem Handy und tippe dort auf „Jetzt verbinden“.') ?></p>
-                    <?php endif ?>
-                    <?php if ($home) : ?>
-                        <p class="text-muted small mt-2"><?= I18N::translate('Unverschlüsselt – nur im Heimnetz.') ?> <a href="https://github.com/thobgg/nas4webtrees#access-from-outside" target="_blank" rel="noopener"><?= I18N::translate('Von unterwegs erreichbar machen: Anleitung') ?></a></p>
-                    <?php endif ?>
-                    <p class="text-muted small mt-2"><?= I18N::translate('Der Code gilt %s Minuten und nur ein einziges Mal. Er verbindet die App mit deinem Konto – gib ihn nicht weiter.', I18N::number($minutes)) ?></p>
-                <?php endif ?>
-            </div>
-        </div>
-    </div>
-</div>
-<?php $phone = ob_get_clean() ?>
-
 <?php if ($apple) : ?>
-    <?php /* Fuer Mac, iPhone und iPad gibt es noch kein Programm (27.09.2026) - ehrlich sagen statt Handy-Ansicht mit Android-App. */ ?>
     <div class="alert alert-info">
         <strong><?= I18N::translate('Für Mac, iPhone und iPad gibt es noch kein eigenes Programm.') ?></strong><br>
         <?= I18N::translate('Nutze webtrees einfach hier im Browser – er funktioniert auf jedem Gerät. Hast du zusätzlich einen Windows-PC oder ein Android-Handy, findest du die Programme darunter.') ?>
     </div>
 <?php endif ?>
 
-<?php foreach ($phone_first ? ['phone', 'windows'] : ['windows', 'phone'] as $section) : ?>
-    <h3 class="h4 mt-4 mb-3"><?= $section === 'phone' ? I18N::translate('Android-Handy und -Tablet: wtAnd') : I18N::translate('Windows-PC: wtWin') ?></h3>
-    <?php if ($section === 'phone') : ?>
-        <?= $phone ?>
+<?php foreach ($apps as $app) : ?>
+    <?php if ($app['open']) : ?>
+        <h3 class="h4 mt-4 mb-3"><?= e($devices($app)) ?>: <?= e($app['name']) ?></h3>
+        <?php $app['kind'] === 'pc' ? $pc($app) : $phone($app) ?>
     <?php else : ?>
-        <?php $pc('windows') ?>
+        <details class="mt-4">
+            <summary class="h4"><?= I18N::translate('Auch für %1$s: %2$s', e($devices($app)), e($app['name'])) ?></summary>
+            <div class="mt-3"><?php $app['kind'] === 'pc' ? $pc($app) : $phone($app) ?></div>
+        </details>
     <?php endif ?>
 <?php endforeach ?>
-
-<details class="mt-4"<?= $device === 'linux' ? ' open' : '' ?>>
-    <summary class="h4"><?= I18N::translate('Auch für Linux: wtTux') ?></summary>
-    <div class="mt-3"><?php $pc('linux') ?></div>
-</details>
 
 <script>
   (function () {
     // Download: die neueste Datei aus dem GitHub-Release suchen (Dateinamen tragen die Version). Erst beim Klick, damit
     // GitHub nur erfaehrt, wer wirklich herunterlaedt. Klappt es nicht, bleibt es bei der Release-Seite.
-    var api = <?= $json($release_api) ?>;
-    document.querySelectorAll('a[data-asset]').forEach(function (link) {
+    document.querySelectorAll('a[data-api]').forEach(function (link) {
+      var api = link.getAttribute('data-api');
+      if (!api) { return; }
       link.addEventListener('click', function (event) {
         if (!window.fetch) { return; }
         event.preventDefault();
@@ -247,8 +260,8 @@ $phone_first = $device === 'android' || $device === 'other' || ($device === 'ios
       if (document.visibilityState === 'visible' && stale() && document.querySelector('[data-connect]')) { window.location.reload(); }
     });
 
-    // Mit wtWin/wtTux verbinden: Link in die Zwischenablage (das Programm wartet darauf) und zusaetzlich oeffnen - in einem
-    // unsichtbaren Rahmen, damit ein noch unbekanntes Schema keine Fehlerseite zeigt.
+    // Mit dem PC-Programm verbinden: Link in die Zwischenablage (das Programm wartet darauf) und zusaetzlich oeffnen - in
+    // einem unsichtbaren Rahmen, damit ein noch unbekanntes Schema keine Fehlerseite zeigt.
     document.querySelectorAll('button[data-connect]').forEach(function (button) {
       var box  = button.closest('.card-body');
       var ok   = box.querySelector('[data-connect-ok]');

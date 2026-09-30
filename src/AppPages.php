@@ -27,9 +27,9 @@ use function http_build_query;
 use function implode;
 use function in_array;
 use function filter_var;
+use function array_keys;
 use function ini_get;
 use function intdiv;
-use function mb_substr;
 use function min;
 use function parse_url;
 use function preg_match;
@@ -43,7 +43,6 @@ use function substr;
 use function time;
 use function trim;
 
-use const FILTER_VALIDATE_URL;
 use const PHP_URL_HOST;
 
 /**
@@ -66,6 +65,15 @@ trait AppPages
 
         $base_url = Validator::attributes($request)->string('base_url');
         $trees    = [];
+        $off      = $this->appsOff();
+        $apps     = [];
+
+        foreach (Apps::ALL as $id => $app) {
+            $apps[] = ['id' => $id, 'enabled' => !in_array($id, $off, true)] + $app;
+        }
+
+        // Der Download-Knopf mit QR-Code gilt der Handy-App des Modulautors.
+        $download = Apps::download(Apps::ALL['wtand'], 'android');
 
         foreach (Registry::container()->get(TreeService::class)->all() as $tree) {
             $trees[] = [
@@ -80,15 +88,10 @@ trait AppPages
             'title'        => $this->title(),
             'trees'        => $trees,
             'save_url'     => $this->actionUrl('Admin', null),
-            'download_url' => self::APP_DOWNLOAD_URL,
-            'download_qr'  => $this->qrSvg(self::APP_DOWNLOAD_URL),
-            'app2'         => $this->secondApp(),
-            'app2_raw'     => [
-                'name'    => $this->getPreference(self::APP2_NAME_SETTING),
-                'android' => $this->getPreference(self::APP2_ANDROID_SETTING),
-                'ios'     => $this->getPreference(self::APP2_IOS_SETTING),
-                'scheme'  => $this->getPreference(self::APP2_SCHEME_SETTING),
-            ],
+            'download_url' => $download,
+            'download_qr'  => $this->qrSvg($download),
+            'apps'         => $apps,
+            'device_names' => self::deviceNames(),
             'version'      => $this->customModuleVersion(),
             'api'          => self::API_VERSION,
             'https'        => str_starts_with($base_url, 'https://'),
@@ -111,41 +114,17 @@ trait AppPages
         // '-' statt leer: eine leere Einstellung hiesse "nie gespeichert" und damit "alle".
         $this->setPreference(self::TREES_SETTING, $names === [] ? '-' : implode(',', $names));
 
-        // Zweite App: nur gueltige Werte werden gespeichert, alles andere wird verworfen und gemeldet.
-        $body    = Validator::parsedBody($request);
-        $name    = trim($body->string('app2_name', ''));
-        $android = trim($body->string('app2_android_url', ''));
-        $ios     = trim($body->string('app2_ios_url', ''));
-        $scheme  = strtolower(trim($body->string('app2_scheme', '')));
-        $rejected = [];
+        // Apps: angekreuzt = an. Gespeichert werden nur die abgeschalteten, damit eine neue App in der Liste von selbst an ist.
+        $on  = Validator::parsedBody($request)->array('apps');
+        $off = [];
 
-        // Download-Adressen: nur https und nur, was PHP als URL erkennt.
-        $checkUrl = static function (string $url) use (&$rejected): string {
-            if ($url === '' || (str_starts_with($url, 'https://') && filter_var($url, FILTER_VALIDATE_URL) !== false)) {
-                return $url;
+        foreach (array_keys(Apps::ALL) as $id) {
+            if (!in_array($id, $on, true)) {
+                $off[] = $id;
             }
-
-            $rejected[] = $url;
-
-            return '';
-        };
-        $android = $checkUrl($android);
-        $ios     = $checkUrl($ios);
-
-        // Ein eigenes URL-Schema: Buchstaben, Ziffern, + . - ; nicht das von wtAnd und keins, das ein Browser selbst versteht.
-        if ($scheme !== '' && (preg_match('/^[a-z][a-z0-9+.-]{1,30}$/', $scheme) !== 1 || in_array($scheme, ['webtreesand', 'http', 'https', 'javascript', 'data', 'file', 'intent'], true))) {
-            $rejected[] = $scheme;
-            $scheme     = '';
         }
 
-        $this->setPreference(self::APP2_NAME_SETTING, mb_substr($name, 0, 60));
-        $this->setPreference(self::APP2_ANDROID_SETTING, $android);
-        $this->setPreference(self::APP2_IOS_SETTING, $ios);
-        $this->setPreference(self::APP2_SCHEME_SETTING, $scheme);
-
-        if ($rejected !== []) {
-            FlashMessages::addMessage(I18N::translate('Nicht übernommen (nur https-Adressen und ein einfaches Schema wie „meineapp“ sind erlaubt): %s', implode(', ', $rejected)), 'warning');
-        }
+        $this->setPreference(self::APPS_OFF_SETTING, implode(',', $off));
 
         FlashMessages::addMessage(I18N::translate('Die Einstellungen wurden gespeichert.'), 'success');
 
@@ -168,11 +147,10 @@ trait AppPages
         $home   = !str_starts_with($base_url, 'https://') && self::homeNetwork($host);
         $secure = str_starts_with($base_url, 'https://') || $home;
 
+        $device      = self::device($request->getHeaderLine('User-Agent'));
+        $apps        = Apps::forDevice($this->apps(), $device);
         $connect_url = '';
-        $deep_link   = '';
-        $deep_link2  = '';
-        $deep_pc     = ['windows' => '', 'linux' => ''];
-        $app2        = $this->secondApp();
+        $deep        = [];
 
         if (Auth::check() && $secure) {
             $code = bin2hex(random_bytes(24));
@@ -182,35 +160,40 @@ trait AppPages
             // Der Code reist im URL-Fragment (#...): das Fragment erreicht nie den Server und steht damit weder im
             // Zugriffsprotokoll des Webservers noch in dem eines Proxys. Die Verbinden-Seite liest es per JavaScript.
             $connect_url = $this->actionUrl('Connect', null) . '#' . http_build_query($params);
-            $deep_link   = $this->deepLink('webtreesand', $base_url, $params);
-            $deep_link2  = $app2 !== null && $app2['scheme'] !== '' ? $this->deepLink($app2['scheme'], $base_url, $params) : '';
-            // wtWin/wtTux: derselbe Link mit eigenem Schema. Der Knopf legt ihn in die Zwischenablage (das Programm liest
-            // sie, solange es auf eine Verbindung wartet) und oeffnet ihn zusaetzlich - das Programm meldet sich dafuer
-            // beim ersten Start selbst als Empfaenger an.
-            $deep_pc     = ['windows' => $this->deepLink('wtwin', $base_url, $params), 'linux' => $this->deepLink('wttux', $base_url, $params)];
+
+            // Derselbe Link je App mit ihrem Schema. Handy-Apps oeffnen ihn per Tipp; wtWin/wtTux bekommen ihn in die
+            // Zwischenablage (das Programm liest sie, solange es auf eine Verbindung wartet) und zusaetzlich geoeffnet -
+            // das Programm meldet sich dafuer beim ersten Start selbst als Empfaenger an.
+            foreach ($apps as $app) {
+                if ($app['scheme'] !== '') {
+                    $deep[$app['id']] = $this->deepLink($app['scheme'], $base_url, $params);
+                }
+            }
         }
 
-        $device = self::device($request->getHeaderLine('User-Agent'));
-        $title  = I18N::translate('Dein Stammbaum am PC und auf dem Handy');
+        $qr = [];
+
+        foreach ($apps as $app) {
+            if ($app['kind'] === 'phone') {
+                $qr[$app['id']] = $this->qrSvg(Apps::download($app, 'android'));
+            }
+        }
 
         return $this->viewResponse($this->name() . '::app', [
-            'title'        => $title,
+            'title'        => I18N::translate('Dein Stammbaum am PC und auf dem Handy'),
             'device'       => $device,
             'base_url'     => $base_url,
-            'release_api'  => self::APP_RELEASE_API,
             'tree'         => $tree,
             'logged_in'    => Auth::check(),
             'secure'       => $secure,
             'home'         => $home,
-            'download_url' => self::APP_DOWNLOAD_URL,
-            'download_qr'  => $this->qrSvg(self::APP_DOWNLOAD_URL),
+            'apps'         => $apps,
+            'device_names' => self::deviceNames(),
+            'badges'       => $this->badgeUrls($apps),
+            'download_qr'  => $qr,
             'connect_url'  => $connect_url,
             'connect_qr'   => $connect_url === '' ? '' : $this->qrSvg($connect_url),
-            'deep_link'    => $deep_link,
-            'app2'         => $app2,
-            'app2_qr'      => $app2 === null ? '' : $this->qrSvg($app2['android'] !== '' ? $app2['android'] : $app2['ios']),
-            'deep_link2'   => $deep_link2,
-            'deep_pc'      => $deep_pc,
+            'deep'         => $deep,
             'minutes'      => intdiv(self::PAIR_SECONDS, 60),
         ]);
     }
@@ -234,12 +217,16 @@ trait AppPages
      */
     public function getConnectAction(ServerRequestInterface $request): ResponseInterface
     {
+        $device = self::device($request->getHeaderLine('User-Agent'));
+        $apps   = Apps::forDevice(Apps::kind($this->apps(), 'phone'), $device);
+
         return $this->viewResponse($this->name() . '::connect', [
-            'title'        => I18N::translate('Mit wtAnd verbinden'),
-            'tree'         => null,
-            'base_url'     => Validator::attributes($request)->string('base_url'),
-            'download_url' => self::APP_DOWNLOAD_URL,
-            'app2'         => $this->secondApp(),
+            'title'    => I18N::translate('Mit der App verbinden'),
+            'tree'     => null,
+            'base_url' => Validator::attributes($request)->string('base_url'),
+            'device'   => $device,
+            'apps'     => $apps,
+            'badges'   => $this->badgeUrls($apps),
         ]);
     }
 
@@ -280,7 +267,7 @@ trait AppPages
         }
 
         Auth::login($user);
-        Log::addAuthenticationLog('Login (wtAnd, QR-Code): ' . $user->userName() . '/' . $user->realName());
+        Log::addAuthenticationLog('Login (App, Einmal-Code): ' . $user->userName() . '/' . $user->realName());
         $user->setPreference(UserInterface::PREF_TIMESTAMP_ACTIVE, (string) time());
         $user->setPreference(self::hintKey($request->getHeaderLine('User-Agent')), 'connected');
 
@@ -364,25 +351,61 @@ trait AppPages
     }
 
     /**
-     * Die vom Verwalter eingetragene zweite App - oder null, wenn keine eingetragen ist.
-     * Sie folgt derselben Schnittstelle und demselben Koppel-Link, nur mit eigenem Schema.
+     * Kennungen der Apps, die der Verwalter abgeschaltet hat.
      *
-     * @return array{name:string,android:string,ios:string,scheme:string}|null
+     * @return list<string>
      */
-    private function secondApp(): ?array
+    private function appsOff(): array
     {
-        $name = trim($this->getPreference(self::APP2_NAME_SETTING));
+        $setting = trim($this->getPreference(self::APPS_OFF_SETTING));
 
-        if ($name === '') {
-            return null;
+        return $setting === '' ? [] : explode(',', $setting);
+    }
+
+    /**
+     * Geraetenamen fuer die Seiten, in der Sprache des Benutzers.
+     *
+     * @return array<string,string>
+     */
+    private static function deviceNames(): array
+    {
+        return [
+            'android' => I18N::translate('Android-Handy und -Tablet'),
+            'ios'     => I18N::translate('iPhone und iPad'),
+            'windows' => I18N::translate('Windows-PC'),
+            'linux'   => I18N::translate('Linux-PC'),
+            'mac'     => I18N::translate('Mac'),
+        ];
+    }
+
+    /**
+     * Adressen der Store-Badges je App und Geraet (Dateien unter resources/img).
+     *
+     * @param list<array<string,mixed>> $apps
+     *
+     * @return array<string,array<string,string>>
+     */
+    private function badgeUrls(array $apps): array
+    {
+        $urls = [];
+
+        foreach ($apps as $app) {
+            foreach ($app['badge'] as $device => $file) {
+                $urls[$app['id']][$device] = $this->assetUrl('img/' . $file);
+            }
         }
 
-        return [
-            'name'    => $name,
-            'android' => $this->getPreference(self::APP2_ANDROID_SETTING),
-            'ios'     => $this->getPreference(self::APP2_IOS_SETTING),
-            'scheme'  => $this->getPreference(self::APP2_SCHEME_SETTING),
-        ];
+        return $urls;
+    }
+
+    /**
+     * Die Apps, die dieses webtrees zeigt: alle aus src/Apps.php ausser den abgeschalteten.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function apps(): array
+    {
+        return Apps::enabled($this->appsOff());
     }
 
     /**
