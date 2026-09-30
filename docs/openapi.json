@@ -5781,6 +5781,145 @@
       }
      }
     }
+   },
+   "post": {
+    "operationId": "postSource",
+    "summary": "Create a source (no `xref`, `title` required) or change one (`xref`).",
+    "description": "Create a source (no `xref`, `title` required) or change one (`xref`). Only the parts named in the body are replaced; media, further repositories and unknown lines are kept. Media are added with the route Media and `xref` of the source.",
+    "x-api-level": 18,
+    "x-minimum-role": "editor",
+    "parameters": [
+     {
+      "name": "tree",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "Tree name (`Info.trees[].name`)"
+     },
+     {
+      "name": "xref",
+      "in": "query",
+      "required": false,
+      "description": "Source identifier when changing, e.g. `S12`",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "X-CSRF-TOKEN",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "`Info.csrf`"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Result – or an error object (`ok: false`, see `Error`)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "pending": {
+           "type": "boolean"
+          },
+          "xref": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "ok",
+          "pending",
+          "xref"
+         ],
+         "additionalProperties": false
+        }
+       }
+      }
+     }
+    },
+    "x-body": "`{title?, author?, publication?, abbreviation?, text?, note?, repository?: \"R1\" | \"\", callNumber?}`"
+   }
+  },
+  "/module/_api4webtrees_/Repositories/{tree}": {
+   "get": {
+    "operationId": "getRepositories",
+    "summary": "All repositories (archives) the viewer may see, with address and how many sources refer to them.",
+    "description": "All repositories (archives) the viewer may see, with address and how many sources refer to them.",
+    "x-api-level": 18,
+    "x-minimum-role": "visitor",
+    "parameters": [
+     {
+      "name": "tree",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "Tree name (`Info.trees[].name`)"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Result – or an error object (`ok: false`, see `Error`)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "repositories": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "address": {
+              "type": "string"
+             },
+             "canEdit": {
+              "type": "boolean"
+             },
+             "name": {
+              "type": "string"
+             },
+             "uses": {
+              "type": "integer"
+             },
+             "xref": {
+              "type": "string"
+             }
+            },
+            "required": [
+             "address",
+             "canEdit",
+             "name",
+             "uses",
+             "xref"
+            ],
+            "additionalProperties": false
+           }
+          },
+          "total": {
+           "type": "integer"
+          }
+         },
+         "required": [
+          "repositories",
+          "total"
+         ],
+         "additionalProperties": false
+        }
+       }
+      }
+     }
+    }
    }
   },
   "/module/_api4webtrees_/MediaList/{tree}": {
@@ -6745,6 +6884,74 @@
     "x-body": "`{factId?, tag, value?, date?, place?, note?}` or `{factId?, gedcom: \"1 BIRT\\n2 DATE …\"}`"
    }
   },
+  "/module/_api4webtrees_/Repository/{tree}": {
+   "post": {
+    "operationId": "postRepository",
+    "summary": "Create a repository (no `xref`) or rename one (`xref`).",
+    "description": "Create a repository (no `xref`) or rename one (`xref`).",
+    "x-api-level": 18,
+    "x-minimum-role": "editor",
+    "parameters": [
+     {
+      "name": "tree",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "Tree name (`Info.trees[].name`)"
+     },
+     {
+      "name": "xref",
+      "in": "query",
+      "required": false,
+      "description": "Repository identifier when changing, e.g. `R1`",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "X-CSRF-TOKEN",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "`Info.csrf`"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Result – or an error object (`ok: false`, see `Error`)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "pending": {
+           "type": "boolean"
+          },
+          "xref": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "ok",
+          "pending",
+          "xref"
+         ],
+         "additionalProperties": false
+        }
+       }
+      }
+     }
+    },
+    "x-body": "`{name}`"
+   }
+  },
   "/module/_api4webtrees_/Citation/{tree}": {
    "post": {
     "operationId": "postCitation",
@@ -7557,6 +7764,7 @@
        "link-exists",
        "link-not-found",
        "link-tag-not-allowed",
+       "name-missing",
        "name-required",
        "not-editable",
        "not-editor",
@@ -7568,8 +7776,10 @@
        "pair-invalid",
        "parent-exists",
        "private",
+       "repository-not-found",
        "source-missing",
        "source-not-found",
+       "title-missing",
        "too-many-results",
        "tree-disabled",
        "upload-failed",

@@ -405,6 +405,12 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
      * nginx mit fastcgi_intercept_errors) ersetzen bei 4xx/5xx den Antwortinhalt durch ihre eigene
      * Fehlerseite - der Fehlercode kaeme nie in der App an. "status" nennt den gemeinten Code.
      */
+    /** Wie xref(), aber leer, wenn der Parameter fehlt - fuer Routen, die ohne Kennung etwas Neues anlegen. */
+    private function xrefOptional(ServerRequestInterface $request): string
+    {
+        return Validator::queryParams($request)->string('xref', '') === '' ? '' : $this->xref($request);
+    }
+
     private function error(int $status, string $code): ResponseInterface
     {
         return response(['ok' => false, 'error' => $code, 'status' => $status]);

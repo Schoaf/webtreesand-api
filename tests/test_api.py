@@ -60,6 +60,7 @@ def leseaufrufe(baum="testbaum"):
     for f in ["F1", "F2"]:
         aufrufe.append(("Family", baum, {"xref": f}))
     aufrufe.append(("Sources", baum, {}))
+    aufrufe.append(("Repositories", baum, {}))
     for q in ["S1", "S2"]:
         aufrufe.append(("Source", baum, {"xref": q}))
     aufrufe += [
@@ -260,6 +261,40 @@ class Schreiben(unittest.TestCase):
         self.assertEqual("source-not-found", s.post("Citation", "testbaum", {"factId": fid, "source": "@S999@"}, xref=xref).json["error"])
         self.assertEqual("invalid-quality", s.post("Citation", "testbaum", {"factId": fid, "index": 0, "quality": 7}, xref=xref).json["error"])
         self.assertEqual("not-editable", U.sitzung("mitglied").post("Citation", "testbaum", {"factId": fid, "source": "S1"}, xref=xref).json["error"])
+
+    def test_quelle_und_archiv_pflegen(self):
+        s = U.sitzung("admin")
+        # Archiv anlegen, Quelle anlegen mit Archiv und Signatur
+        r = s.post("Repository", "testbaum", {"name": "Stadtarchiv Zitadorf"})
+        self.assertEqual(True, r.json["ok"], r); repo = r.json["xref"]
+        a = s.post("Source", "testbaum", {"title": "Adressbuch Zitadorf 1900", "author": "Magistrat", "publication": "Zitadorf, 1900",
+                                           "text": "Seite 1\nSeite 2", "note": "Digitalisat", "repository": repo, "callNumber": "AB 1900"})
+        self.assertEqual(True, a.json["ok"], a); quelle = a.json["xref"]
+        q = s.get("Source", "testbaum", xref=quelle).json
+        self.assertEqual(("Adressbuch Zitadorf 1900", "Magistrat", "Zitadorf, 1900", "Seite 1\nSeite 2", ["Digitalisat"], "Stadtarchiv Zitadorf", "AB 1900"),
+                         (q["title"], q["author"], q["publication"], q["text"], q["notes"], q["repository"], q["callNumber"]))
+        # nur den Autor aendern: alles andere bleibt
+        a = s.post("Source", "testbaum", {"author": "Magistrat der Stadt"}, xref=quelle)
+        self.assertEqual(True, a.json["ok"], a)
+        q = s.get("Source", "testbaum", xref=quelle).json
+        self.assertEqual(("Adressbuch Zitadorf 1900", "Magistrat der Stadt", "Zitadorf, 1900", "AB 1900"), (q["title"], q["author"], q["publication"], q["callNumber"]))
+        # nur die Signatur aendern, dann das Archiv entfernen
+        s.post("Source", "testbaum", {"callNumber": "AB 1900/2"}, xref=quelle)
+        self.assertEqual(("Stadtarchiv Zitadorf", "AB 1900/2"), (lambda q: (q["repository"], q["callNumber"]))(s.get("Source", "testbaum", xref=quelle).json))
+        s.post("Source", "testbaum", {"repository": ""}, xref=quelle)
+        self.assertEqual(("", ""), (lambda q: (q["repository"], q["callNumber"]))(s.get("Source", "testbaum", xref=quelle).json))
+        # Archiv umbenennen, Liste
+        self.assertEqual(True, s.post("Repository", "testbaum", {"name": "Stadtarchiv Zitadorf (neu)"}, xref=repo).json["ok"])
+        repos = s.get("Repositories", "testbaum").json["repositories"]
+        self.assertIn(("Stadtarchiv Zitadorf (neu)", 0), [(x["name"], x["uses"]) for x in repos])
+        # Fehler und Rechte
+        self.assertEqual("title-missing", s.post("Source", "testbaum", {"author": "x"}).json["error"])
+        self.assertEqual("repository-not-found", s.post("Source", "testbaum", {"title": "x", "repository": "R999"}).json["error"])
+        self.assertEqual("not-editable", U.sitzung("mitglied").post("Source", "testbaum", {"title": "x"}).json["error"])
+        # unbenutzte Quelle loeschen
+        self.assertEqual(0, next(x["uses"] for x in s.get("Sources", "testbaum").json["sources"] if x["xref"] == quelle))
+        self.assertEqual(True, s.post("DeleteRecord", "testbaum", {}, xref=quelle).json["ok"])
+        self.assertEqual("not-found", s.get("Source", "testbaum", xref=quelle).json["error"])
 
     def test_name_aendern_behaelt_unterangaben(self):
         # Beim Aendern des Namens darf nichts verloren gehen: Praefix, Spitzname und Notiz bleiben,

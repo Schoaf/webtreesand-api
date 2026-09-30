@@ -27,6 +27,8 @@ JSON API for webtrees 2.2, used by wtAnd, wtWin/wtTux and nas4webtrees. Machine-
 | `GET Export/{tree}` | 17 | visitor | The whole visible tree page by page (250 records): first individuals, then families, linked by identifiers only. |
 | `GET Sources/{tree}` | 18 | visitor | All sources the viewer may see, sorted by title: title, author, publication, abbreviation, first repository with call number, and how many individuals and families cite them (`uses`). |
 | `GET Source/{tree}` | 18 | visitor | One source with text, notes, media, repositories and who cites it: individuals and families with the facts that carry the citation (at most 1000 each; `moreIndividuals`, `moreFamilies`). |
+| `POST Source/{tree}` | 18 | editor | Create a source (no `xref`, `title` required) or change one (`xref`). |
+| `GET Repositories/{tree}` | 18 | visitor | All repositories (archives) the viewer may see, with address and how many sources refer to them. |
 | `GET MediaList/{tree}` | 2 | visitor | All media objects, newest first, 60 per page, with up to three linked names. |
 | `GET Anniversaries/{tree}` | 4 | visitor | Birthdays, weddings and deaths in the next `days` days. |
 | `GET Bookmarks/{tree}` | 11 | member | The signed-in user's bookmarks in this tree (user setting, all clients). |
@@ -35,6 +37,7 @@ JSON API for webtrees 2.2, used by wtAnd, wtWin/wtTux and nas4webtrees. Machine-
 | `GET Tags/{tree}` | 1 | visitor | Facts and events the client may offer for adding, with labels. |
 | `GET Places/{tree}` | 8 | editor | Place suggestions while typing, like webtrees' own autocomplete. |
 | `POST Fact/{tree}` | 1 | editor | Add or change a fact or event. |
+| `POST Repository/{tree}` | 18 | editor | Create a repository (no `xref`) or rename one (`xref`). |
 | `POST Citation/{tree}` | 18 | editor | Add, change, delete or move a source citation on a fact – or a general citation on the record (no `factId`). |
 | `POST DeleteFact/{tree}` | 1 | editor | Delete a fact or event (not links like FAMC/FAMS). |
 | `POST AddIndividual/{tree}` | 1 | editor | Create an individual and link it as child, spouse, father or mother. |
@@ -150,6 +153,24 @@ One source with text, notes, media, repositories and who cites it: individuals a
 
 Answer fields: `abbreviation`, `author`, `callNumber`, `canEdit`, `families`, `individuals`, `media`, `moreFamilies`, `moreIndividuals`, `notes`, `publication`, `repositories`, `repository`, `text`, `title`, `url`, `xref` – full schema in openapi.json.
 
+### `POST Source/{tree}`
+
+Create a source (no `xref`, `title` required) or change one (`xref`). Only the parts named in the body are replaced; media, further repositories and unknown lines are kept. Media are added with the route Media and `xref` of the source.
+
+| parameter | | |
+|---|---|---|
+| `xref` | optional | Source identifier when changing, e.g. `S12` |
+
+Body: `{title?, author?, publication?, abbreviation?, text?, note?, repository?: "R1" | "", callNumber?}`
+
+Answer fields: `ok`, `pending`, `xref` – full schema in openapi.json.
+
+### `GET Repositories/{tree}`
+
+All repositories (archives) the viewer may see, with address and how many sources refer to them.
+
+Answer fields: `repositories`, `total` – full schema in openapi.json.
+
 ### `GET MediaList/{tree}`
 
 All media objects, newest first, 60 per page, with up to three linked names.
@@ -219,6 +240,18 @@ Add or change a fact or event. Unmentioned sub-lines (sources, media …) are ke
 | `xref` | required | Record identifier, e.g. `I123` |
 
 Body: `{factId?, tag, value?, date?, place?, note?}` or `{factId?, gedcom: "1 BIRT\n2 DATE …"}`
+
+Answer fields: `ok`, `pending`, `xref` – full schema in openapi.json.
+
+### `POST Repository/{tree}`
+
+Create a repository (no `xref`) or rename one (`xref`).
+
+| parameter | | |
+|---|---|---|
+| `xref` | optional | Repository identifier when changing, e.g. `R1` |
+
+Body: `{name}`
 
 Answer fields: `ok`, `pending`, `xref` – full schema in openapi.json.
 
@@ -355,9 +388,11 @@ Answer fields: `ok`, `tree`, `user` – full schema in openapi.json.
 | 400 | `invalid-relation` |
 | 400 | `invalid-value` |
 | 400 | `link-tag-not-allowed` |
+| 400 | `name-missing` |
 | 400 | `name-required` |
 | 400 | `pair-invalid` |
 | 400 | `source-missing` |
+| 400 | `title-missing` |
 | 400 | `too-many-results` |
 | 400 | `upload-failed` |
 | 403 | `chart-disabled` |
@@ -377,6 +412,7 @@ Answer fields: `ok`, `tree`, `user` – full schema in openapi.json.
 | 404 | `family-not-found` |
 | 404 | `link-not-found` |
 | 404 | `not-found` |
+| 404 | `repository-not-found` |
 | 404 | `source-not-found` |
 | 409 | `link-exists` |
 | 409 | `parent-exists` |

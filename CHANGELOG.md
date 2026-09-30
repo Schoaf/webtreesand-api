@@ -12,6 +12,11 @@ covers the new routes.
 citation on the record. Only the parts named in the body are replaced (`source`, `page`, `quality`, `date`, `text`,
 `note`, `media`); everything else on the citation and the fact stays. A fact's id is a hash of its content, so the
 answer carries the new `factId`. Test: `test_quellenverweis_schreiben`.
+**Managing sources and repositories:** `Source` (POST) creates a source or changes only the parts named (title, author,
+publication, abbreviation, text, note, repository with call number); `Repositories` lists the archives, `Repository`
+(POST) creates or renames one. `Media` accepts `type` (`document` for scans of records, default `photo`) and works
+with a source's `xref` too. Unused sources (`uses: 0`) can be removed with `DeleteRecord`. Test:
+`test_quelle_und_archiv_pflegen`.
 
 Also: **Changing a name no longer loses its details.** Until now, editing a name through `Fact`
 removed the nickname (`NICK`) and the name prefixes (`NPFX`, `SPFX`) along with the parts derived from the name. Now

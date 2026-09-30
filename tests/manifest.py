@@ -65,6 +65,7 @@ ROUTEN = [
      "One source with text, notes, media, repositories and who cites it: individuals and families with the facts "
      "that carry the citation (at most 1000 each; `moreIndividuals`, `moreFamilies`).",
      [P("xref", "Source identifier, e.g. `S12`", pflicht=True)], None),
+    ("get", "Repositories", True, 18, "visitor", "All repositories (archives) the viewer may see, with address and how many sources refer to them.", [], None),
     ("get", "MediaList", True, 2, "visitor", "All media objects, newest first, 60 per page, with up to three linked names.",
      [P("page", "Page, from 1", "integer")], None),
     ("get", "Anniversaries", True, 4, "visitor",
@@ -81,6 +82,12 @@ ROUTEN = [
     ("post", "Fact", True, 1, "editor",
      "Add or change a fact or event. Unmentioned sub-lines (sources, media …) are kept when changing.",
      [XREF], "`{factId?, tag, value?, date?, place?, note?}` or `{factId?, gedcom: \"1 BIRT\\n2 DATE …\"}`"),
+    ("post", "Source", True, 18, "editor",
+     "Create a source (no `xref`, `title` required) or change one (`xref`). Only the parts named in the body are "
+     "replaced; media, further repositories and unknown lines are kept. Media are added with the route Media and `xref` of the source.",
+     [P("xref", "Source identifier when changing, e.g. `S12`")], "`{title?, author?, publication?, abbreviation?, text?, note?, repository?: \"R1\" | \"\", callNumber?}`"),
+    ("post", "Repository", True, 18, "editor", "Create a repository (no `xref`) or rename one (`xref`).",
+     [P("xref", "Repository identifier when changing, e.g. `R1`")], "`{name}`"),
     ("post", "Citation", True, 18, "editor",
      "Add, change, delete or move a source citation on a fact – or a general citation on the record (no `factId`). "
      "Only the parts named in the body are replaced; everything else on the citation and the fact is kept.",
@@ -222,6 +229,11 @@ def sammeln(u):
     m = medien.json.get("media")
     merken("post", "PrimaryMedia", admin.post("PrimaryMedia", "testbaum", {"media": m}, xref="I1"))
     merken("post", "Bookmarks", admin.post("Bookmarks", "testbaum", {"xref": "I1", "add": True}))
+    archiv = admin.post("Repository", "testbaum", {"name": "Manifestarchiv"})
+    merken("post", "Repository", archiv)
+    quelle = admin.post("Source", "testbaum", {"title": "Manifestquelle", "author": "Manifest", "repository": archiv.json["xref"], "callNumber": "M 1"})
+    merken("post", "Source", quelle)
+    merken("post", "Source", admin.post("Source", "testbaum", {"publication": "Manifeststadt, 1900"}, xref=quelle.json["xref"]))
     fakt = admin.post("Fact", "testbaum", {"tag": "OCCU", "value": "Manifestberuf", "date": "1850"}, xref="I4")
     merken("post", "Fact", fakt)
     occu = [f for f in admin.get("Individual", "testbaum", xref="I4").json["facts"] if f.get("tag") == "OCCU"]

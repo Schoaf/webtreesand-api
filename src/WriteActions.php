@@ -41,6 +41,7 @@ use function is_array;
 use function preg_match;
 use function preg_quote;
 use function preg_replace;
+use function preg_replace_callback;
 use function response;
 use function str_replace;
 use function str_starts_with;
@@ -371,6 +372,148 @@ trait WriteActions
         }
 
         return $praefix . $kopf . $rest;
+    }
+
+    /**
+     * Quelle anlegen oder aendern (ab Stufe 18): ohne ?xref neu (title Pflicht), mit ?xref=S1 aendern.
+     * Rumpf: { title?, author?, publication?, abbreviation?, text?, note?, repository?, callNumber? }
+     * Nur genannte Teile werden ersetzt; repository: Kennung eines Archivs ("R1") oder "" (weg), callNumber: Signatur
+     * am (ersten) Archiv. Medien kommen ueber die Route Media mit ?xref=S1 dazu. Antwort: xref der Quelle.
+     */
+    public function postSourceAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree = Validator::attributes($request)->tree();
+        $xref = $this->xrefOptional($request);
+        $body = $this->body($request);
+
+        foreach (['title', 'author', 'publication', 'abbreviation', 'text', 'note', 'callNumber'] as $key) {
+            if (GedcomText::looksLikePointer($this->str($body, $key))) {
+                return $this->error(400, 'invalid-value');
+            }
+        }
+
+        if (array_key_exists('repository', $body) && $this->str($body, 'repository') !== '') {
+            $repo = preg_replace('/^@|@$/', '', $this->str($body, 'repository'));
+
+            if (Registry::repositoryFactory()->make($repo, $tree) === null) {
+                return $this->error(404, 'repository-not-found');
+            }
+
+            $body['repository'] = $repo;
+        }
+
+        if ($xref === '') {
+            if (!Auth::isEditor($tree)) {
+                return $this->error(403, 'not-editable');
+            }
+
+            if (GedcomText::line($this->str($body, 'title')) === '') {
+                return $this->error(400, 'title-missing');
+            }
+
+            $source = $tree->createRecord($this->sourceGedcom("0 @@ SOUR", $body));
+
+            return $this->written($source, ['xref' => $source->xref()], 201);
+        }
+
+        $source = Registry::sourceFactory()->make($xref, $tree);
+        $denied = $this->denyEdit($source);
+
+        if ($denied !== null) {
+            return $denied;
+        }
+
+        $source->updateRecord($this->sourceGedcom($source->gedcom(), $body), true);
+
+        return $this->written($source, ['xref' => $source->xref()]);
+    }
+
+    /**
+     * Das GEDCOM einer Quelle mit den im Rumpf genannten Teilen ersetzt; alles andere (Medien, weitere Archive,
+     * Notiz-Datensaetze, unbekannte Zeilen) bleibt.
+     *
+     * @param array<string,mixed> $body
+     */
+    private function sourceGedcom(string $alt, array $body): string
+    {
+        [$kopf, $rest] = array_pad(explode("\n", $alt, 2), 2, '');
+        $rest = $rest === '' ? '' : "\n" . $rest;
+
+        $ersetzen = static function (string $tag, string $neu) use (&$rest): void {
+            $rest = (string) preg_replace('/\n1 ' . $tag . '(?: [^\n]*)?(?:\n[2-9] [^\n]*)*/', '', $rest);
+            $rest .= $neu;
+        };
+
+        foreach (['title' => 'TITL', 'author' => 'AUTH', 'publication' => 'PUBL', 'abbreviation' => 'ABBR', 'text' => 'TEXT'] as $key => $tag) {
+            if (array_key_exists($key, $body)) {
+                $wert = GedcomText::multiline($this->str($body, $key), 2);
+                $ersetzen($tag, $wert === '' ? '' : "\n1 " . $tag . ' ' . $wert);
+            }
+        }
+
+        if (array_key_exists('note', $body)) {
+            $note = GedcomText::multiline($this->str($body, 'note'), 2);
+            // Nur die eingebettete Notiz ersetzen; Verweise auf Notiz-Datensaetze bleiben
+            $rest = (string) preg_replace('/\n1 NOTE (?!@)[^\n]*(\n2 CONT[^\n]*)*/', '', $rest);
+            $rest .= $note === '' ? '' : "\n1 NOTE " . $note;
+        }
+
+        if (array_key_exists('repository', $body)) {
+            $repo = $this->str($body, 'repository');
+            // Das erste Archiv ersetzen, weitere bleiben
+            $alte = GedcomText::unterzeilen($rest, 1, 'REPO');
+            $alt_caln = $alte === [] ? '' : (GedcomText::unterzeilen($alte[0][1], 2, 'CALN')[0][0] ?? '');
+            $caln = array_key_exists('callNumber', $body) ? GedcomText::line($this->str($body, 'callNumber')) : $alt_caln;
+            $rest = (string) preg_replace('/\n1 REPO(?: [^\n]*)?(?:\n[2-9] [^\n]*)*/', '', $rest, 1);
+            if ($repo !== '') {
+                $rest .= "\n1 REPO @" . $repo . '@' . ($caln === '' ? '' : "\n2 CALN " . $caln);
+            }
+        } elseif (array_key_exists('callNumber', $body)) {
+            $caln = GedcomText::line($this->str($body, 'callNumber'));
+            $rest = (string) preg_replace_callback('/(\n1 REPO [^\n]*)((?:\n[2-9] [^\n]*)*)/', static function (array $m) use ($caln): string {
+                $unter = (string) preg_replace('/\n2 CALN(?: [^\n]*)?(?:\n[3-9] [^\n]*)*/', '', $m[2]);
+
+                return $m[1] . ($caln === '' ? '' : "\n2 CALN " . $caln) . $unter;
+            }, $rest, 1);
+        }
+
+        return $kopf . $rest;
+    }
+
+    /**
+     * Archiv anlegen oder umbenennen (ab Stufe 18): ohne ?xref neu, mit ?xref=R1 aendern. Rumpf: { name }
+     */
+    public function postRepositoryAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree = Validator::attributes($request)->tree();
+        $xref = $this->xrefOptional($request);
+        $name = GedcomText::line($this->str($this->body($request), 'name'));
+
+        if ($name === '' || GedcomText::looksLikePointer($name)) {
+            return $this->error(400, 'name-missing');
+        }
+
+        if ($xref === '') {
+            if (!Auth::isEditor($tree)) {
+                return $this->error(403, 'not-editable');
+            }
+
+            $repo = $tree->createRecord("0 @@ REPO\n1 NAME " . $name);
+
+            return $this->written($repo, ['xref' => $repo->xref()], 201);
+        }
+
+        $repo   = Registry::repositoryFactory()->make($xref, $tree);
+        $denied = $this->denyEdit($repo);
+
+        if ($denied !== null) {
+            return $denied;
+        }
+
+        $gedcom = (string) preg_replace('/\n1 NAME [^\n]*(\n[2-9] [^\n]*)*/', '', $repo->gedcom());
+        $repo->updateRecord($gedcom . "\n1 NAME " . $name, true);
+
+        return $this->written($repo, ['xref' => $repo->xref()]);
     }
 
     /**
@@ -775,7 +918,9 @@ trait WriteActions
             return $this->error(400, 'upload-failed');
         }
 
-        $gedcom = "0 @@ OBJE\n" . Registry::container()->get(MediaFileService::class)->createMediaFileGedcom($file, 'photo', $title, $note);
+        // Art der Datei (ab Stufe 18 waehlbar): "document" fuer Scans von Urkunden und Kirchenbuchseiten, sonst "photo".
+        $type   = in_array($this->str($body, 'type'), ['photo', 'document', 'certificate', 'book', 'newspaper', 'card', 'map', 'tombstone', 'audio', 'video', 'other'], true) ? $this->str($body, 'type') : 'photo';
+        $gedcom = "0 @@ OBJE\n" . Registry::container()->get(MediaFileService::class)->createMediaFileGedcom($file, $type, $title, $note);
         $media  = $tree->createMediaObject($gedcom);
 
         // Wie webtrees selbst: das Medienobjekt sofort annehmen, damit Dateisystem und Baum zusammenpassen.

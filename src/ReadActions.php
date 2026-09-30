@@ -19,6 +19,7 @@ use Fisharebest\Webtrees\Module\ModuleChartInterface;
 use Fisharebest\Webtrees\Module\RelationshipsChartModule;
 use Fisharebest\Webtrees\Place;
 use Fisharebest\Webtrees\Registry;
+use Fisharebest\Webtrees\Repository;
 use Fisharebest\Webtrees\GedcomRecord;
 use Fisharebest\Webtrees\Source;
 use Fisharebest\Webtrees\Services\CalendarService;
@@ -1005,6 +1006,40 @@ trait ReadActions
             ->all();
 
         return response(['total' => count($sources), 'sources' => $sources]);
+    }
+
+    /**
+     * Alle Archive des Baums (ab Stufe 18): Kennung, Name, Anschrift und wie viele Quellen darauf verweisen.
+     */
+    public function getRepositoriesAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree = Validator::attributes($request)->tree();
+
+        $uses = DB::table('link')
+            ->where('l_file', '=', $tree->id())
+            ->where('l_type', '=', 'REPO')
+            ->groupBy(['l_to'])
+            ->selectRaw('l_to, COUNT(DISTINCT l_from) AS n')
+            ->pluck('n', 'l_to');
+
+        $repos = DB::table('other')
+            ->where('o_file', '=', $tree->id())
+            ->where('o_type', '=', 'REPO')
+            ->get()
+            ->map(Registry::repositoryFactory()->mapper($tree))
+            ->filter(static fn ($repo): bool => $repo instanceof Repository && $repo->canShow())
+            ->map(fn (Repository $repo): array => [
+                'xref'    => $repo->xref(),
+                'name'    => $this->plain($repo->fullName()),
+                'address' => GedcomText::ersterWert($repo->gedcom(), 1, 'ADDR'),
+                'canEdit' => $repo->canEdit(),
+                'uses'    => (int) ($uses[$repo->xref()] ?? 0),
+            ])
+            ->sort(static fn (array $a, array $b): int => I18N::comparator()($a['name'], $b['name']))
+            ->values()
+            ->all();
+
+        return response(['total' => count($repos), 'repositories' => $repos]);
     }
 
     /**
