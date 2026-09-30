@@ -174,6 +174,18 @@ class Schreiben(unittest.TestCase):
         self.assertEqual(True, a.json["ok"], a)
         self.assertIn("Testperson", s.get("Individual", "testbaum", xref=a.json["xref"]).text)
 
+    def test_quellenverweis_mit_seite(self):
+        # Die Seitenangabe (3 PAGE, mehrzeilig) kommt mit; eine vertrauliche Quelle nur fuer den Verwalter.
+        # Gaesten zeigt webtrees in diesem Baum keine Quellen - dann auch keine Seite (das deckt der Lecktest ab).
+        for benutzer, sieht_konfidenz in (("verwalter", True), ("bearbeiter", False), ("mitglied", False)):
+            fakten = U.sitzung(benutzer).get("Individual", "testbaum", xref="I1").json["facts"]
+            geburt = next(f for f in fakten if f.get("tag") == "BIRT")
+            self.assertEqual([{"xref": "S1", "title": "Kirchenbuch Offenbach", "page": "Taufen 1800,\nNr. 4"}], geburt["sources"], benutzer)
+            tod = next(f for f in fakten if f.get("tag") == "DEAT")
+            self.assertEqual(sieht_konfidenz, any(q.get("page") == "Markerkonfidenz-Seite" for q in tod["sources"]), benutzer)
+        gast = U.sitzung().get("Individual", "testbaum", xref="I1").json["facts"]
+        self.assertNotIn("Taufen 1800", json.dumps(gast, ensure_ascii=False))
+
     def test_name_aendern_behaelt_unterangaben(self):
         # Beim Aendern des Namens darf nichts verloren gehen: Praefix, Spitzname und Notiz bleiben,
         # GIVN/SURN/NSFX folgen dem neuen Namen.

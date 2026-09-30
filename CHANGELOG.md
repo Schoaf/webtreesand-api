@@ -6,6 +6,10 @@ removed the nickname (`NICK`) and the name prefixes (`NPFX`, `SPFX`) along with 
 only `GIVN`, `SURN` and `NSFX` are rebuilt from the new name (`NSFX` is new: the text after the surname, e.g. "jun."),
 everything else under the name stays; a prefix such as "Dr." is no longer counted among the given names. Test:
 `test_name_aendern_behaelt_unterangaben`.
+**Source citations carry their page.** Each entry in `sources` of a fact now has `page` – the `PAGE` of the citation
+("Baptisms 1833, no. 19"), multi-line with line breaks; empty if there is none. Only for sources the viewer may see,
+like the title. Older clients ignore the new field. Test: `test_quellenverweis_mit_seite`; the test tree has a public
+and a confidential source.
 
 ## 1.9.6 – 2026-09-27
 API level 17, unchanged. **Anniversaries stay small on large trees.** A tree with 50,000 individuals has hundreds of

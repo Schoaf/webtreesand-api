@@ -10,8 +10,13 @@
 1 BIRT
 2 DATE 1 MAR 1800
 2 PLAC Offenbach
+2 SOUR @S1@
+3 PAGE Taufen 1800,
+4 CONT Nr. 4
 1 DEAT
 2 DATE 5 JUN 1870
+2 SOUR @S2@
+3 PAGE Markerkonfidenz-Seite
 1 OCCU Schmied
 1 OCCU Markerberuf
 2 RESN privacy
@@ -63,4 +68,9 @@
 0 @F2@ FAM
 1 HUSB @I4@
 1 CHIL @I3@
+0 @S1@ SOUR
+1 TITL Kirchenbuch Offenbach
+0 @S2@ SOUR
+1 TITL Markerkonfidenz-Quelle
+1 RESN confidential
 0 TRLR

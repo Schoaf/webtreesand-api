@@ -478,15 +478,29 @@ trait JsonBuilders
      */
     private function factSources(Fact $fact, Tree $tree): array
     {
-        preg_match_all('/\n2 SOUR @(.+)@/', $fact->gedcom(), $matches);
+        // Je Verweis die Unterzeilen mitnehmen - daraus die Seitenangabe (3 PAGE, auch mehrzeilig mit CONT/CONC).
+        preg_match_all('/\n2 SOUR @([^@]+)@((?:\n[3-9] [^\n]*)*)/', $fact->gedcom(), $matches, PREG_SET_ORDER);
 
         $sources = [];
 
-        foreach ($matches[1] as $xref) {
+        foreach ($matches as $match) {
+            $xref   = $match[1];
             $source = Registry::sourceFactory()->make($xref, $tree);
 
             if ($source !== null && $source->canShow()) {
-                $sources[] = ['xref' => $xref, 'title' => $this->plain($source->fullName())];
+                $page = '';
+
+                if (preg_match('/\n3 PAGE ?([^\n]*)((?:\n4 CON[CT] ?[^\n]*)*)/', $match[2], $zeilen) === 1) {
+                    $page = $zeilen[1];
+
+                    foreach (explode("\n", trim($zeilen[2], "\n")) as $zeile) {
+                        if (preg_match('/^4 (CONT|CONC) ?(.*)$/', $zeile, $teil) === 1) {
+                            $page .= ($teil[1] === 'CONT' ? "\n" : '') . $teil[2];
+                        }
+                    }
+                }
+
+                $sources[] = ['xref' => $xref, 'title' => $this->plain($source->fullName()), 'page' => $page];
             }
         }
 
