@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10.2 – 2026-09-30
+Settings: the name app4webtrees in the text is a link to the GitHub repository.
+
 ## 1.10.1 – 2026-09-30
 **wtMac in the list** (test build for Macs with Apple chip or Intel, from the same code as wtWin/wtTux; connect scheme
 `wtmac://`). A Mac now gets its program on the “App” page instead of the browser note, which is left for iPhone and
