@@ -70,20 +70,20 @@ eintippen). Die Seite bietet den App-Download, den Status (https, Upload-Limit) 
 **welche Stammbäume die App erreichen darf.** Nicht angekreuzte Bäume sind über dieses Modul gar nicht erreichbar,
 für keinen Benutzer und unabhängig von seinen Rechten in webtrees. Standard: alle Bäume.
 
-**Apps:** die Apps, die das Modul kennt (wtAnd, wtWin, wtTux und per Pull Request hinzugekommene), je mit Häkchen.
+**Apps:** die Apps, die das Modul kennt (wtAnd, wtWin, wtTux, wtMac und per Pull Request hinzugekommene), je mit Häkchen.
 Abgehakte verschwinden von der Seite „App“, aus dem Hinweis und der Fußzeile. Standard: alle an. Siehe
 [Apps auf der Seite „App“](#apps-auf-der-seite-app).
 
 ![Einstellungsseite: App installieren, Stammbäume für die App, Apps, Status](docs/einstellungen.png)
 
-## Für Familienmitglieder: die Seite „App“
+## Für Benutzer: die Seite „App“
 
 Angemeldete Benutzer sehen oben auf der Seite einen Hinweis mit einem Knopf zur Seite „App“ – am Windows- oder Linux-PC
 **„Den Stammbaum als Programm auf dem PC“** (wtWin/wtTux), am Handy **„Den Stammbaum aufs Handy“** (wtAnd). Handy und PC
 werden getrennt gemerkt: Der Hinweis verschwindet für diese Geräteart, sobald ihre App verbunden ist (oder nach *Nicht
 mehr anzeigen*); danach führen die Links in der Fußzeile dorthin. Die Seite zeigt die Apps für das Gerät des Besuchers
-zuerst (eigene vor fremden), wtWin und wtAnd immer aufgeklappt, die übrigen eingeklappt darunter. Auf iPhone, iPad oder
-Mac ohne passende App sagt sie das und empfiehlt den Browser. Je App zwei Schritte:
+zuerst (eigene vor fremden), wtWin und wtAnd immer aufgeklappt, die übrigen eingeklappt darunter. Auf iPhone und iPad
+sagt sie, dass es noch keine App gibt, und empfiehlt den Browser. Je App zwei Schritte:
 
 1. **Installieren:** ein Knopf zur neuesten Datei (`.exe`, `.deb` oder APK), fürs Handy auch als QR-Code.
 2. **Mit dem eigenen Konto verbinden – nichts eintippen, das Passwort erreicht das Gerät nie:**
@@ -156,7 +156,7 @@ ab. Verwalter können jede App in den Einstellungen abhaken. Der Vertrag fürs K
 „App“ und „Verbinden“ öffnen `<schema>://connect?url=<Basisadresse>&code=<48 Hex>&tree=<Baumname>&user=<Benutzername>`
 in der App. Die App holt sich mit `GET …/Info` Sitzungs-Cookie und `csrf`, dann `POST …/Pair` mit Header `X-CSRF-TOKEN`
 und Rumpf `{"code": "…"}`; Antwort `{"ok":true,"tree":"…","user":"…"}`, die Sitzung ist jetzt als dieser Benutzer
-angemeldet. Für den Code gelten die Regeln [oben](#für-familienmitglieder-die-seite-app), egal welche App ihn einlöst.
+angemeldet. Für den Code gelten die Regeln [oben](#für-benutzer-die-seite-app), egal welche App ihn einlöst.
 
 Einstieg in den Quelltext ist der Kopf von `Api4WebtreesModule.php`: dort steht, welcher Teil des Moduls in
 welcher Datei unter `src/` liegt.

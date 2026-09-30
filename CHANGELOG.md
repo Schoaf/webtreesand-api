@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.1 – 2026-09-30
+**wtMac in the list** (test build for Macs with Apple chip or Intel, from the same code as wtWin/wtTux; connect scheme
+`wtmac://`). A Mac now gets its program on the “App” page instead of the browser note, which is left for iPhone and
+iPad. Settings text: the apps live on GitHub under app4webtrees in four editions; “users” instead of “family
+members” – whoever works on a tree. Note and footer say “computer” instead of “PC”.
+
 ## 1.10.0 – 2026-09-30
 **The apps the module shows now live in the code, not in the settings.** `src/Apps.php` lists them (wtAnd, wtWin,
 wtTux) with name, devices, download, connect scheme and store badge; a further app joins by pull request with one

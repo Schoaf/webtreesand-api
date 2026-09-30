@@ -79,6 +79,18 @@ final class Apps
             'asset'    => '_amd64\\.deb$',
             'always'   => false,
         ],
+        // Testfassung: baut wie wtWin/wtTux aus demselben Code, ist aber noch nicht auf einem echten Mac geprueft.
+        'wtmac' => [
+            'name'     => 'wtMac',
+            'author'   => 'thobgg',
+            'kind'     => 'pc',
+            'devices'  => ['mac'],
+            'scheme'   => 'wtmac',
+            'download' => ['mac' => 'https://github.com/thobgg/app4webtrees/releases/latest'],
+            'badge'    => [],
+            'asset'    => '-arm64\\.dmg$',
+            'always'   => false,
+        ],
     ];
 
     /**

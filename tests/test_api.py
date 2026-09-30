@@ -376,7 +376,7 @@ class Schreiben(unittest.TestCase):
         code = 'require "src/Apps.php"; echo json_encode([Api4Webtrees\\Apps::check(), array_keys(Api4Webtrees\\Apps::ALL)]);'
         fehler, kennungen = json.loads(subprocess.check_output(["php", "-r", code], cwd=modul, text=True))
         self.assertEqual([], fehler)
-        self.assertEqual(["wtand", "wtwin", "wttux"], kennungen[:3])
+        self.assertEqual(["wtand", "wtwin", "wttux", "wtmac"], kennungen[:4])
 
     def test_seite_app_je_geraet(self):
         """Die Seite App zeigt die Apps fuer das Geraet des Besuchers zuerst; Apple ohne passende App bekommt den Browser-Hinweis."""
@@ -399,6 +399,11 @@ class Schreiben(unittest.TestCase):
 
         iphone = seite("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)")
         self.assertIn("noch kein eigenes Programm", iphone)
+
+        mac = seite("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)")
+        self.assertNotIn("noch kein eigenes Programm", mac)
+        self.assertLess(mac.index("wtMac"), mac.index("wtWin"))
+        self.assertIn("wtmac://connect?", mac)
 
         # Verbinden-Seite (Ziel des QR-Codes): ein Knopf je Handy-App mit Schema, Download je App.
         verbinden = s._senden(urllib.request.Request(s.url("/module/_api4webtrees_/Connect"))).text

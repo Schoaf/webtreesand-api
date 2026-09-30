@@ -32,9 +32,9 @@ use Fisharebest\Webtrees\I18N;
 
     <div class="row g-4 mb-4">
         <div class="col-lg-5">
-            <h2 class="h4"><?= I18N::translate('App installieren') ?></h2>
-            <p><?= I18N::translate('Die App wtAnd gibt es bei GitHub. Angemeldete Familienmitglieder sehen oben auf der Seite einen Hinweis auf die App für ihr Gerät, bis sie sie verbunden oder den Hinweis weggeklickt haben. Danach führen die Links in der Fußzeile zur Seite „App“.') ?></p>
-            <p><a class="btn btn-secondary" href="<?= e($download_url) ?>"><?= I18N::translate('App herunterladen') ?></a></p>
+            <h2 class="h4"><?= I18N::translate('Apps installieren') ?></h2>
+            <p><?= I18N::translate('Die Apps gibt es bei GitHub unter app4webtrees, in vier Fassungen: wtAnd für Android, wtWin für Windows, wtTux für Linux und wtMac für den Mac. Angemeldete Benutzer sehen oben auf der Seite einen Hinweis auf die App für ihr Gerät, bis sie sie verbunden oder den Hinweis weggeklickt haben. Danach führen die Links in der Fußzeile zur Seite „App“.') ?></p>
+            <p><a class="btn btn-secondary" href="<?= e($download_url) ?>"><?= I18N::translate('Apps herunterladen') ?></a></p>
             <?php if ($download_qr !== '') : ?>
                 <div style="max-width: 10rem; background: #fff; padding: .5rem;"><?= $download_qr ?></div>
             <?php endif ?>

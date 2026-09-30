@@ -133,6 +133,8 @@ $pc = static function (array $app) use ($base_url, $secure, $home, $logged_in, $
                         <p class="text-muted small"><?= I18N::translate('Die Datei doppelt anklicken. Warnt Windows („Der Computer wurde durch Windows geschützt“), auf „Weitere Informationen“ und dann „Trotzdem ausführen“ klicken.') ?></p>
                     <?php elseif ($os === 'linux') : ?>
                         <p class="text-muted small"><?= I18N::translate('Die .deb-Datei doppelt anklicken und installieren – oder im Terminal: sudo apt install ./Dateiname.deb') ?></p>
+                    <?php elseif ($os === 'mac') : ?>
+                        <p class="text-muted small"><?= I18N::translate('Die .dmg-Datei öffnen und %s in „Programme“ ziehen (arm64 für Macs mit Apple-Chip, x64 für Intel-Macs – beide auf der Release-Seite). Die Datei ist nicht signiert: beim ersten Start unter Systemeinstellungen › Datenschutz & Sicherheit „Trotzdem öffnen“. Testfassung – Rückmeldungen willkommen.', $name) ?></p>
                     <?php endif ?>
                     <p class="text-muted small mb-0"><?= I18N::translate('Schon installiert? Dann gleich weiter mit Schritt 2.') ?></p>
                 </div>
@@ -179,7 +181,7 @@ $pc = static function (array $app) use ($base_url, $secure, $home, $logged_in, $
     <?php
 };
 
-// Apple-Geraet ohne passende App: ehrlich sagen, statt die Android-App zu zeigen.
+// Apple-Geraet ohne passende App (heute iPhone und iPad): ehrlich sagen, statt die Android-App zu zeigen.
 $apple = in_array($device, ['mac', 'ios'], true) && array_filter($apps, static fn (array $app): bool => $app['matches']) === [];
 
 ?>
@@ -188,8 +190,8 @@ $apple = in_array($device, ['mac', 'ios'], true) && array_filter($apps, static f
 
 <?php if ($apple) : ?>
     <div class="alert alert-info">
-        <strong><?= I18N::translate('Für Mac, iPhone und iPad gibt es noch kein eigenes Programm.') ?></strong><br>
-        <?= I18N::translate('Nutze webtrees einfach hier im Browser – er funktioniert auf jedem Gerät. Hast du zusätzlich einen Windows-PC oder ein Android-Handy, findest du die Programme darunter.') ?>
+        <strong><?= I18N::translate('Für dieses Gerät gibt es noch kein eigenes Programm.') ?></strong><br>
+        <?= I18N::translate('Nutze webtrees einfach hier im Browser – er funktioniert auf jedem Gerät. Hast du zusätzlich einen Computer oder ein Android-Handy, findest du die Programme darunter.') ?>
     </div>
 <?php endif ?>
 

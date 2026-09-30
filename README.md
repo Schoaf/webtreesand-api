@@ -70,19 +70,19 @@ module list). The page offers the app download, the status (https, upload limit)
 **which family trees the app may reach.** Trees that are not ticked cannot be reached through this module at all,
 for any user, whatever their rights in webtrees. Default: all trees.
 
-**Apps:** the apps the module knows (wtAnd, wtWin, wtTux, and any added by pull request), each with a tick. Unticked apps
+**Apps:** the apps the module knows (wtAnd, wtWin, wtTux, wtMac, and any added by pull request), each with a tick. Unticked apps
 disappear from the “App” page, the note and the footer. Default: all on. See [Apps on the “App” page](#apps-on-the-app-page).
 
 ![Settings page: install the app, family trees for the app, apps, status](docs/einstellungen.png)
 
-## For family members: the “App” page
+## For users: the “App” page
 
 Signed-in users see a note at the top of the page with a button to the “App” page – at a Windows or Linux PC
 **“The family tree as a program on your PC”** (wtWin/wtTux), on a phone **“The family tree on your phone”** (wtAnd).
 Phone and PC are remembered separately: the note disappears for that kind of device once its app is connected (or when
 they click *Do not show again*); after that the links in the footer lead there. The page shows the apps for the
-visitor's device first (own apps before others), wtWin and wtAnd always open, the rest folded below. On an iPhone, iPad or
-Mac without a matching app it says so and recommends the browser. Each app has two steps:
+visitor's device first (own apps before others), wtWin and wtAnd always open, the rest folded below. On an iPhone or iPad
+it says that there is no app yet and recommends the browser. Each app has two steps:
 
 1. **Install:** a button to the newest download (`.exe`, `.deb` or APK), for the phone also as a QR code.
 2. **Connect your account – nothing to type, the password never reaches the device:**
@@ -198,7 +198,7 @@ The contract for one-tap connecting is the one wtAnd uses:
 2. The app calls `GET <url>…/Info` to obtain a session cookie and the `csrf` token, then `POST …/Pair` with header
    `X-CSRF-TOKEN` and body `{"code": "<code>"}` – like every other POST. Answer: `{"ok":true,"tree":"…","user":"…"}` – the session
    is now signed in as that user – or `{"ok":false,"error":"pair-invalid"|"pair-expired"}`.
-3. The rules for the code are those [above](#for-family-members-the-app-page), whichever app redeems it.
+3. The rules for the code are those [above](#for-users-the-app-page), whichever app redeems it.
 
 ### Reading (GET)
 
