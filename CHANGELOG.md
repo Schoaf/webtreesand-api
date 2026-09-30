@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.10.0 – 2026-09-30
 **The apps the module shows now live in the code, not in the settings.** `src/Apps.php` lists them (wtAnd, wtWin,
 wtTux) with name, devices, download, connect scheme and store badge; a further app joins by pull request with one
 entry, once it is publicly installable. The settings offer a tick per app instead of the four free-text fields for
