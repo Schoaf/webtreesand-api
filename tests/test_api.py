@@ -59,6 +59,9 @@ def leseaufrufe(baum="testbaum"):
         ]
     for f in ["F1", "F2"]:
         aufrufe.append(("Family", baum, {"xref": f}))
+    aufrufe.append(("Sources", baum, {}))
+    for q in ["S1", "S2"]:
+        aufrufe.append(("Source", baum, {"xref": q}))
     aufrufe += [
         ("Export", baum, {"page": 1}),
         ("MediaList", baum, {}),
@@ -180,11 +183,38 @@ class Schreiben(unittest.TestCase):
         for benutzer, sieht_konfidenz in (("verwalter", True), ("bearbeiter", False), ("mitglied", False)):
             fakten = U.sitzung(benutzer).get("Individual", "testbaum", xref="I1").json["facts"]
             geburt = next(f for f in fakten if f.get("tag") == "BIRT")
-            self.assertEqual([{"xref": "S1", "title": "Kirchenbuch Offenbach", "page": "Taufen 1800,\nNr. 4"}], geburt["sources"], benutzer)
+            q = geburt["sources"]
+            self.assertEqual((1, "S1", "Kirchenbuch Offenbach", "Taufen 1800,\nNr. 4"), (len(q), q[0]["xref"], q[0]["title"], q[0]["page"]), benutzer)
             tod = next(f for f in fakten if f.get("tag") == "DEAT")
             self.assertEqual(sieht_konfidenz, any(q.get("page") == "Markerkonfidenz-Seite" for q in tod["sources"]), benutzer)
         gast = U.sitzung().get("Individual", "testbaum", xref="I1").json["facts"]
         self.assertNotIn("Taufen 1800", json.dumps(gast, ensure_ascii=False))
+
+    def test_quellenverweis_vollstaendig(self):
+        # Stufe 18: Qualitaet, Datum und Text der Fundstelle, Notiz - und Text-Quellen ohne Datensatz
+        fakten = U.sitzung("bearbeiter").get("Individual", "testbaum", xref="I1").json["facts"]
+        q = next(f for f in fakten if f.get("tag") == "BIRT")["sources"][0]
+        self.assertEqual(3, q["quality"])
+        self.assertEqual("2 MAR 1800", q["date"]["gedcom"])
+        self.assertEqual("Theodor, Sohn des\nSchmieds, getauft", q["text"])
+        self.assertEqual(["Eintrag gut lesbar"], q["notes"])
+        beruf = next(f for f in fakten if f.get("tag") == "OCCU" and f.get("value") == "Schmied")
+        self.assertEqual([("", "laut Martha Meier", ["mündlich 1950"])], [(x["xref"], x["title"], x["notes"]) for x in beruf["sources"]])
+
+    def test_quellen_liste_und_einzeln(self):
+        s = U.sitzung("bearbeiter")
+        liste = s.get("Sources", "testbaum").json
+        self.assertEqual(["S1"], [x["xref"] for x in liste["sources"]])  # S2 ist vertraulich
+        s1 = liste["sources"][0]
+        self.assertEqual(("Pfarramt Offenbach", "Offenbach, 1790–1830", "Bistumsarchiv Mainz", "KB 12", 2),
+                         (s1["author"], s1["publication"], s1["repository"], s1["callNumber"], s1["uses"]))
+        einzeln = s.get("Source", "testbaum", xref="S1").json
+        self.assertEqual("Taufen, Trauungen, Begräbnisse", einzeln["text"])
+        self.assertEqual(["Digitalisat im Archiv"], einzeln["notes"])
+        self.assertEqual({("I1", ("Geburt",)), ("I2", ("Tod",))}, {(p["xref"], tuple(p["facts"])) for p in einzeln["individuals"]})
+        self.assertEqual("private", s.get("Source", "testbaum", xref="S2").json["error"])
+        verwalter = U.sitzung("verwalter").get("Sources", "testbaum").json
+        self.assertEqual(["Kirchenbuch Offenbach", "Markerkonfidenz-Quelle"], [x["title"] for x in verwalter["sources"]])
 
     def test_name_aendern_behaelt_unterangaben(self):
         # Beim Aendern des Namens darf nichts verloren gehen: Praefix, Spitzname und Notiz bleiben,

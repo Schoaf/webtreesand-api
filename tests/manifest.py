@@ -58,6 +58,13 @@ ROUTEN = [
      "The whole visible tree page by page (250 records): first individuals, then families, linked by identifiers "
      "only. Individuals and families that are linked but not visible come as placeholders (`private: true`).",
      [P("page", "Page, from 1", "integer")], None),
+    ("get", "Sources", True, 18, "visitor",
+     "All sources the viewer may see, sorted by title: title, author, publication, abbreviation, first repository "
+     "with call number, and how many individuals and families cite them (`uses`).", [], None),
+    ("get", "Source", True, 18, "visitor",
+     "One source with text, notes, media, repositories and who cites it: individuals and families with the facts "
+     "that carry the citation (at most 1000 each; `moreIndividuals`, `moreFamilies`).",
+     [P("xref", "Source identifier, e.g. `S12`", pflicht=True)], None),
     ("get", "MediaList", True, 2, "visitor", "All media objects, newest first, 60 per page, with up to three linked names.",
      [P("page", "Page, from 1", "integer")], None),
     ("get", "Anniversaries", True, 4, "visitor",

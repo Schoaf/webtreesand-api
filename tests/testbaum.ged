@@ -13,11 +13,19 @@
 2 SOUR @S1@
 3 PAGE Taufen 1800,
 4 CONT Nr. 4
+3 QUAY 3
+3 DATA
+4 DATE 2 MAR 1800
+4 TEXT Theodor, Sohn des
+5 CONT Schmieds, getauft
+3 NOTE Eintrag gut lesbar
 1 DEAT
 2 DATE 5 JUN 1870
 2 SOUR @S2@
 3 PAGE Markerkonfidenz-Seite
 1 OCCU Schmied
+2 SOUR laut Martha Meier
+3 NOTE mündlich 1950
 1 OCCU Markerberuf
 2 RESN privacy
 1 RELI katholisch
@@ -30,6 +38,8 @@
 2 DATE 1805
 1 DEAT
 2 DATE 1880
+2 SOUR @S1@
+3 PAGE Begräbnisse 1880
 1 FAMS @F1@
 0 @I4@ INDI
 1 NAME Karl /Offen/
@@ -70,7 +80,15 @@
 1 CHIL @I3@
 0 @S1@ SOUR
 1 TITL Kirchenbuch Offenbach
+1 AUTH Pfarramt Offenbach
+1 PUBL Offenbach, 1790–1830
+1 TEXT Taufen, Trauungen, Begräbnisse
+1 NOTE Digitalisat im Archiv
+1 REPO @R1@
+2 CALN KB 12
 0 @S2@ SOUR
 1 TITL Markerkonfidenz-Quelle
 1 RESN confidential
+0 @R1@ REPO
+1 NAME Bistumsarchiv Mainz
 0 TRLR

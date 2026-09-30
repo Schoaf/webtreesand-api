@@ -1,7 +1,15 @@
 # Changelog
 
 ## Unreleased
-API level 17, unchanged. **Changing a name no longer loses its details.** Until now, editing a name through `Fact`
+**API level 18: sources.** New routes `Sources` (all visible sources with author, publication, repository, call
+number and how often they are cited) and `Source` (one source with text, notes, media, repositories and the
+individuals and families citing it, with the facts that carry the citation). Citations on facts now come complete:
+besides `page` also `quality` (QUAY 0–3), `date` and `text` of the entry (DATA), `notes` and `media` of the citation,
+and sources without a record ("according to Martha Meier") with an empty `xref`. Sources a viewer may not see are
+left out, as in webtrees. Tests: `test_quellenverweis_vollstaendig`, `test_quellen_liste_und_einzeln`; the leak test
+covers the new routes.
+
+Also: **Changing a name no longer loses its details.** Until now, editing a name through `Fact`
 removed the nickname (`NICK`) and the name prefixes (`NPFX`, `SPFX`) along with the parts derived from the name. Now
 only `GIVN`, `SURN` and `NSFX` are rebuilt from the new name (`NSFX` is new: the text after the surname, e.g. "jun."),
 everything else under the name stays; a prefix such as "Dr." is no longer counted among the given names. Test:

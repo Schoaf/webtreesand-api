@@ -6,6 +6,7 @@ namespace Api4Webtrees;
 
 use Fisharebest\Webtrees\Date;
 
+use function array_map;
 use function array_slice;
 use function explode;
 use function in_array;
@@ -69,6 +70,42 @@ final class GedcomText
         }
 
         return null;
+    }
+
+    /**
+     * Alle Zeilen "<ebene> <tag> ..." in einem Block von Unterzeilen, je mit Wert und eigenen Unterzeilen.
+     *
+     * @return array<int,array{0:string,1:string}>
+     */
+    public static function unterzeilen(string $block, int $ebene, string $tag): array
+    {
+        $tiefer = $ebene + 1;
+        preg_match_all('/\n' . $ebene . ' ' . $tag . '(?: ([^\n]*))?((?:\n[' . $tiefer . '-9] [^\n]*)*)/', $block, $treffer, PREG_SET_ORDER);
+
+        return array_map(static fn (array $t): array => [$t[1] ?? '', $t[2] ?? ''], $treffer);
+    }
+
+    /**
+     * Ein Wert samt Fortsetzungen: CONT beginnt eine neue Zeile, CONC haengt an ([$ebene] ist die Ebene des Werts).
+     */
+    public static function mitFortsetzung(string $wert, string $unter, int $ebene): string
+    {
+        $text = $wert;
+        preg_match_all('/\n' . ($ebene + 1) . ' (CONT|CONC)(?: ([^\n]*))?/', $unter, $teile, PREG_SET_ORDER);
+
+        foreach ($teile as $teil) {
+            $text .= ($teil[1] === 'CONT' ? "\n" : '') . ($teil[2] ?? '');
+        }
+
+        return $text;
+    }
+
+    /** Der erste Wert "<ebene> <tag>" eines Datensatzes samt Fortsetzungen; leer, wenn es ihn nicht gibt. */
+    public static function ersterWert(string $gedcom, int $ebene, string $tag): string
+    {
+        $t = self::unterzeilen("\n" . $gedcom, $ebene, $tag)[0] ?? null;
+
+        return $t === null ? '' : self::mitFortsetzung($t[0], $t[1], $ebene);
     }
 
     /**

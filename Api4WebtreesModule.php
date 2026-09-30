@@ -84,7 +84,8 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     // 15: Pedigree?siblings=1 - je Vorfahr die Geschwister
     // 16: Pedigree bis 12 Generationen (war 7)
     // 17: Export - der ganze sichtbare Baum seitenweise (Personen, Familien, Fakten, Medien)
-    public const int    API_VERSION = 17;
+    // 18: Quellen - Sources, Source; Quellenverweise vollstaendig (Seite, Qualitaet, Datum, Text, Notizen, Medien, Text-Quellen)
+    public const int    API_VERSION = 18;
 
     /** Benutzereinstellung je Baum: die Merkliste als Liste von Personenkennungen. */
     private const string BOOKMARKS_PREF = 'api4webtrees_bookmarks';

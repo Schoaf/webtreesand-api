@@ -19,6 +19,8 @@ use Fisharebest\Webtrees\Module\ModuleChartInterface;
 use Fisharebest\Webtrees\Module\RelationshipsChartModule;
 use Fisharebest\Webtrees\Place;
 use Fisharebest\Webtrees\Registry;
+use Fisharebest\Webtrees\GedcomRecord;
+use Fisharebest\Webtrees\Source;
 use Fisharebest\Webtrees\Services\CalendarService;
 use Fisharebest\Webtrees\Services\LinkedRecordService;
 use Fisharebest\Webtrees\Services\ModuleService;
@@ -41,6 +43,8 @@ use function array_flip;
 use function array_keys;
 use function array_map;
 use function array_values;
+use function str_contains;
+use function array_unique;
 use function count;
 use function explode;
 use function implode;
@@ -975,6 +979,89 @@ trait ReadActions
     /**
      * Beschriftete Liste der Ereignisse, die die App zum Hinzufuegen anbietet: ?type=INDI|FAM
      */
+    /**
+     * Alle Quellen des Baums, die der Betrachter sehen darf (ab Stufe 18), nach Titel: Titel, Autor, Publikation,
+     * Kurztitel, erstes Archiv mit Signatur und wie viele Personen und Familien sie zitieren.
+     */
+    public function getSourcesAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree = Validator::attributes($request)->tree();
+
+        $uses = DB::table('link')
+            ->where('l_file', '=', $tree->id())
+            ->where('l_type', '=', 'SOUR')
+            ->groupBy(['l_to'])
+            ->selectRaw('l_to, COUNT(DISTINCT l_from) AS n')
+            ->pluck('n', 'l_to');
+
+        $sources = DB::table('sources')
+            ->where('s_file', '=', $tree->id())
+            ->get()
+            ->map(Registry::sourceFactory()->mapper($tree))
+            ->filter(static fn ($source): bool => $source instanceof Source && $source->canShow())
+            ->map(fn (Source $source): array => $this->sourceSummary($source) + ['uses' => (int) ($uses[$source->xref()] ?? 0)])
+            ->sort(static fn (array $a, array $b): int => I18N::comparator()($a['title'], $b['title']))
+            ->values()
+            ->all();
+
+        return response(['total' => count($sources), 'sources' => $sources]);
+    }
+
+    /**
+     * Eine Quelle vollstaendig (ab Stufe 18): ?xref=S1 - dazu Text, Notizen, Medien, Archive und wer sie zitiert:
+     * Personen und Familien mit den Ereignissen, an denen der Verweis steht (hoechstens 1000 je Art).
+     */
+    public function getSourceAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree   = Validator::attributes($request)->tree();
+        $source = Registry::sourceFactory()->make($this->xref($request), $tree);
+
+        if ($source === null) {
+            return $this->error(404, 'not-found');
+        }
+
+        if (!$source->canShow()) {
+            return $this->error(403, 'private');
+        }
+
+        $linked = Registry::container()->get(LinkedRecordService::class);
+        $xref   = $source->xref();
+
+        // Die Ereignisse eines Datensatzes, die diese Quelle zitieren (auch die allgemeine Quelle "1 SOUR").
+        $wo = function (GedcomRecord $record) use ($xref): array {
+            $labels = [];
+            foreach ($record->facts() as $fact) {
+                if ($fact->canShow() && str_contains($fact->gedcom(), '@' . $xref . '@')) {
+                    $labels[] = $this->factLabel($fact);
+                }
+            }
+
+            return array_values(array_unique($labels));
+        };
+
+        $individuals = $linked->linkedIndividuals($source, 'SOUR')->filter(static fn (Individual $i): bool => $i->canShow());
+        $families    = $linked->linkedFamilies($source, 'SOUR')->filter(static fn (Family $f): bool => $f->canShow());
+
+        return response($this->sourceSummary($source) + [
+            'text'         => GedcomText::ersterWert($source->gedcom(), 1, 'TEXT'),
+            'notes'        => $source->facts(['NOTE'])->filter(static fn (Fact $f): bool => $f->canShow())
+                ->map(fn (Fact $f): string => $f->target() instanceof Note ? $f->target()->getNote() : $this->plainLines($f->value()))
+                ->filter(static fn (string $t): bool => trim($t) !== '')->values()->all(),
+            'media'        => $this->mediaJson($source),
+            'repositories' => $this->sourceRepositories($source),
+            'individuals'  => $individuals->take(1000)->map(fn (Individual $i): array => $this->personShort($i) + ['facts' => $wo($i)])->values()->all(),
+            'families'     => $families->take(1000)->map(fn (Family $f): array => [
+                'xref'    => $f->xref(),
+                'name'    => $this->plain($f->fullName()),
+                'husband' => $f->husband() instanceof Individual && $f->husband()->canShowName() ? $f->husband()->xref() : null,
+                'wife'    => $f->wife() instanceof Individual && $f->wife()->canShowName() ? $f->wife()->xref() : null,
+                'facts'   => $wo($f),
+            ])->values()->all(),
+            'moreIndividuals' => max(0, $individuals->count() - 1000),
+            'moreFamilies'    => max(0, $families->count() - 1000),
+        ]);
+    }
+
     public function getTagsAction(ServerRequestInterface $request): ResponseInterface
     {
         Validator::attributes($request)->tree();

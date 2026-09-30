@@ -17,6 +17,8 @@ use Fisharebest\Webtrees\Note;
 use Fisharebest\Webtrees\Place;
 use Fisharebest\Webtrees\PlaceLocation;
 use Fisharebest\Webtrees\Registry;
+use Fisharebest\Webtrees\Repository;
+use Fisharebest\Webtrees\Source;
 use Fisharebest\Webtrees\Services\RelationshipService;
 use Fisharebest\Webtrees\Tree;
 use Fisharebest\Webtrees\Validator;
@@ -474,37 +476,141 @@ trait JsonBuilders
     }
 
     /**
-     * @return array<int,array{xref:string,title:string}>
+     * Kopfdaten einer Quelle: Titel, Autor, Publikation, Kurztitel, erstes sichtbares Archiv mit Signatur.
+     *
+     * @return array<string,mixed>
+     */
+    private function sourceSummary(Source $source): array
+    {
+        $attr = static fn (string $tag): string => GedcomText::ersterWert($source->gedcom(), 1, $tag);
+        $repo = $this->sourceRepositories($source)[0] ?? null;
+
+        return [
+            'xref'         => $source->xref(),
+            'title'        => $this->plain($source->fullName()),
+            'author'       => $attr('AUTH'),
+            'publication'  => $attr('PUBL'),
+            'abbreviation' => $attr('ABBR'),
+            'repository'   => $repo['name'] ?? '',
+            'callNumber'   => $repo['callNumber'] ?? '',
+            'canEdit'      => $source->canEdit(),
+            'url'          => $source->url(),
+        ];
+    }
+
+    /**
+     * Archive einer Quelle (1 REPO @R1@ mit 2 CALN), nur sichtbare.
+     *
+     * @return array<int,array{xref:string,name:string,callNumber:string}>
+     */
+    private function sourceRepositories(Source $source): array
+    {
+        $data = [];
+
+        foreach (GedcomText::unterzeilen("\n" . $source->gedcom(), 1, 'REPO') as [$wert, $unter]) {
+            if (preg_match('/^@([^@]+)@$/', trim($wert), $m) !== 1) {
+                continue;
+            }
+            $repo = Registry::repositoryFactory()->make($m[1], $source->tree());
+            if ($repo instanceof Repository && $repo->canShow()) {
+                $data[] = ['xref' => $m[1], 'name' => $this->plain($repo->fullName()), 'callNumber' => GedcomText::unterzeilen($unter, 2, 'CALN')[0][0] ?? ''];
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * Quellenverweise eines Ereignisses (2 SOUR), vollstaendig ab Stufe 18.
+     *
+     * @return array<int,array<string,mixed>>
      */
     private function factSources(Fact $fact, Tree $tree): array
     {
-        // Je Verweis die Unterzeilen mitnehmen - daraus die Seitenangabe (3 PAGE, auch mehrzeilig mit CONT/CONC).
-        preg_match_all('/\n2 SOUR @([^@]+)@((?:\n[3-9] [^\n]*)*)/', $fact->gedcom(), $matches, PREG_SET_ORDER);
-
         $sources = [];
 
-        foreach ($matches as $match) {
-            $xref   = $match[1];
-            $source = Registry::sourceFactory()->make($xref, $tree);
+        foreach (GedcomText::unterzeilen($fact->gedcom(), 2, 'SOUR') as [$wert, $unter]) {
+            $citation = $this->citationJson($wert, $unter, 2, $tree);
 
-            if ($source !== null && $source->canShow()) {
-                $page = '';
-
-                if (preg_match('/\n3 PAGE ?([^\n]*)((?:\n4 CON[CT] ?[^\n]*)*)/', $match[2], $zeilen) === 1) {
-                    $page = $zeilen[1];
-
-                    foreach (explode("\n", trim($zeilen[2], "\n")) as $zeile) {
-                        if (preg_match('/^4 (CONT|CONC) ?(.*)$/', $zeile, $teil) === 1) {
-                            $page .= ($teil[1] === 'CONT' ? "\n" : '') . $teil[2];
-                        }
-                    }
-                }
-
-                $sources[] = ['xref' => $xref, 'title' => $this->plain($source->fullName()), 'page' => $page];
+            if ($citation !== null) {
+                $sources[] = $citation;
             }
         }
 
         return $sources;
+    }
+
+    /**
+     * Ein Quellenverweis: die Quelle (Datensatz "@S1@" oder eine Text-Quelle ohne Datensatz, "laut Martha Meier"),
+     * Seite (PAGE), Qualitaet (QUAY 0-3), Datum und Text der Fundstelle (DATA/DATE, DATA/TEXT), Notizen und Medien.
+     * Eine Quelle, die der Betrachter nicht sehen darf, faellt samt Seite weg - wie in webtrees.
+     *
+     * @return array<string,mixed>|null
+     */
+    private function citationJson(string $wert, string $unter, int $ebene, Tree $tree): array|null
+    {
+        $u = $ebene + 1;
+
+        if (preg_match('/^@([^@]+)@$/', trim($wert), $match) === 1) {
+            $source = Registry::sourceFactory()->make($match[1], $tree);
+
+            if ($source === null || !$source->canShow()) {
+                return null;
+            }
+
+            $xref  = $match[1];
+            $title = $this->plain($source->fullName());
+        } else {
+            $xref  = '';
+            $title = GedcomText::mitFortsetzung($wert, $unter, $ebene);
+        }
+
+        $eins  = static fn (string $tag): array|null => GedcomText::unterzeilen($unter, $u, $tag)[0] ?? null;
+        $page  = $eins('PAGE');
+        $quay  = $eins('QUAY');
+        $data  = $eins('DATA');
+        $datum = $data !== null ? (GedcomText::unterzeilen($data[1], $u + 1, 'DATE')[0][0] ?? '') : '';
+        $texte = $data !== null ? array_map(static fn (array $t): string => GedcomText::mitFortsetzung($t[0], $t[1], $u + 1),
+            GedcomText::unterzeilen($data[1], $u + 1, 'TEXT')) : [];
+        // Eine Text-Quelle darf ihren Text auch direkt unter sich tragen (3 TEXT statt 3 DATA / 4 TEXT)
+        if ($xref === '') {
+            $texte = [...$texte, ...array_map(static fn (array $t): string => GedcomText::mitFortsetzung($t[0], $t[1], $u),
+                GedcomText::unterzeilen($unter, $u, 'TEXT'))];
+        }
+
+        $notes = [];
+        foreach (GedcomText::unterzeilen($unter, $u, 'NOTE') as [$n, $n_unter]) {
+            if (preg_match('/^@([^@]+)@$/', trim($n), $nm) === 1) {
+                $note = Registry::noteFactory()->make($nm[1], $tree);
+                $text = $note instanceof Note && $note->canShow() ? $note->getNote() : '';
+            } else {
+                $text = GedcomText::mitFortsetzung($n, $n_unter, $u);
+            }
+            if (trim($text) !== '') {
+                $notes[] = $text;
+            }
+        }
+
+        $media = [];
+        foreach (GedcomText::unterzeilen($unter, $u, 'OBJE') as [$o]) {
+            if (preg_match('/^@([^@]+)@$/', trim($o), $om) === 1) {
+                $medium = Registry::mediaFactory()->make($om[1], $tree);
+                if ($medium instanceof Media && $medium->canShow()) {
+                    $media = [...$media, ...$this->mediaFilesJson($medium)];
+                }
+            }
+        }
+
+        return [
+            'xref'    => $xref,
+            'title'   => $title,
+            'page'    => $page !== null ? GedcomText::mitFortsetzung($page[0], $page[1], $u) : '',
+            'quality' => $quay !== null && preg_match('/^[0-3]$/', trim($quay[0])) === 1 ? (int) trim($quay[0]) : null,
+            'date'    => $datum !== '' ? $this->dateJson(new Date($datum), $datum) : null,
+            'text'    => implode("\n\n", $texte),
+            'notes'   => $notes,
+            'media'   => $media,
+        ];
     }
 
     /**
