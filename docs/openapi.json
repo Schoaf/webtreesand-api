@@ -6745,6 +6745,78 @@
     "x-body": "`{factId?, tag, value?, date?, place?, note?}` or `{factId?, gedcom: \"1 BIRT\\n2 DATE …\"}`"
    }
   },
+  "/module/_api4webtrees_/Citation/{tree}": {
+   "post": {
+    "operationId": "postCitation",
+    "summary": "Add, change, delete or move a source citation on a fact – or a general citation on the record (no `factId`).",
+    "description": "Add, change, delete or move a source citation on a fact – or a general citation on the record (no `factId`). Only the parts named in the body are replaced; everything else on the citation and the fact is kept.",
+    "x-api-level": 18,
+    "x-minimum-role": "editor",
+    "parameters": [
+     {
+      "name": "tree",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "Tree name (`Info.trees[].name`)"
+     },
+     {
+      "name": "xref",
+      "in": "query",
+      "required": true,
+      "description": "Record identifier, e.g. `I123`",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "X-CSRF-TOKEN",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "`Info.csrf`"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Result – or an error object (`ok: false`, see `Error`)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "factId": {
+           "type": "string"
+          },
+          "ok": {
+           "type": "boolean"
+          },
+          "pending": {
+           "type": "boolean"
+          },
+          "xref": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "factId",
+          "ok",
+          "pending",
+          "xref"
+         ],
+         "additionalProperties": false
+        }
+       }
+      }
+     }
+    },
+    "x-body": "`{factId?, index?, delete?, moveTo?, source?: \"S1\" | free text, page?, quality?: 0-3, date?, text?, note?, media?: [\"M1\"]}`"
+   }
+  },
   "/module/_api4webtrees_/DeleteFact/{tree}": {
    "post": {
     "operationId": "postDeleteFact",
@@ -7471,6 +7543,7 @@
       "type": "string",
       "enum": [
        "chart-disabled",
+       "citation-not-found",
        "fact-locked",
        "fact-not-found",
        "family-locked",
@@ -7478,6 +7551,7 @@
        "family-required",
        "invalid-date",
        "invalid-gedcom",
+       "invalid-quality",
        "invalid-relation",
        "invalid-value",
        "link-exists",
@@ -7494,6 +7568,8 @@
        "pair-invalid",
        "parent-exists",
        "private",
+       "source-missing",
+       "source-not-found",
        "too-many-results",
        "tree-disabled",
        "upload-failed",

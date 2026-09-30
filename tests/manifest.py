@@ -81,6 +81,10 @@ ROUTEN = [
     ("post", "Fact", True, 1, "editor",
      "Add or change a fact or event. Unmentioned sub-lines (sources, media …) are kept when changing.",
      [XREF], "`{factId?, tag, value?, date?, place?, note?}` or `{factId?, gedcom: \"1 BIRT\\n2 DATE …\"}`"),
+    ("post", "Citation", True, 18, "editor",
+     "Add, change, delete or move a source citation on a fact – or a general citation on the record (no `factId`). "
+     "Only the parts named in the body are replaced; everything else on the citation and the fact is kept.",
+     [XREF], "`{factId?, index?, delete?, moveTo?, source?: \"S1\" | free text, page?, quality?: 0-3, date?, text?, note?, media?: [\"M1\"]}`"),
     ("post", "DeleteFact", True, 1, "editor", "Delete a fact or event (not links like FAMC/FAMS).", [XREF], "`{factId}`"),
     ("post", "AddIndividual", True, 1, "editor", "Create an individual and link it as child, spouse, father or mother.", [],
      "`{relation: child|spouse|father|mother|none, relativeTo?, family?, given, surname, sex: M|F|U, birthDate?, "
@@ -220,6 +224,9 @@ def sammeln(u):
     merken("post", "Bookmarks", admin.post("Bookmarks", "testbaum", {"xref": "I1", "add": True}))
     fakt = admin.post("Fact", "testbaum", {"tag": "OCCU", "value": "Manifestberuf", "date": "1850"}, xref="I4")
     merken("post", "Fact", fakt)
+    occu = [f for f in admin.get("Individual", "testbaum", xref="I4").json["facts"] if f.get("tag") == "OCCU"]
+    zitat = admin.post("Citation", "testbaum", {"factId": occu[0]["id"], "source": "S1", "page": "Manifestseite", "quality": 2}, xref="I4")
+    merken("post", "Citation", zitat)
     occu = [f for f in admin.get("Individual", "testbaum", xref="I4").json["facts"] if f.get("tag") == "OCCU"]
     merken("post", "DeleteFact", admin.post("DeleteFact", "testbaum", {"factId": occu[0]["id"]}, xref="I4"))
     ehe = admin.post("AddIndividual", "testbaum", {"relation": "none", "given": "Ella", "surname": "Neu", "sex": "F", "dead": True})

@@ -26,6 +26,7 @@ use Illuminate\Support\Collection;
 use Psr\Http\Message\ServerRequestInterface;
 
 use function array_map;
+use function array_pad;
 use function class_exists;
 use function explode;
 use function implode;
@@ -527,6 +528,14 @@ trait JsonBuilders
      */
     private function factSources(Fact $fact, Tree $tree): array
     {
+        // Ein allgemeiner Verweis am Datensatz ("1 SOUR @S1@" mit 2 PAGE ...) ist selbst der Verweis
+        if ($this->shortTag($fact->tag()) === 'SOUR') {
+            [$kopf, $rest] = array_pad(explode("\n", $fact->gedcom(), 2), 2, '');
+            $citation      = $this->citationJson($fact->value(), $rest === '' ? '' : "\n" . $rest, 1, $tree);
+
+            return $citation === null ? [] : [$citation];
+        }
+
         $sources = [];
 
         foreach (GedcomText::unterzeilen($fact->gedcom(), 2, 'SOUR') as [$wert, $unter]) {

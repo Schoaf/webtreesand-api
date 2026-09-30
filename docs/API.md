@@ -35,6 +35,7 @@ JSON API for webtrees 2.2, used by wtAnd, wtWin/wtTux and nas4webtrees. Machine-
 | `GET Tags/{tree}` | 1 | visitor | Facts and events the client may offer for adding, with labels. |
 | `GET Places/{tree}` | 8 | editor | Place suggestions while typing, like webtrees' own autocomplete. |
 | `POST Fact/{tree}` | 1 | editor | Add or change a fact or event. |
+| `POST Citation/{tree}` | 18 | editor | Add, change, delete or move a source citation on a fact – or a general citation on the record (no `factId`). |
 | `POST DeleteFact/{tree}` | 1 | editor | Delete a fact or event (not links like FAMC/FAMS). |
 | `POST AddIndividual/{tree}` | 1 | editor | Create an individual and link it as child, spouse, father or mother. |
 | `POST Link/{tree}` | 8 | editor | Link two existing individuals (like AddIndividual without a new individual). |
@@ -221,6 +222,18 @@ Body: `{factId?, tag, value?, date?, place?, note?}` or `{factId?, gedcom: "1 BI
 
 Answer fields: `ok`, `pending`, `xref` – full schema in openapi.json.
 
+### `POST Citation/{tree}`
+
+Add, change, delete or move a source citation on a fact – or a general citation on the record (no `factId`). Only the parts named in the body are replaced; everything else on the citation and the fact is kept.
+
+| parameter | | |
+|---|---|---|
+| `xref` | required | Record identifier, e.g. `I123` |
+
+Body: `{factId?, index?, delete?, moveTo?, source?: "S1" | free text, page?, quality?: 0-3, date?, text?, note?, media?: ["M1"]}`
+
+Answer fields: `factId`, `ok`, `pending`, `xref` – full schema in openapi.json.
+
 ### `POST DeleteFact/{tree}`
 
 Delete a fact or event (not links like FAMC/FAMS).
@@ -338,11 +351,13 @@ Answer fields: `ok`, `tree`, `user` – full schema in openapi.json.
 | 400 | `family-required` |
 | 400 | `invalid-date` |
 | 400 | `invalid-gedcom` |
+| 400 | `invalid-quality` |
 | 400 | `invalid-relation` |
 | 400 | `invalid-value` |
 | 400 | `link-tag-not-allowed` |
 | 400 | `name-required` |
 | 400 | `pair-invalid` |
+| 400 | `source-missing` |
 | 400 | `too-many-results` |
 | 400 | `upload-failed` |
 | 403 | `chart-disabled` |
@@ -357,10 +372,12 @@ Answer fields: `ok`, `tree`, `user` – full schema in openapi.json.
 | 403 | `private` |
 | 403 | `tree-disabled` |
 | 403 | `upload-not-allowed` |
+| 404 | `citation-not-found` |
 | 404 | `fact-not-found` |
 | 404 | `family-not-found` |
 | 404 | `link-not-found` |
 | 404 | `not-found` |
+| 404 | `source-not-found` |
 | 409 | `link-exists` |
 | 409 | `parent-exists` |
 | 501 | `not-supported` |

@@ -216,6 +216,51 @@ class Schreiben(unittest.TestCase):
         verwalter = U.sitzung("verwalter").get("Sources", "testbaum").json
         self.assertEqual(["Kirchenbuch Offenbach", "Markerkonfidenz-Quelle"], [x["title"] for x in verwalter["sources"]])
 
+    def test_quellenverweis_schreiben(self):
+        # Verweis anlegen, gezielt aendern, verschieben, loeschen - das Ereignis und die anderen Teile bleiben unberuehrt.
+        # Die Kennung des Ereignisses aendert sich mit jedem Schreiben (Hash); die Antwort liefert die neue.
+        s = U.sitzung("admin")
+        a = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Zita", "surname": "Quell", "sex": "F", "dead": True,
+                                                  "birthDate": "1 MAY 1850", "birthPlace": "Zitadorf"})
+        xref = a.json["xref"]
+        fid = next(f for f in self.fakten(s, xref) if f.get("tag") == "BIRT")["id"]
+
+        def zitat(**rumpf):
+            nonlocal fid
+            a = s.post("Citation", "testbaum", {"factId": fid, **rumpf}, xref=xref)
+            self.assertEqual(True, a.json["ok"], a)
+            fid = a.json["factId"]
+            return next(f for f in self.fakten(s, xref) if f.get("tag") == "BIRT")
+
+        # 1. anlegen: Quelle S1 mit Seite, Qualitaet, Datum, Zitat, Notiz; 2. eine Text-Quelle dazu
+        zitat(source="S1", page="Taufen 1850, Nr. 7", quality=3, date="3 MAY 1850", text="Zita, Tochter\ndes Quell", note="gut lesbar")
+        geburt = zitat(source="laut Oma Quell", quality=1)
+        self.assertEqual(fid, geburt["id"])
+        q = geburt["sources"]
+        self.assertEqual([("S1", "Taufen 1850, Nr. 7", 3, "Zita, Tochter\ndes Quell", ["gut lesbar"]), ("", "", 1, "", [])],
+                         [(x["xref"], x["page"], x["quality"], x["text"], x["notes"]) for x in q])
+        self.assertEqual("laut Oma Quell", q[1]["title"])
+        # 3. nur die Seite aendern: Qualitaet, Datum, Zitat, Notiz bleiben
+        q0 = zitat(index=0, page="Taufen 1850, Nr. 8")["sources"][0]
+        self.assertEqual(("Taufen 1850, Nr. 8", 3, "3 MAY 1850", "Zita, Tochter\ndes Quell", ["gut lesbar"]),
+                         (q0["page"], q0["quality"], q0["date"]["gedcom"], q0["text"], q0["notes"]))
+        # 4. verschieben: die Text-Quelle nach vorn
+        self.assertEqual(["", "S1"], [x["xref"] for x in zitat(index=1, moveTo=0)["sources"]])
+        # Ort und Datum des Ereignisses selbst sind unveraendert, DATA ist richtig aufgebaut
+        ged = umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = ?", xref)[0][0]
+        self.assertIn("2 DATE 1 MAY 1850\n2 PLAC Zitadorf", ged)
+        self.assertIn("3 DATA\n4 DATE 3 MAY 1850\n4 TEXT Zita, Tochter\n5 CONT des Quell", ged)
+        # 5. loeschen
+        self.assertEqual(["S1"], [x["xref"] for x in zitat(index=0, delete=True)["sources"]])
+        # 6. allgemeiner Verweis am Datensatz und Fehler
+        a = s.post("Citation", "testbaum", {"source": "S1", "page": "Familienbogen"}, xref=xref)
+        self.assertEqual(True, a.json["ok"], a)
+        allgemein = [f for f in self.fakten(s, xref) if f.get("tag") == "SOUR"]
+        self.assertEqual([("S1", "Familienbogen")], [(x["sources"][0]["xref"], x["sources"][0]["page"]) for x in allgemein])
+        self.assertEqual("source-not-found", s.post("Citation", "testbaum", {"factId": fid, "source": "@S999@"}, xref=xref).json["error"])
+        self.assertEqual("invalid-quality", s.post("Citation", "testbaum", {"factId": fid, "index": 0, "quality": 7}, xref=xref).json["error"])
+        self.assertEqual("not-editable", U.sitzung("mitglied").post("Citation", "testbaum", {"factId": fid, "source": "S1"}, xref=xref).json["error"])
+
     def test_name_aendern_behaelt_unterangaben(self):
         # Beim Aendern des Namens darf nichts verloren gehen: Praefix, Spitzname und Notiz bleiben,
         # GIVN/SURN/NSFX folgen dem neuen Namen.

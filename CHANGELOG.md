@@ -8,6 +8,10 @@ besides `page` also `quality` (QUAY 0–3), `date` and `text` of the entry (DATA
 and sources without a record ("according to Martha Meier") with an empty `xref`. Sources a viewer may not see are
 left out, as in webtrees. Tests: `test_quellenverweis_vollstaendig`, `test_quellen_liste_und_einzeln`; the leak test
 covers the new routes.
+**Writing citations:** new route `Citation` adds, changes, deletes or moves a citation on a fact, or a general
+citation on the record. Only the parts named in the body are replaced (`source`, `page`, `quality`, `date`, `text`,
+`note`, `media`); everything else on the citation and the fact stays. A fact's id is a hash of its content, so the
+answer carries the new `factId`. Test: `test_quellenverweis_schreiben`.
 
 Also: **Changing a name no longer loses its details.** Until now, editing a name through `Fact`
 removed the nickname (`NICK`) and the name prefixes (`NPFX`, `SPFX`) along with the parts derived from the name. Now
