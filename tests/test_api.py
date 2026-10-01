@@ -169,15 +169,15 @@ class Paten(unittest.TestCase):
                           ("godparent", "Marie Offen", "Witwe", "Marie Offen, Witwe")],
                          [(p["role"], p["name"], p["detail"], p["text"]) for p in taufe["freeAssociates"]])
         heirat = self.fakt("verwalter", "F1", "MARR", "Family")
-        self.assertEqual([("witness", None, None, "Fritz Krause, Schneider"), ("witness", None, None, "Hans Müller, Bauer, Offenbach")],
+        self.assertEqual([("witness", "Fritz Krause", "Schneider", "Fritz Krause, Schneider"), ("witness", None, None, "Hans Müller, Bauer, Offenbach")],
                          [(p["role"], p["name"], p["detail"], p["text"]) for p in heirat["freeAssociates"]],
                          "erst Ahnenblatts _WITN, dann die Notiz; alte Form ohne ';': nicht raten")
 
     def test_ahnenblatt_godp(self):
-        # Ahnenblatt: "2 _GODP <Text>" unter CHR/BAPM, je Zeile ein oder mehrere Paten - wie der Text einer Notiz "Paten:"
+        # Ahnenblatt: "2 _GODP <Text>" unter CHR/BAPM, je Zeile eine Person (Name bis zum ersten Komma); mit ";" eine Liste
         taufe = self.fakt("verwalter", "I4", "CHR")
         self.assertEqual([], taufe["notes"])
-        self.assertEqual([("godparent", "Hans Meier", "Bauer"), ("godparent", "Grete Meier", "Witwe"), ("godparent", None, None)],
+        self.assertEqual([("godparent", "Hans Meier", "Bauer"), ("godparent", "Grete Meier", "Witwe"), ("godparent", "Peter Schulz und Paul Schulz", None)],
                          [(p["role"], p["name"], p["detail"]) for p in taufe["freeAssociates"]])
         self.assertEqual("Peter Schulz und Paul Schulz", taufe["freeAssociates"][2]["text"])
 

@@ -13,11 +13,12 @@ fields (spec: `docs/spec-paten-quellen.md`, read side).
   `associates` so that `RELA` is no longer lost – and, when it names a godparent and the person has a christening
   (`CHR`, else `BAPM`), is added to that christening's `associates` with `level1: true`. Nothing is rewritten.
 - `freeAssociates[]`: people without a record. First from Ahnenblatt's own tags `2 _GODP <text>` under `CHR`/`BAPM`
-  (godparents) and `2 _WITN <text>` under `MARR` (witnesses; GEDCOM-L, webtrees knows both), one entry per line or
-  several when the line uses `;`; then from fact notes beginning with `Paten:`, `Taufpaten:`, `Gevattern:`,
-  `Trauzeugen:` or `Zeugen:` (any case) – entries separated by `;`, `name` up to the first comma, `detail` the rest.
-  A line or note without `;` (commas only, “A und B”) gives one entry with `name: null` and the whole `text` – no
-  guessing. The note stays in `notes`; the new parallel `noteKinds[]` marks it as `associates` (others: `note`), so
+  (godparents) and `2 _WITN <text>` under `MARR` (witnesses; GEDCOM-L, webtrees knows both): Ahnenblatt writes one
+  person per line (“Friedrich Plate, Anbauer zu Celle”), so each line is one entry with `name` up to the first comma
+  and `detail` the rest – a line with `;` is a list like a note. Then from fact notes beginning with `Paten:`,
+  `Taufpaten:`, `Gevattern:`, `Trauzeugen:` or `Zeugen:` (any case) – entries separated by `;`, `name` up to the first
+  comma, `detail` the rest. A note without `;` (commas only) gives one entry with `name: null` and the whole `text` –
+  no guessing. The note stays in `notes`; the new parallel `noteKinds[]` marks it as `associates` (others: `note`), so
   clients do not show it twice.
 - `Individual.associatedIn[]`: where this person is a godparent, witness … – the other person's or family's event
   (`record`, `recordType`, `name`, `tag`, `label`, `factId`, `date`, `place`, `rela`, `role`, `label2`, `level1`,

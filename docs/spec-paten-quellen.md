@@ -42,6 +42,8 @@ Vorschlag: Modul **1.11.0**, `API_VERSION = 19`. Alles hier ist **additiv** – 
 | `1 ASSO @I…@` + `2 RELA Godfather` an der Person | GEDCOM 5.5.1, alte GenPlus_Win-Exporte | der Taufe zuordnen (s. 1.3) |
 | `2 NOTE Paten: A, Beruf zu Ort; B, …` | Personen ohne eigenen Datensatz | als freie Einträge (s. 1.4) |
 | `2 NOTE Trauzeugen: …` | dto. | dto. |
+| `2 _GODP Friedrich Plate, Anbauer zu Celle` unter `CHR`/`BAPM`, je Pate eine Zeile | Ahnenblatt 4.40/4.45, GEDCOM-L; webtrees kennt es (`CustomTags/GedcomL.php`), Demo-Baum ab 1.3 | als freier Eintrag, `name` bis zum ersten Komma, `detail` der Rest; Zeile mit `;` wie eine Notiz-Liste (ab 1.11.0) |
+| `2 _WITN …` unter `MARR`, je Zeuge eine Zeile | dto. | dto., `role` witness |
 
 ### 1.2 Neues Feld `associates[]` je Fakt
 

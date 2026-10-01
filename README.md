@@ -215,9 +215,9 @@ Every fact (`facts[]` in `Individual`, `Family`, `Export`) carries `id`, `tag`, 
 witnesses … – `xref`, `name`, `sex`, `rela` as in the file, `role` normalised to `godparent`, `witness` or `other`,
 `label` as webtrees shows it by the linked person's sex, `private`, `level1`, `notes`, `sources`) and
 `freeAssociates` (people without a record: first from Ahnenblatt's tags `2 _GODP` under `CHR`/`BAPM` and `2 _WITN`
-under `MARR`, one line each, then from notes beginning with `Paten:`, `Taufpaten:`, `Gevattern:`, `Trauzeugen:` or
-`Zeugen:` – entries separated by `;`, `name` up to the first comma, `detail` the rest; a line or note without `;`
-gives a single entry with `name: null` and the whole `text`, no guessing). A `1 ASSO` on the person stays a fact `ASSO`
+under `MARR`, one person per line as Ahnenblatt writes them, then from notes beginning with `Paten:`, `Taufpaten:`,
+`Gevattern:`, `Trauzeugen:` or `Zeugen:` – entries separated by `;`; `name` up to the first comma, `detail` the rest. A
+note without `;` (the older comma-only form) gives a single entry with `name: null` and the whole `text`, no guessing). A `1 ASSO` on the person stays a fact `ASSO`
 as before and, for a godparent, is added to the christening's `associates` with `level1: true`. A linked person the
 user may not see comes with `private: true` and no name; one whose name they may not see is left out.
 

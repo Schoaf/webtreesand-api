@@ -689,8 +689,9 @@ trait JsonBuilders
     /**
      * Notizen eines Ereignisses (2 NOTE) samt Einordnung: notes (Texte, wie bisher), noteKinds (parallel dazu:
      * "note" oder "associates") und freeAssociates - zuerst aus Ahnenblatts eigenen Tags "2 _GODP <Text>" (Paten, unter
-     * CHR/BAPM) und "2 _WITN <Text>" (Zeugen; GEDCOM-L, webtrees kennt sie), je Zeile wie der Text einer Notiz
-     * "Paten: …", dann aus solchen Notizen (siehe freeAssociates()).
+     * CHR/BAPM) und "2 _WITN <Text>" (Zeugen; GEDCOM-L, webtrees kennt sie). Ahnenblatt schreibt je Person eine Zeile
+     * ("Friedrich Plate, Anbauer zu Celle"): name bis zum ersten Komma, detail der Rest; eine Zeile mit ";" zaehlt wie
+     * eine Notiz "Paten: …" als Liste. Danach die Eintraege aus solchen Notizen (siehe freeAssociates()).
      *
      * @return array{0:array<int,string>,1:array<int,string>,2:array<int,array<string,mixed>>}
      */
@@ -702,7 +703,8 @@ trait JsonBuilders
 
         foreach (['_GODP' => 'godparent', '_WITN' => 'witness'] as $tag => $role) {
             foreach (GedcomText::unterzeilen($fact->gedcom(), 2, $tag) as [$wert, $unter]) {
-                $free = [...$free, ...$this->freeEntries($role, GedcomText::mitFortsetzung($wert, $unter, 2))];
+                $text = GedcomText::mitFortsetzung($wert, $unter, 2);
+                $free = [...$free, ...$this->freeEntries($role, str_contains($text, ';') ? $text : $text . ';')];
             }
         }
 

@@ -1341,10 +1341,16 @@
                   "type": "object",
                   "properties": {
                    "detail": {
-                    "type": "null"
+                    "type": [
+                     "null",
+                     "string"
+                    ]
                    },
                    "name": {
-                    "type": "null"
+                    "type": [
+                     "null",
+                     "string"
+                    ]
                    },
                    "role": {
                     "type": "string"
@@ -2447,10 +2453,16 @@
                   "type": "object",
                   "properties": {
                    "detail": {
-                    "type": "null"
+                    "type": [
+                     "null",
+                     "string"
+                    ]
                    },
                    "name": {
-                    "type": "null"
+                    "type": [
+                     "null",
+                     "string"
+                    ]
                    },
                    "role": {
                     "type": "string"
@@ -3807,10 +3819,16 @@
                "type": "object",
                "properties": {
                 "detail": {
-                 "type": "null"
+                 "type": [
+                  "null",
+                  "string"
+                 ]
                 },
                 "name": {
-                 "type": "null"
+                 "type": [
+                  "null",
+                  "string"
+                 ]
                 },
                 "role": {
                  "type": "string"
@@ -6331,10 +6349,16 @@
                   "type": "object",
                   "properties": {
                    "detail": {
-                    "type": "null"
+                    "type": [
+                     "null",
+                     "string"
+                    ]
                    },
                    "name": {
-                    "type": "null"
+                    "type": [
+                     "null",
+                     "string"
+                    ]
                    },
                    "role": {
                     "type": "string"
