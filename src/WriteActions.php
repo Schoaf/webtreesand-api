@@ -1456,8 +1456,17 @@ trait WriteActions
 
         if (array_key_exists('note', $body)) {
             $note   = GedcomText::multiline($this->str($body, 'note'), 3);
-            // Nur die erste eingebettete Notiz ersetzen; Verweise auf Notiz-Datensaetze bleiben.
-            $gedcom = (string) preg_replace('/\n2 NOTE (?!@)[^\n]*(\n3 CONT[^\n]*)*/', '', $gedcom, 1);
+            // Nur die erste eingebettete Notiz ersetzen; Verweise auf Notiz-Datensaetze bleiben. Eine Patenliste
+            // ("Paten: …", "Trauzeugen: …") ist keine gewoehnliche Notiz - die pflegt die Route Association (ab Stufe 20).
+            $erledigt = false;
+            $gedcom   = (string) preg_replace_callback('/\n2 NOTE (?!@)([^\n]*)((?:\n3 CON[CT][^\n]*)*)/', function (array $m) use (&$erledigt): string {
+                if ($erledigt || preg_match('/^(paten|taufpaten|gevattern|trauzeugen|zeugen):/iu', trim(GedcomText::mitFortsetzung($m[1], $m[2], 2))) === 1) {
+                    return $m[0];
+                }
+                $erledigt = true;
+
+                return '';
+            }, $gedcom);
             $gedcom .= $note === '' ? '' : "\n2 NOTE " . $note;
         }
 

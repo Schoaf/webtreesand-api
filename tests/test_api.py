@@ -382,7 +382,7 @@ class Schreiben(unittest.TestCase):
                                                   "birthDate": "1 MAY 1850"})
         xref = a.json["xref"]
         taufe_alt = ("1 CHR\n2 DATE 3 MAY 1850\n2 PLAC Patendorf\n2 _ASSO @I2@\n3 RELA Godmother\n3 SOUR @S1@\n4 PAGE Taufen 1850"
-                     "\n2 _ASSO @I5@\n3 RELA godfather\n2 NOTE Paten: Hans Alt, Bauer; Grete Alt\n2 NOTE Randnotiz\n2 SOUR @S1@\n3 PAGE Taufen 1850, Nr. 3")
+                     "\n2 _ASSO @I5@\n3 RELA godfather\n2 NOTE Paten: Hans Alt, Bauer; Grete Alt\n2 NOTE Alte Randnotiz\n2 SOUR @S1@\n3 PAGE Taufen 1850, Nr. 3")
         self.assertEqual(True, s.post("Fact", "testbaum", {"gedcom": taufe_alt}, xref=xref).json["ok"])
         self.assertEqual(True, s.post("Fact", "testbaum", {"gedcom": "1 ASSO @I4@\n2 RELA Godfather\n2 NOTE in Abwesenheit"}, xref=xref).json["ok"])
 
@@ -392,6 +392,10 @@ class Schreiben(unittest.TestCase):
         def ged():
             return umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = ?", xref)[0][0]
 
+        # Die gewoehnliche Notiz aendern: die Patenliste bleibt (sie ist nicht "die erste Notiz")
+        a = s.post("Fact", "testbaum", {"factId": taufe()["id"], "note": "Randnotiz"}, xref=xref)
+        self.assertEqual(True, a.json["ok"], a)
+        self.assertEqual(["Paten: Hans Alt, Bauer; Grete Alt", "Randnotiz"], taufe()["notes"])
         fid = taufe()["id"]
         # Reihenfolge tauschen, I3 neu als Pate mit Notiz, I5 (fuer Mitglieder privat) bleibt, I4 aus 1 ASSO hereinholen,
         # freie Paten neu - die alte Notiz "Paten: ..." geht in _GODP ueber, die Randnotiz bleibt
@@ -411,7 +415,7 @@ class Schreiben(unittest.TestCase):
         g = ged()
         self.assertIn("2 _ASSO @I5@\n3 RELA godfather\n2 _ASSO @I2@\n3 RELA Godmother\n3 SOUR @S1@\n4 PAGE Taufen 1850"
                       "\n2 _ASSO @I3@\n3 RELA godparent\n3 NOTE Bruder des Vaters\n2 _ASSO @I4@\n3 RELA godparent\n3 NOTE in Abwesenheit"
-                      "\n2 _GODP Hans Alt, Bauer\n2 _GODP Fritz Neu, Schmied\n2 NOTE Randnotiz\n2 SOUR @S1@\n3 PAGE Taufen 1850, Nr. 3", g)
+                      "\n2 _GODP Hans Alt, Bauer\n2 _GODP Fritz Neu, Schmied\n2 SOUR @S1@\n3 PAGE Taufen 1850, Nr. 3\n2 NOTE Randnotiz", g)
         self.assertNotIn("1 ASSO", g, "der 1 ASSO ist in die Taufe gewandert")
         self.assertIn("2 DATE 3 MAY 1850\n2 PLAC Patendorf", g)
         # Nur die freien aendern: verknuepfte bleiben; einen verknuepften entfernen: die freien bleiben

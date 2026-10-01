@@ -13,6 +13,8 @@
   Answer: the new `factId`. Moderation and change log as for `POST Fact`.
 - `POST Fact` takes `type` (the fact's `2 TYPE`); for `MARR` it is written in webtrees' form (civil → `CIVIL`,
   religious → `RELIGIOUS`, `PARTNERS`, `COMMON LAW`), anything else as given.
+- `POST Fact` with `note` no longer overwrites a godparent list (“Paten: …”, “Trauzeugen: …”) that happens to be the
+  first note of the fact; it replaces the first ordinary note.
 - Tests: write godparents (order, kept sources and spelling, private links, free entries, `1 ASSO` into the baptism,
   errors) and marriage type with witnesses.
 
