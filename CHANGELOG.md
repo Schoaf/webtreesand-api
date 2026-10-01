@@ -12,14 +12,17 @@ fields (spec: `docs/spec-paten-quellen.md`, read side).
 - A `1 ASSO` on the person (GEDCOM 5.5.1, older GenPlus exports) stays a fact `ASSO` as before – now with
   `associates` so that `RELA` is no longer lost – and, when it names a godparent and the person has a christening
   (`CHR`, else `BAPM`), is added to that christening's `associates` with `level1: true`. Nothing is rewritten.
-- `freeAssociates[]`: people without a record, from fact notes beginning with `Paten:`, `Taufpaten:`, `Gevattern:`,
+- `freeAssociates[]`: people without a record. First from Ahnenblatt's own tags `2 _GODP <text>` under `CHR`/`BAPM`
+  (godparents) and `2 _WITN <text>` under `MARR` (witnesses; GEDCOM-L, webtrees knows both), one entry per line or
+  several when the line uses `;`; then from fact notes beginning with `Paten:`, `Taufpaten:`, `Gevattern:`,
   `Trauzeugen:` or `Zeugen:` (any case) – entries separated by `;`, `name` up to the first comma, `detail` the rest.
-  The older form with commas only gives one entry with `name: null` and the whole `text` – no guessing. The note
-  stays in `notes`; the new parallel `noteKinds[]` marks it as `associates` (others: `note`), so clients do not show
-  it twice.
+  A line or note without `;` (commas only, “A und B”) gives one entry with `name: null` and the whole `text` – no
+  guessing. The note stays in `notes`; the new parallel `noteKinds[]` marks it as `associates` (others: `note`), so
+  clients do not show it twice.
 - `Individual.associatedIn[]`: where this person is a godparent, witness … – the other person's or family's event
   (`record`, `recordType`, `name`, `tag`, `label`, `factId`, `date`, `place`, `rela`, `role`, `label2`, `level1`,
-  `url`), like webtrees' “associated events” over the `ASSO` and `_ASSO` links, but including `1 ASSO` on the
+  `url`, and for families `husband`/`wife` as xrefs of the visible partners, so a client can open the entry), like
+  webtrees' “associated events” over the `ASSO` and `_ASSO` links, but including `1 ASSO` on the
   godchild. Only visible records and facts; sorted by date.
 - `typeLabel` on every fact with a `TYPE`: the value as webtrees displays it (`FAM:MARR:TYPE`: `CIVIL` → “Civil
   marriage”, `RELIGIOUS` → “Religious marriage”), raw for unknown values, `null` without a type. `type` itself is

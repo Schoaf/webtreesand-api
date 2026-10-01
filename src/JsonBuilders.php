@@ -402,6 +402,11 @@ trait JsonBuilders
         ];
     }
 
+    private function visibleXref(Individual|null $individual): string|null
+    {
+        return $individual instanceof Individual && $individual->canShow() ? $individual->xref() : null;
+    }
+
     /**
      * RELA normalisiert, ohne Ruecksicht auf Gross-/Kleinschreibung: godparent, witness oder other.
      */
@@ -494,6 +499,9 @@ trait JsonBuilders
                         'label2'     => $this->associateLabel($rela, $role, $individual->sex()),
                         'level1'     => $level1,
                         'url'        => $record->url(),
+                        // Bei Familien die Partner, damit ein Client den Eintrag oeffnen kann - nur sichtbare
+                        'husband'    => $record instanceof Family ? $this->visibleXref($record->husband()) : null,
+                        'wife'       => $record instanceof Family ? $this->visibleXref($record->wife()) : null,
                     ];
                 }
             }
@@ -680,7 +688,9 @@ trait JsonBuilders
 
     /**
      * Notizen eines Ereignisses (2 NOTE) samt Einordnung: notes (Texte, wie bisher), noteKinds (parallel dazu:
-     * "note" oder "associates") und freeAssociates aus Notizen "Paten: A, Beruf zu Ort; B, …" (siehe freeAssociates()).
+     * "note" oder "associates") und freeAssociates - zuerst aus Ahnenblatts eigenen Tags "2 _GODP <Text>" (Paten, unter
+     * CHR/BAPM) und "2 _WITN <Text>" (Zeugen; GEDCOM-L, webtrees kennt sie), je Zeile wie der Text einer Notiz
+     * "Paten: …", dann aus solchen Notizen (siehe freeAssociates()).
      *
      * @return array{0:array<int,string>,1:array<int,string>,2:array<int,array<string,mixed>>}
      */
@@ -689,6 +699,12 @@ trait JsonBuilders
         $notes = [];
         $kinds = [];
         $free  = [];
+
+        foreach (['_GODP' => 'godparent', '_WITN' => 'witness'] as $tag => $role) {
+            foreach (GedcomText::unterzeilen($fact->gedcom(), 2, $tag) as [$wert, $unter]) {
+                $free = [...$free, ...$this->freeEntries($role, GedcomText::mitFortsetzung($wert, $unter, 2))];
+            }
+        }
 
         foreach ($this->notesFromBlock($fact->gedcom(), 2, $tree) as $text) {
             $entries = $this->freeAssociates($text);
@@ -740,8 +756,17 @@ trait JsonBuilders
             return null;
         }
 
-        $role = in_array(mb_strtolower($match[1]), ['trauzeugen', 'zeugen'], true) ? 'witness' : 'godparent';
-        $rest = GedcomText::line($match[2]);
+        return $this->freeEntries(in_array(mb_strtolower($match[1]), ['trauzeugen', 'zeugen'], true) ? 'witness' : 'godparent', $match[2]);
+    }
+
+    /**
+     * Die Personen einer Liste "A, Beruf zu Ort; B, …" (siehe freeAssociates()).
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private function freeEntries(string $role, string $text): array
+    {
+        $rest = GedcomText::line($text);
 
         if ($rest === '') {
             return [];

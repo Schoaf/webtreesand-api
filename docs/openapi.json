@@ -541,6 +541,12 @@
              "factId": {
               "type": "string"
              },
+             "husband": {
+              "type": [
+               "null",
+               "string"
+              ]
+             },
              "label": {
               "type": "string"
              },
@@ -597,11 +603,18 @@
              },
              "url": {
               "type": "string"
+             },
+             "wife": {
+              "type": [
+               "null",
+               "string"
+              ]
              }
             },
             "required": [
              "date",
              "factId",
+             "husband",
              "label",
              "label2",
              "level1",
@@ -612,7 +625,8 @@
              "rela",
              "role",
              "tag",
-             "url"
+             "url",
+             "wife"
             ],
             "additionalProperties": false
            }
@@ -1478,10 +1492,7 @@
                 "type": "integer"
                },
                "chr": {
-                "type": [
-                 "null",
-                 "object"
-                ],
+                "type": "object",
                 "properties": {
                  "date": {
                   "type": "object",
@@ -1504,7 +1515,10 @@
                   "additionalProperties": false
                  },
                  "place": {
-                  "type": "object",
+                  "type": [
+                   "null",
+                   "object"
+                  ],
                   "properties": {
                    "lat": {
                     "type": "null"
@@ -2584,10 +2598,7 @@
                 "type": "integer"
                },
                "chr": {
-                "type": [
-                 "null",
-                 "object"
-                ],
+                "type": "object",
                 "properties": {
                  "date": {
                   "type": "object",
@@ -2610,7 +2621,10 @@
                   "additionalProperties": false
                  },
                  "place": {
-                  "type": "object",
+                  "type": [
+                   "null",
+                   "object"
+                  ],
                   "properties": {
                    "lat": {
                     "type": "null"
@@ -3254,7 +3268,37 @@
                 "type": "integer"
                },
                "chr": {
-                "type": "null"
+                "type": "object",
+                "properties": {
+                 "date": {
+                  "type": "object",
+                  "properties": {
+                   "jd": {
+                    "type": "integer"
+                   },
+                   "text": {
+                    "type": "string"
+                   },
+                   "year": {
+                    "type": "integer"
+                   }
+                  },
+                  "required": [
+                   "jd",
+                   "text",
+                   "year"
+                  ],
+                  "additionalProperties": false
+                 },
+                 "place": {
+                  "type": "null"
+                 }
+                },
+                "required": [
+                 "date",
+                 "place"
+                ],
+                "additionalProperties": false
                },
                "death": {
                 "type": "object",
@@ -3911,10 +3955,7 @@
              "type": "string"
             },
             "chr": {
-             "type": [
-              "null",
-              "object"
-             ],
+             "type": "object",
              "properties": {
               "date": {
                "type": "object",
@@ -3937,7 +3978,10 @@
                "additionalProperties": false
               },
               "place": {
-               "type": "object",
+               "type": [
+                "null",
+                "object"
+               ],
                "properties": {
                 "lat": {
                  "type": "null"

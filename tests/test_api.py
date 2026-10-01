@@ -169,8 +169,17 @@ class Paten(unittest.TestCase):
                           ("godparent", "Marie Offen", "Witwe", "Marie Offen, Witwe")],
                          [(p["role"], p["name"], p["detail"], p["text"]) for p in taufe["freeAssociates"]])
         heirat = self.fakt("verwalter", "F1", "MARR", "Family")
-        self.assertEqual([("witness", None, None, "Hans Müller, Bauer, Offenbach")],
-                         [(p["role"], p["name"], p["detail"], p["text"]) for p in heirat["freeAssociates"]], "alte Form ohne ';': nicht raten")
+        self.assertEqual([("witness", None, None, "Fritz Krause, Schneider"), ("witness", None, None, "Hans Müller, Bauer, Offenbach")],
+                         [(p["role"], p["name"], p["detail"], p["text"]) for p in heirat["freeAssociates"]],
+                         "erst Ahnenblatts _WITN, dann die Notiz; alte Form ohne ';': nicht raten")
+
+    def test_ahnenblatt_godp(self):
+        # Ahnenblatt: "2 _GODP <Text>" unter CHR/BAPM, je Zeile ein oder mehrere Paten - wie der Text einer Notiz "Paten:"
+        taufe = self.fakt("verwalter", "I4", "CHR")
+        self.assertEqual([], taufe["notes"])
+        self.assertEqual([("godparent", "Hans Meier", "Bauer"), ("godparent", "Grete Meier", "Witwe"), ("godparent", None, None)],
+                         [(p["role"], p["name"], p["detail"]) for p in taufe["freeAssociates"]])
+        self.assertEqual("Peter Schulz und Paul Schulz", taufe["freeAssociates"][2]["text"])
 
     def test_heiratsart_und_trauzeuge(self):
         heirat = self.fakt("verwalter", "F1", "MARR", "Family")
@@ -204,6 +213,7 @@ class Paten(unittest.TestCase):
         wo = U.sitzung("verwalter").get("Individual", "testbaum", xref="I4").json["associatedIn"]
         self.assertEqual([("I1", "INDI", "CHR", True, 1800), ("F1", "FAM", "MARR", False, 1828)],
                          [(e["record"], e["recordType"], e["tag"], e["level1"], e["date"]["year"]) for e in wo])
+        self.assertEqual([(None, None), ("I1", "I2")], [(e["husband"], e["wife"]) for e in wo], "Partner der Familie zum Oeffnen")
         self.assertIn("Theodor", wo[0]["name"])
         self.assertIn("Anna", wo[1]["name"])
 
