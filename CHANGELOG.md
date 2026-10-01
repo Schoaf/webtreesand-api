@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.12.0 – 2026-10-01
+**API level 20: godparents and witnesses – writing.** New route `POST Association` and `type` for `POST Fact`.
+- `POST Association` (`?xref=` individual or family): `{factId, linked?, free?, convertLevel1?}`. `linked` replaces the
+  linked individuals of the fact in the given order and writes them as webtrees does (`2 _ASSO @I…@` + `3 RELA
+  godparent`/`witness`; `other` with a free `rela`). An individual already linked keeps its sub-lines (`3 SOUR` …) and
+  its RELA spelling (“Godfather”) when the role matches; `note` replaces only its embedded note. Links to individuals
+  the writer may not even see as a reference are always kept. `free` replaces the people without a record, one line
+  each as `2 _GODP` (godparents) or `2 _WITN` (witnesses) – the form Ahnenblatt writes; notes “Paten: …” /
+  “Trauzeugen: …” on the fact are converted into it, other notes stay. `convertLevel1: true` moves the person's
+  `1 ASSO` for individuals in `linked` into the baptism, with their note and source. Parts not named stay untouched.
+  Answer: the new `factId`. Moderation and change log as for `POST Fact`.
+- `POST Fact` takes `type` (the fact's `2 TYPE`); for `MARR` it is written in webtrees' form (civil → `CIVIL`,
+  religious → `RELIGIOUS`, `PARTNERS`, `COMMON LAW`), anything else as given.
+- Tests: write godparents (order, kept sources and spelling, private links, free entries, `1 ASSO` into the baptism,
+  errors) and marriage type with witnesses.
+
 ## 1.11.0 – 2026-10-01
 **API level 19: godparents and witnesses – reading.** Until now the API ignored `_ASSO` entirely, so the apps saw
 godparents only from notes. Everything here is additive; older clients keep working and simply do not see the new

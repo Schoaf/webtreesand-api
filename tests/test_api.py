@@ -375,6 +375,82 @@ class Schreiben(unittest.TestCase):
         self.assertEqual("invalid-quality", s.post("Citation", "testbaum", {"factId": fid, "index": 0, "quality": 7}, xref=xref).json["error"])
         self.assertEqual("not-editable", U.sitzung("mitglied").post("Citation", "testbaum", {"factId": fid, "source": "S1"}, xref=xref).json["error"])
 
+    def test_paten_schreiben(self):
+        # Stufe 20: Paten verknuepft und frei schreiben, Unterzeilen und Schreibweise bleiben, 1 ASSO in die Taufe
+        s = U.sitzung("admin")
+        a = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Pia", "surname": "Pate", "sex": "F", "dead": True,
+                                                  "birthDate": "1 MAY 1850"})
+        xref = a.json["xref"]
+        taufe_alt = ("1 CHR\n2 DATE 3 MAY 1850\n2 PLAC Patendorf\n2 _ASSO @I2@\n3 RELA Godmother\n3 SOUR @S1@\n4 PAGE Taufen 1850"
+                     "\n2 _ASSO @I5@\n3 RELA godfather\n2 NOTE Paten: Hans Alt, Bauer; Grete Alt\n2 NOTE Randnotiz\n2 SOUR @S1@\n3 PAGE Taufen 1850, Nr. 3")
+        self.assertEqual(True, s.post("Fact", "testbaum", {"gedcom": taufe_alt}, xref=xref).json["ok"])
+        self.assertEqual(True, s.post("Fact", "testbaum", {"gedcom": "1 ASSO @I4@\n2 RELA Godfather\n2 NOTE in Abwesenheit"}, xref=xref).json["ok"])
+
+        def taufe():
+            return next(f for f in self.fakten(s, xref) if f.get("tag") == "CHR")
+
+        def ged():
+            return umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = ?", xref)[0][0]
+
+        fid = taufe()["id"]
+        # Reihenfolge tauschen, I3 neu als Pate mit Notiz, I5 (fuer Mitglieder privat) bleibt, I4 aus 1 ASSO hereinholen,
+        # freie Paten neu - die alte Notiz "Paten: ..." geht in _GODP ueber, die Randnotiz bleibt
+        a = s.post("Association", "testbaum", {"factId": fid, "convertLevel1": True,
+                                               "linked": [{"xref": "I5", "role": "godparent"}, {"xref": "I2", "role": "godparent"},
+                                                          {"xref": "I3", "role": "godparent", "note": "Bruder des Vaters"},
+                                                          {"xref": "I4", "role": "godparent"}],
+                                               "free": [{"text": "Hans Alt, Bauer", "role": "godparent"}, {"text": "Fritz Neu, Schmied", "role": "godparent"}]},
+                   xref=xref)
+        self.assertEqual(True, a.json["ok"], a)
+        t = taufe()
+        self.assertEqual(a.json["factId"], t["id"])
+        self.assertEqual(["I5", "I2", "I3", "I4"], [x["xref"] for x in t["associates"]])
+        self.assertEqual([False] * 4, [x["level1"] for x in t["associates"]], "I4 steht jetzt an der Taufe selbst")
+        self.assertEqual([("Hans Alt", "Bauer"), ("Fritz Neu", "Schmied")], [(x["name"], x["detail"]) for x in t["freeAssociates"]])
+        self.assertEqual(["Randnotiz"], t["notes"])
+        g = ged()
+        self.assertIn("2 _ASSO @I5@\n3 RELA godfather\n2 _ASSO @I2@\n3 RELA Godmother\n3 SOUR @S1@\n4 PAGE Taufen 1850"
+                      "\n2 _ASSO @I3@\n3 RELA godparent\n3 NOTE Bruder des Vaters\n2 _ASSO @I4@\n3 RELA godparent\n3 NOTE in Abwesenheit"
+                      "\n2 _GODP Hans Alt, Bauer\n2 _GODP Fritz Neu, Schmied\n2 NOTE Randnotiz\n2 SOUR @S1@\n3 PAGE Taufen 1850, Nr. 3", g)
+        self.assertNotIn("1 ASSO", g, "der 1 ASSO ist in die Taufe gewandert")
+        self.assertIn("2 DATE 3 MAY 1850\n2 PLAC Patendorf", g)
+        # Nur die freien aendern: verknuepfte bleiben; einen verknuepften entfernen: die freien bleiben
+        fid = s.post("Association", "testbaum", {"factId": t["id"], "free": []}, xref=xref).json["factId"]
+        self.assertEqual(([], 4), (taufe()["freeAssociates"], len(taufe()["associates"])))
+        a = s.post("Association", "testbaum", {"factId": fid, "linked": [{"xref": "I2", "role": "godparent"}]}, xref=xref)
+        self.assertEqual(["I2"], [x["xref"] for x in taufe()["associates"]])
+        self.assertIn("3 SOUR @S1@", ged(), "Quelle am Paten bleibt")
+        # Fehler
+        fid = a.json["factId"]
+        self.assertEqual("invalid-role", s.post("Association", "testbaum", {"factId": fid, "linked": [{"xref": "I3", "role": "nachbar"}]}, xref=xref).json["error"])
+        self.assertEqual("individual-not-found", s.post("Association", "testbaum", {"factId": fid, "linked": [{"xref": "I999", "role": "godparent"}]}, xref=xref).json["error"])
+        self.assertEqual("invalid-value", s.post("Association", "testbaum", {"factId": fid, "free": [{"text": "@I1@", "role": "godparent"}]}, xref=xref).json["error"])
+        self.assertEqual("not-editable", U.sitzung("mitglied").post("Association", "testbaum", {"factId": fid, "free": []}, xref=xref).json["error"])
+        # Andere Beteiligte mit freier Rolle
+        s.post("Association", "testbaum", {"factId": fid, "linked": [{"xref": "I2", "role": "godparent"}, {"xref": "I3", "role": "other", "rela": "Hebamme"}]}, xref=xref)
+        self.assertEqual([("godparent", "Godmother"), ("other", "Hebamme")], [(x["role"], x["rela"]) for x in taufe()["associates"]])
+        # Aufraeumen: die Testperson zitiert S1 und wuerde die Zaehlung anderer Tests verfaelschen
+        self.assertEqual(True, s.post("DeleteRecord", "testbaum", {}, xref=xref).json["ok"])
+
+    def test_heiratsart_und_trauzeugen_schreiben(self):
+        s = U.sitzung("admin")
+        a = s.post("Fact", "testbaum", {"tag": "MARR", "date": "5 JUN 1830", "type": "religious"}, xref="F1")
+        self.assertEqual(True, a.json["ok"], a)
+        heiraten = [f for f in s.get("Family", "testbaum", xref="F1").json["facts"] if f["tag"] == "MARR"]
+        kirchlich = next(f for f in heiraten if f["type"] == "RELIGIOUS")
+        self.assertTrue(kirchlich["typeLabel"])
+        a = s.post("Association", "testbaum", {"factId": kirchlich["id"], "linked": [{"xref": "I4", "role": "witness"}],
+                                               "free": [{"text": "Otto Zeuge, Kuester", "role": "witness"}]}, xref="F1")
+        self.assertEqual(True, a.json["ok"], a)
+        g = umgebung.sql("SELECT f_gedcom FROM wt_families WHERE f_id = 'F1'")[0][0]
+        self.assertIn("1 MARR\n2 TYPE RELIGIOUS\n2 DATE 5 JUN 1830\n2 _ASSO @I4@\n3 RELA witness\n2 _WITN Otto Zeuge, Kuester", g)
+        # Art aendern und wieder aufraeumen; die erste Heirat (civil) bleibt unberuehrt
+        a = s.post("Fact", "testbaum", {"factId": a.json["factId"], "type": "Civil"}, xref="F1")
+        self.assertIn("2 TYPE CIVIL\n2 DATE 5 JUN 1830", umgebung.sql("SELECT f_gedcom FROM wt_families WHERE f_id = 'F1'")[0][0])
+        neu = [f for f in s.get("Family", "testbaum", xref="F1").json["facts"] if f["tag"] == "MARR" and f["date"] and f["date"]["year"] == 1830 and f["date"]["gedcom"] == "5 JUN 1830"]
+        self.assertEqual(True, s.post("DeleteFact", "testbaum", {"factId": neu[0]["id"]}, xref="F1").json["ok"])
+        self.assertIn("2 DATE 1828\n2 TYPE civil", umgebung.sql("SELECT f_gedcom FROM wt_families WHERE f_id = 'F1'")[0][0])
+
     def test_quelle_und_archiv_pflegen(self):
         s = U.sitzung("admin")
         # Archiv anlegen, Quelle anlegen mit Archiv und Signatur

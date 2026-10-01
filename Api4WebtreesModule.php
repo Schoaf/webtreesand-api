@@ -88,7 +88,9 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     // 18: Quellen - Sources, Source; Quellenverweise vollstaendig (Seite, Qualitaet, Datum, Text, Notizen, Medien, Text-Quellen)
     // 19: Paten und Trauzeugen lesen - je Fakt associates (2 _ASSO, 1 ASSO), freeAssociates (Notizen "Paten: ..."),
     //     noteKinds, typeLabel (MARR:TYPE uebersetzt); Individual.associatedIn (Gegenrichtung); NOTE/TEXT mit CONC
-    public const int    API_VERSION = 19;
+    // 20: Paten und Trauzeugen schreiben - POST Association (verknuepfte als 2 _ASSO + RELA, freie als 2 _GODP/_WITN,
+    //     1 ASSO in die Taufe verschieben); Fact.type (Art des Ereignisses, MARR in webtrees-Form CIVIL/RELIGIOUS ...)
+    public const int    API_VERSION = 20;
 
     /** Benutzereinstellung je Baum: die Merkliste als Liste von Personenkennungen. */
     private const string BOOKMARKS_PREF = 'api4webtrees_bookmarks';
@@ -227,7 +229,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
     public function customModuleVersion(): string
     {
-        return '1.11.0';
+        return '1.12.0';
     }
 
     public function customModuleLatestVersionUrl(): string
