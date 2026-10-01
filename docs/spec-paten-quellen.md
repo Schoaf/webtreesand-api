@@ -1,6 +1,13 @@
 # Spec: Paten, Trauzeugen, Heiratsart und Quellen-Lücken (api4webtrees 1.11)
 
-Stand 01.10.2026, nur Spec – kein Code. Gegenstück für die Apps: `app4webtrees/docs/paten-quellen-konzept.md`.
+Stand 01.10.2026. **Umgesetzt in 1.11.0 (Stufe 19): Abschnitt 1, 3 (nur Lesen), 5 (Lese-Seite), 6, 7, 8.** Offen: Schreiben
+(Abschnitt 2, 3 Schreiben, 4). Abweichungen beim Umsetzen: `1 ASSO` bleibt als Fakt `ASSO` in `facts[]` stehen (mit
+`associates`), zusätzlich zur Taufe – nichts fällt für ältere Apps weg. `type` liefert wie bisher webtrees' kanonische
+Form (`CIVIL`, `RELIGIOUS`), leer ohne TYPE; nur `typeLabel` ist neu. Gäste sehen lebende Paten gar nicht (nicht als
+`private: true`), weil webtrees ihnen bei der Voreinstellung „Namen Lebender: Mitglieder“ nicht einmal den Namen zeigt
+(`canShowName()`); Mitglieder sehen Vertrauliche als `private: true` ohne Namen. `noteKinds[]` parallel zu `notes[]`
+(offene Frage 1). `associatedIn[].name` einer Familie ist `Family::fullName()` („Mann + Frau“) wie in `Family.name`.
+Ursprünglich: nur Spec – kein Code. Gegenstück für die Apps: `app4webtrees/docs/paten-quellen-konzept.md`.
 Testdaten: Demo-Stammbaum Falkenrath **Version 1.2** (`app4webtrees/demo-tree/falkenrath.ged`, Fundstellen in dessen
 README). Maßstab ist **webtrees 2.2.6** – die API liefert, was webtrees speichert, und schreibt, was webtrees selbst
 schreiben würde.

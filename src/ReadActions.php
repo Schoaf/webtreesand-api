@@ -281,6 +281,8 @@ trait ReadActions
             'spouseFamilies' => $spouses,
             'stepFamilies'   => $step,
             'media'          => $this->mediaJson($individual),
+            // ab Stufe 19: wo diese Person Pate, Trauzeuge ... ist (Gegenrichtung zu associates an den Fakten)
+            'associatedIn'   => $this->associatedIn($individual),
         ]);
     }
 

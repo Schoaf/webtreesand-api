@@ -86,7 +86,9 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     // 16: Pedigree bis 12 Generationen (war 7)
     // 17: Export - der ganze sichtbare Baum seitenweise (Personen, Familien, Fakten, Medien)
     // 18: Quellen - Sources, Source; Quellenverweise vollstaendig (Seite, Qualitaet, Datum, Text, Notizen, Medien, Text-Quellen)
-    public const int    API_VERSION = 18;
+    // 19: Paten und Trauzeugen lesen - je Fakt associates (2 _ASSO, 1 ASSO), freeAssociates (Notizen "Paten: ..."),
+    //     noteKinds, typeLabel (MARR:TYPE uebersetzt); Individual.associatedIn (Gegenrichtung); NOTE/TEXT mit CONC
+    public const int    API_VERSION = 19;
 
     /** Benutzereinstellung je Baum: die Merkliste als Liste von Personenkennungen. */
     private const string BOOKMARKS_PREF = 'api4webtrees_bookmarks';
@@ -225,7 +227,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
     public function customModuleVersion(): string
     {
-        return '1.10.2';
+        return '1.11.0';
     }
 
     public function customModuleLatestVersionUrl(): string

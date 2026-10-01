@@ -7,6 +7,7 @@ namespace Api4Webtrees;
 use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\Contracts\UserInterface;
 use Fisharebest\Webtrees\Date;
+use Fisharebest\Webtrees\Elements\RelationIsDescriptor;
 use Fisharebest\Webtrees\Elements\UnknownElement;
 use Fisharebest\Webtrees\Fact;
 use Fisharebest\Webtrees\Family;
@@ -19,12 +20,14 @@ use Fisharebest\Webtrees\PlaceLocation;
 use Fisharebest\Webtrees\Registry;
 use Fisharebest\Webtrees\Repository;
 use Fisharebest\Webtrees\Source;
+use Fisharebest\Webtrees\Services\LinkedRecordService;
 use Fisharebest\Webtrees\Services\RelationshipService;
 use Fisharebest\Webtrees\Tree;
 use Fisharebest\Webtrees\Validator;
 use Illuminate\Support\Collection;
 use Psr\Http\Message\ServerRequestInterface;
 
+use function array_keys;
 use function array_map;
 use function array_pad;
 use function class_exists;
@@ -32,16 +35,20 @@ use function explode;
 use function implode;
 use function html_entity_decode;
 use function in_array;
+use function mb_strtolower;
 use function preg_match;
 use function preg_match_all;
 use function preg_replace;
 use function str_replace;
+use function str_contains;
 use function strip_tags;
 use function strrpos;
 use function substr;
 use function trim;
+use function usort;
 
 use const ENT_HTML5;
+use const PHP_INT_MAX;
 use const ENT_QUOTES;
 
 /**
@@ -243,10 +250,14 @@ trait JsonBuilders
     /**
      * Ereignisse und Attribute eines Datensatzes. facts() filtert bereits nach Zugriffsrechten.
      *
+     * Ab Stufe 19 je Fakt zusaetzlich: typeLabel (TYPE uebersetzt), noteKinds (parallel zu notes), associates
+     * (2 _ASSO: Paten, Trauzeugen ...) und freeAssociates (aus Notizen "Paten: ..."). Alles additiv.
+     *
      * @return array<int,array<string,mixed>>
      */
     private function factsJson(GedcomRecord $record): array
     {
+        $tree  = $record->tree();
         $facts = $this->sortFacts($record->facts());
         $data  = [];
 
@@ -258,24 +269,240 @@ trait JsonBuilders
             }
 
             $place = $fact->place();
+            $type  = $fact->attribute('TYPE');
+            [$notes, $kinds, $free] = $this->factNotesJson($fact, $tree);
 
             $data[] = [
-                'id'      => $fact->id(),
-                'tag'     => $tag,
-                'label'   => $this->factLabel($fact),
+                'id'             => $fact->id(),
+                'tag'            => $tag,
+                'label'          => $this->factLabel($fact),
                 // false: ein Tag, das webtrees nicht kennt (Hersteller-Tag ohne Definition, z. B. Ahnenblatts _INET).
                 // Clients koennen solche Zeilen ausblenden; in webtrees selbst bleiben sie unveraendert erhalten.
-                'known'   => !Registry::elementFactory()->make($fact->tag()) instanceof UnknownElement,
-                'value'   => $this->factValue($fact, $record->tree()),
-                'type'    => $fact->attribute('TYPE'),
-                'date'    => $this->dateJson($fact->date(), $fact->attribute('DATE')),
-                'place'   => $this->placeJson($place, $fact->latitude(), $fact->longitude()),
-                'notes'   => $this->factNotes($fact, $record->tree()),
-                'sources' => $this->factSources($fact, $record->tree()),
+                'known'          => !Registry::elementFactory()->make($fact->tag()) instanceof UnknownElement,
+                'value'          => $this->factValue($fact, $tree),
+                'type'           => $type,
+                // TYPE so, wie webtrees ihn anzeigt (FAM:MARR:TYPE: civil -> "Standesamtliche Heirat"); unbekannte
+                // Werte bleiben roh, ohne TYPE null.
+                'typeLabel'      => $type === '' ? null : $this->plain(Registry::elementFactory()->make($fact->tag() . ':TYPE')->value($type, $tree)),
+                'date'           => $this->dateJson($fact->date(), $fact->attribute('DATE')),
+                'place'          => $this->placeJson($place, $fact->latitude(), $fact->longitude()),
+                'notes'          => $notes,
+                'noteKinds'      => $kinds,
+                'sources'        => $this->factSources($fact, $tree),
+                'associates'     => $this->factAssociates($fact, $tree),
+                'freeAssociates' => $free,
             ];
         }
 
+        if ($record instanceof Individual) {
+            $this->attachLevel1Associates($data);
+        }
+
         return $data;
+    }
+
+    /**
+     * "1 ASSO @I…@" + "2 RELA godparent" an der Person (GEDCOM 5.5.1, alte GenPlus_Win-Exporte): der Pate erscheint
+     * zusaetzlich bei der Taufe (CHR, sonst BAPM) mit level1: true. Der Fakt ASSO selbst bleibt in der Liste stehen -
+     * so, wie ihn aeltere Clients kennen; neuere blenden ihn aus, wenn sie ihn ueber die Taufe zeigen.
+     *
+     * @param array<int,array<string,mixed>> $data
+     */
+    private function attachLevel1Associates(array &$data): void
+    {
+        $target = null;
+
+        foreach (['CHR', 'BAPM'] as $tag) {
+            foreach ($data as $i => $fact) {
+                if ($fact['tag'] === $tag) {
+                    $target = $i;
+                    break 2;
+                }
+            }
+        }
+
+        if ($target === null) {
+            return;
+        }
+
+        foreach ($data as $fact) {
+            if ($fact['tag'] === 'ASSO') {
+                foreach ($fact['associates'] as $associate) {
+                    if ($associate['role'] === 'godparent') {
+                        $data[$target]['associates'][] = $associate;
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Verknuepfte Personen eines Ereignisses (2 _ASSO @I…@ mit 3 RELA, 3 NOTE, 3 SOUR) - Paten, Trauzeugen ... Bei
+     * einem Fakt "1 ASSO" an der Person ist der Fakt selbst die Verknuepfung (ein Eintrag, level1: true).
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private function factAssociates(Fact $fact, Tree $tree): array
+    {
+        if ($this->shortTag($fact->tag()) === 'ASSO') {
+            [, $rest] = array_pad(explode("\n", $fact->gedcom(), 2), 2, '');
+            $entry    = $this->associateJson($fact->value(), $rest === '' ? '' : "\n" . $rest, 1, $tree, true);
+
+            return $entry === null ? [] : [$entry];
+        }
+
+        $data = [];
+
+        foreach (GedcomText::unterzeilen($fact->gedcom(), 2, '_ASSO') as [$wert, $unter]) {
+            $entry = $this->associateJson($wert, $unter, 2, $tree, false);
+
+            if ($entry !== null) {
+                $data[] = $entry;
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * Ein Eintrag fuer associates[]. Datenschutz wie bei verborgenen Kindern: darf der Betrachter die Person nicht
+     * sehen, bleiben nur xref und private: true - kein Name, kein Geschlecht. Darf er nicht einmal den Verweis sehen
+     * (canShowName), faellt der Eintrag ganz weg. Verweise auf fehlende Datensaetze fallen weg.
+     *
+     * @return array<string,mixed>|null
+     */
+    private function associateJson(string $wert, string $unter, int $ebene, Tree $tree, bool $level1): array|null
+    {
+        if (preg_match('/^@([^@]+)@$/', trim($wert), $match) !== 1) {
+            return null;
+        }
+
+        $individual = Registry::individualFactory()->make($match[1], $tree);
+
+        if (!$individual instanceof Individual || !$individual->canShowName()) {
+            return null;
+        }
+
+        $u       = $ebene + 1;
+        $private = !$individual->canShow();
+        $rela    = trim(GedcomText::unterzeilen($unter, $u, 'RELA')[0][0] ?? '');
+        $role    = $this->associateRole($rela);
+
+        return [
+            'xref'    => $match[1],
+            'name'    => $private ? null : $this->plain($individual->fullName()),
+            'sex'     => $private ? null : $individual->sex(),
+            'rela'    => $rela,
+            'role'    => $role,
+            'label'   => $this->associateLabel($rela, $role, $private ? 'U' : $individual->sex()),
+            'private' => $private,
+            'level1'  => $level1,
+            'notes'   => $this->notesFromBlock($unter, $u, $tree),
+            'sources' => $this->sourcesFromBlock($unter, $u, $tree),
+        ];
+    }
+
+    /**
+     * RELA normalisiert, ohne Ruecksicht auf Gross-/Kleinschreibung: godparent, witness oder other.
+     */
+    private function associateRole(string $rela): string
+    {
+        $rela = mb_strtolower(trim($rela));
+
+        if (in_array($rela, ['godparent', 'godfather', 'godmother', 'pate', 'patin', 'taufpate', 'taufpatin', 'gevatter', 'gevatterin'], true)) {
+            return 'godparent';
+        }
+
+        if (in_array($rela, ['witness', 'trauzeuge', 'trauzeugin', 'zeuge', 'zeugin'], true)) {
+            return 'witness';
+        }
+
+        return 'other';
+    }
+
+    /**
+     * Beschriftung wie webtrees (RelationIsDescriptor): "godparent" wird nach dem Geschlecht der verknuepften Person zu
+     * "Pate"/"Patin". Werte, die webtrees nicht kennt (godfather, Gevatter ...), bekommen die Beschriftung ihrer Rolle;
+     * sonst bleibt der Rohwert.
+     */
+    private function associateLabel(string $rela, string $role, string $sex): string
+    {
+        $element = Registry::elementFactory()->make('INDI:*:_ASSO:RELA');
+        $element = $element instanceof RelationIsDescriptor ? $element : new RelationIsDescriptor('');
+        $values  = $element->values($sex) + $element->values('U');
+        $key     = mb_strtolower(trim($rela));
+
+        return $values[$key] ?? ($role === 'other' ? $rela : $values[$role] ?? $rela);
+    }
+
+    /**
+     * Gegenrichtung (ab Stufe 19): bei welchen Ereignissen anderer Personen und Familien diese Person als Pate, Zeuge ...
+     * steht - wie webtrees' IndividualFactsService ueber die Verknuepfungen ASSO und _ASSO. Nur sichtbare Datensaetze
+     * (LinkedRecordService filtert) und sichtbare Fakten (facts()). Ein "1 ASSO" an der Person zaehlt mit: steht er
+     * fuer einen Paten und hat die Person eine Taufe, wird deren Ereignis genannt (level1: true). Nach Datum sortiert.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private function associatedIn(Individual $individual): array
+    {
+        $service = Registry::container()->get(LinkedRecordService::class);
+        $records = new Collection();
+
+        foreach (['ASSO', '_ASSO'] as $type) {
+            $records = $records->merge($service->linkedIndividuals($individual, $type))->merge($service->linkedFamilies($individual, $type));
+        }
+
+        $pointer = '@' . $individual->xref() . '@';
+        $data    = [];
+        $order   = [];
+
+        foreach ($records->unique(static fn (GedcomRecord $record): string => $record->xref()) as $record) {
+            $facts   = $record->facts()->filter(static fn (Fact $fact): bool => !$fact->isPendingDeletion());
+            $baptism = $facts->first(fn (Fact $fact): bool => $this->shortTag($fact->tag()) === 'CHR')
+                ?? $facts->first(fn (Fact $fact): bool => $this->shortTag($fact->tag()) === 'BAPM');
+
+            foreach ($facts as $fact) {
+                $links = [];
+
+                if ($this->shortTag($fact->tag()) === 'ASSO' && trim($fact->value()) === $pointer) {
+                    $links[] = [trim($fact->attribute('RELA')), true];
+                }
+
+                foreach (GedcomText::unterzeilen($fact->gedcom(), 2, '_ASSO') as [$wert, $unter]) {
+                    if (trim($wert) === $pointer) {
+                        $links[] = [trim(GedcomText::unterzeilen($unter, 3, 'RELA')[0][0] ?? ''), false];
+                    }
+                }
+
+                foreach ($links as [$rela, $level1]) {
+                    $role  = $this->associateRole($rela);
+                    $shown = $level1 && $role === 'godparent' && $baptism instanceof Fact ? $baptism : $fact;
+                    $date  = $shown->date();
+
+                    $order[] = $date->isOK() ? $date->minimumJulianDay() : PHP_INT_MAX;
+                    $data[]  = [
+                        'record'     => $record->xref(),
+                        'recordType' => $record instanceof Family ? 'FAM' : 'INDI',
+                        'name'       => $this->plain($record->fullName()),
+                        'tag'        => $this->shortTag($shown->tag()),
+                        'label'      => $this->factLabel($shown),
+                        'factId'     => $shown->id(),
+                        'date'       => $this->dateJson($date),
+                        'place'      => $this->placeJson($shown->place(), null, null),
+                        'rela'       => $rela,
+                        'role'       => $role,
+                        'label2'     => $this->associateLabel($rela, $role, $individual->sex()),
+                        'level1'     => $level1,
+                        'url'        => $record->url(),
+                    ];
+                }
+            }
+        }
+
+        $keys = array_keys($data);
+        usort($keys, static fn (int $a, int $b): int => $order[$a] <=> $order[$b] ?: $a <=> $b);
+
+        return array_map(static fn (int $key): array => $data[$key], $keys);
     }
 
     /**
@@ -452,20 +679,43 @@ trait JsonBuilders
     }
 
     /**
+     * Notizen eines Ereignisses (2 NOTE) samt Einordnung: notes (Texte, wie bisher), noteKinds (parallel dazu:
+     * "note" oder "associates") und freeAssociates aus Notizen "Paten: A, Beruf zu Ort; B, …" (siehe freeAssociates()).
+     *
+     * @return array{0:array<int,string>,1:array<int,string>,2:array<int,array<string,mixed>>}
+     */
+    private function factNotesJson(Fact $fact, Tree $tree): array
+    {
+        $notes = [];
+        $kinds = [];
+        $free  = [];
+
+        foreach ($this->notesFromBlock($fact->gedcom(), 2, $tree) as $text) {
+            $entries = $this->freeAssociates($text);
+            $notes[] = $text;
+            $kinds[] = $entries === null ? 'note' : 'associates';
+            $free    = [...$free, ...$entries ?? []];
+        }
+
+        return [$notes, $kinds, $free];
+    }
+
+    /**
+     * Notizen "<ebene> NOTE" in einem Block: Texte mit Fortsetzungen (CONT = neue Zeile, CONC = angehaengt), Verweise
+     * auf Notiz-Datensaetze aufgeloest - nur sichtbare. Leere fallen weg.
+     *
      * @return array<int,string>
      */
-    private function factNotes(Fact $fact, Tree $tree): array
+    private function notesFromBlock(string $block, int $ebene, Tree $tree): array
     {
-        preg_match_all('/\n2 NOTE ?(.*(?:\n3 CONT ?.*)*)/', $fact->gedcom(), $matches);
-
         $notes = [];
 
-        foreach ($matches[1] as $text) {
-            if (preg_match('/^@(.+)@$/', $text, $match) === 1) {
+        foreach (GedcomText::unterzeilen($block, $ebene, 'NOTE') as [$wert, $unter]) {
+            if (preg_match('/^@([^@]+)@$/', trim($wert), $match) === 1) {
                 $note = Registry::noteFactory()->make($match[1], $tree);
                 $text = $note instanceof Note && $note->canShow() ? $note->getNote() : '';
             } else {
-                $text = (string) preg_replace('/\n3 CONT ?/', "\n", $text);
+                $text = GedcomText::mitFortsetzung($wert, $unter, $ebene);
             }
 
             if (trim($text) !== '') {
@@ -474,6 +724,47 @@ trait JsonBuilders
         }
 
         return $notes;
+    }
+
+    /**
+     * Freie Paten und Trauzeugen - Personen ohne eigenen Datensatz - aus einer Notiz, die mit "Paten:", "Taufpaten:",
+     * "Gevattern:", "Trauzeugen:" oder "Zeugen:" beginnt (Gross-/Kleinschreibung egal). Personen trennt ";", name ist
+     * der Text bis zum ersten Komma, detail der Rest. Alte Schreibweise nur mit Kommas: ein Eintrag mit name null und
+     * dem ganzen Text - nicht raten. null, wenn die Notiz keine solche Liste ist.
+     *
+     * @return array<int,array<string,mixed>>|null
+     */
+    private function freeAssociates(string $text): array|null
+    {
+        if (preg_match('/^(paten|taufpaten|gevattern|trauzeugen|zeugen):\s*(.*)$/isu', trim($text), $match) !== 1) {
+            return null;
+        }
+
+        $role = in_array(mb_strtolower($match[1]), ['trauzeugen', 'zeugen'], true) ? 'witness' : 'godparent';
+        $rest = GedcomText::line($match[2]);
+
+        if ($rest === '') {
+            return [];
+        }
+
+        if (!str_contains($rest, ';')) {
+            return [['role' => $role, 'name' => null, 'detail' => null, 'text' => $rest]];
+        }
+
+        $entries = [];
+
+        foreach (explode(';', $rest) as $teil) {
+            $teil = trim($teil);
+
+            if ($teil === '') {
+                continue;
+            }
+
+            [$name, $detail] = array_pad(array_map(trim(...), explode(',', $teil, 2)), 2, null);
+            $entries[]       = ['role' => $role, 'name' => $name, 'detail' => $detail, 'text' => $teil];
+        }
+
+        return $entries;
     }
 
     /**
@@ -536,10 +827,20 @@ trait JsonBuilders
             return $citation === null ? [] : [$citation];
         }
 
+        return $this->sourcesFromBlock($fact->gedcom(), 2, $tree);
+    }
+
+    /**
+     * Quellenverweise "<ebene> SOUR" in einem Block (Ereignis, _ASSO ...), nur sichtbare Quellen.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private function sourcesFromBlock(string $block, int $ebene, Tree $tree): array
+    {
         $sources = [];
 
-        foreach (GedcomText::unterzeilen($fact->gedcom(), 2, 'SOUR') as [$wert, $unter]) {
-            $citation = $this->citationJson($wert, $unter, 2, $tree);
+        foreach (GedcomText::unterzeilen($block, $ebene, 'SOUR') as [$wert, $unter]) {
+            $citation = $this->citationJson($wert, $unter, $ebene, $tree);
 
             if ($citation !== null) {
                 $sources[] = $citation;
@@ -587,18 +888,7 @@ trait JsonBuilders
                 GedcomText::unterzeilen($unter, $u, 'TEXT'))];
         }
 
-        $notes = [];
-        foreach (GedcomText::unterzeilen($unter, $u, 'NOTE') as [$n, $n_unter]) {
-            if (preg_match('/^@([^@]+)@$/', trim($n), $nm) === 1) {
-                $note = Registry::noteFactory()->make($nm[1], $tree);
-                $text = $note instanceof Note && $note->canShow() ? $note->getNote() : '';
-            } else {
-                $text = GedcomText::mitFortsetzung($n, $n_unter, $u);
-            }
-            if (trim($text) !== '') {
-                $notes[] = $text;
-            }
-        }
+        $notes = $this->notesFromBlock($unter, $u, $tree);
 
         $media = [];
         foreach (GedcomText::unterzeilen($unter, $u, 'OBJE') as [$o]) {

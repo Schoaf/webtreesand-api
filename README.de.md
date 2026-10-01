@@ -138,10 +138,13 @@ einen Baums die Dateien des anderen und können sie verknüpfen.
 Vollständige Beschreibung aller Routen, Antwortschemas und Leistungszahlen (englisch): **[docs/API.md](docs/API.md)** (maschinenlesbar: [docs/openapi.json](docs/openapi.json), aus echten Antworten erzeugt und von den Tests geprüft).
 
 Die vollständige Beschreibung der Schnittstelle (Adressen, Anmeldung, alle Aktionen, Fehlercodes)
-steht in der [englischen README](README.md#for-developers).
+steht in der [englischen README](README.md#for-developers). Was je Fassung dazukam, steht im [CHANGELOG](CHANGELOG.md);
+zuletzt (1.11.0, Stufe 19): Paten und Trauzeugen lesen – je Ereignis `associates` (verknüpfte Personen aus `_ASSO`
+und `1 ASSO`), `freeAssociates` (aus Notizen „Paten: …“), `noteKinds`, `typeLabel` (Heiratsart übersetzt) und an der
+Person `associatedIn` (wo sie Pate oder Zeuge ist). Entwurf dazu: [docs/spec-paten-quellen.md](docs/spec-paten-quellen.md).
 
 **Kompatibilität:** Die Schnittstelle wächst nur. Jedes Release mit neuen Routen oder Feldern erhöht die **API-Stufe**
-(`apiVersion` in `Info`, heute 18); bestehende Routen, Parameter und Felder behalten Name, Typ und Bedeutung. Ein Client
+(`apiVersion` in `Info`, heute 19); bestehende Routen, Parameter und Felder behalten Name, Typ und Bedeutung. Ein Client
 für Stufe N läuft mit jedem Modul ab Stufe N, und ein älterer Client läuft mit einem neueren Modul weiter, er sieht die
 neuen Felder nur nicht. Die Tests prüfen jede Antwort gegen das dokumentierte Schema, ein Feld kann also nicht unbemerkt
 verschwinden. Müsste sich je etwas unverträglich ändern, wäre es eine neue Route, nie eine geänderte.

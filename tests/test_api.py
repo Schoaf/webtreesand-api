@@ -127,6 +127,104 @@ class Lecktest(unittest.TestCase):
         self.assertEqual(["testbaum"], [t["name"] for t in info["trees"]])
 
 
+class Paten(unittest.TestCase):
+    """Stufe 19: Paten und Trauzeugen lesen (docs/spec-paten-quellen.md, Abschnitt 1, 3, 5, 6)."""
+
+    def fakt(self, benutzer, xref, tag, art="Individual"):
+        fakten = U.sitzung(benutzer).get(art, "testbaum", xref=xref).json["facts"]
+        return next(f for f in fakten if f["tag"] == tag)
+
+    def test_verlinkte_paten_mit_notiz_und_quelle(self):
+        taufe = self.fakt("verwalter", "I1", "CHR")
+        paten = {a["xref"]: a for a in taufe["associates"]}
+        self.assertEqual(["I2", "I3", "I5", "I4"], list(paten), "drei 2 _ASSO, dann der 1 ASSO der Person (level1)")
+        anna = paten["I2"]
+        self.assertEqual(("Anna Offen", "F", "godparent", "godparent", False, False), (anna["name"], anna["sex"], anna["rela"], anna["role"], anna["private"], anna["level1"]))
+        self.assertIn(anna["label"], ("Patin", "Godmother"), "Beschriftung nach dem Geschlecht der verknuepften Person")
+        self.assertEqual(["Schwester der Mutter"], anna["notes"])
+        self.assertEqual(("S1", "Taufen 1800, Nr. 4"), (anna["sources"][0]["xref"], anna["sources"][0]["page"]))
+        # Gross-/Kleinschreibung und aeltere Werte: Godparent, godfather -> role godparent, rela bleibt roh
+        self.assertEqual(("Godparent", "godparent"), (paten["I3"]["rela"], paten["I3"]["role"]))
+        self.assertEqual(("godfather", "godparent"), (paten["I5"]["rela"], paten["I5"]["role"]))
+        self.assertIn(paten["I5"]["label"], ("Pate", "Godfather"))
+        # 1 ASSO an der Person: in der Taufe mit level1, der Fakt ASSO bleibt daneben stehen (aeltere Clients)
+        self.assertEqual(("Godfather", "godparent", True), (paten["I4"]["rela"], paten["I4"]["role"], paten["I4"]["level1"]))
+        asso = self.fakt("verwalter", "I1", "ASSO")
+        self.assertEqual(["I4"], [a["xref"] for a in asso["associates"]])
+        self.assertTrue(asso["associates"][0]["level1"])
+        # Taufen-Datum und -Ort bleiben wie bisher
+        self.assertEqual(1800, taufe["date"]["year"])
+
+    def test_asso_ohne_taufe_bleibt_eigener_fakt(self):
+        asso = self.fakt("verwalter", "I2", "ASSO")
+        a = asso["associates"][0]
+        self.assertEqual(("I1", "friend", "other", True), (a["xref"], a["rela"], a["role"], a["level1"]))
+        self.assertIn(a["label"], ("Freund", "Friend"))
+
+    def test_freie_paten_neu_und_alt(self):
+        taufe = self.fakt("verwalter", "I1", "CHR")
+        self.assertEqual(["associates", "note"], taufe["noteKinds"])
+        self.assertEqual(2, len(taufe["notes"]), "die Patennotiz bleibt in notes")
+        self.assertEqual([("godparent", "Friedrich Plate", "Anbauer zu Celle", "Friedrich Plate, Anbauer zu Celle"),
+                          ("godparent", "Marie Offen", "Witwe", "Marie Offen, Witwe")],
+                         [(p["role"], p["name"], p["detail"], p["text"]) for p in taufe["freeAssociates"]])
+        heirat = self.fakt("verwalter", "F1", "MARR", "Family")
+        self.assertEqual([("witness", None, None, "Hans Müller, Bauer, Offenbach")],
+                         [(p["role"], p["name"], p["detail"], p["text"]) for p in heirat["freeAssociates"]], "alte Form ohne ';': nicht raten")
+
+    def test_heiratsart_und_trauzeuge(self):
+        heirat = self.fakt("verwalter", "F1", "MARR", "Family")
+        self.assertEqual("CIVIL", heirat["type"], "type wie bisher: webtrees' kanonische Form (Fact::attribute)")
+        self.assertIn(heirat["typeLabel"], ("Standesamtliche Heirat", "Civil marriage"))
+        zeuge = heirat["associates"][0]
+        self.assertEqual(("I4", "witness", "witness"), (zeuge["xref"], zeuge["rela"], zeuge["role"]))
+        self.assertIn(zeuge["label"], ("Zeuge", "Witness"))
+        self.assertIsNone(self.fakt("verwalter", "I1", "BIRT")["typeLabel"])
+
+    def test_cont_und_conc(self):
+        # Beim Import fuegt webtrees CONC schon zusammen ...
+        heirat = self.fakt("verwalter", "F1", "MARR", "Family")
+        self.assertIn("Trauung in der Stadtkirche\nzweite Zeile", heirat["notes"])
+        # ... eine ausstehende Aenderung mit CONC liest die API selbst richtig (Bearbeiter sehen ihre eigenen)
+        s = U.sitzung("bearbeiter")
+        a = s.post("Fact", "testbaum", {"gedcom": "1 EVEN\n2 TYPE Conctest\n2 NOTE Erste Zei\n3 CONC le\n3 CONT zweite Zeile"}, xref="I4")
+        self.assertEqual(True, a.json["ok"], a)
+        even = next(f for f in s.get("Individual", "testbaum", xref="I4").json["facts"] if f.get("type") == "Conctest")
+        self.assertEqual(["Erste Zeile\nzweite Zeile"], even["notes"])
+        self.assertEqual("Conctest", even["typeLabel"])
+
+    def test_gegenrichtung(self):
+        wo = U.sitzung("verwalter").get("Individual", "testbaum", xref="I1").json["associatedIn"]
+        self.assertEqual([("I5", "INDI", "CHR", "godparent", False), ("I3", "INDI", "CHR", "godparent", False), ("I2", "INDI", "ASSO", "other", True)],
+                         [(e["record"], e["recordType"], e["tag"], e["role"], e["level1"]) for e in wo], "nach Datum, ohne Datum zuletzt")
+        self.assertEqual(("godmother", 1990), (wo[1]["rela"], wo[1]["date"]["year"]))
+        self.assertIn(wo[0]["label2"], ("Pate", "Godfather"), "godparent: Beschriftung nach dem Geschlecht des Paten selbst")
+        self.assertIn(wo[1]["label2"], ("Patin", "Godmother"), "godmother: webtrees kennt den Wert, er bleibt wie er ist")
+        # Karl: Pate ueber 1 ASSO (-> die Taufe von I1) und Trauzeuge der Eltern (Familie)
+        wo = U.sitzung("verwalter").get("Individual", "testbaum", xref="I4").json["associatedIn"]
+        self.assertEqual([("I1", "INDI", "CHR", True, 1800), ("F1", "FAM", "MARR", False, 1828)],
+                         [(e["record"], e["recordType"], e["tag"], e["level1"], e["date"]["year"]) for e in wo])
+        self.assertIn("Theodor", wo[0]["name"])
+        self.assertIn("Anna", wo[1]["name"])
+
+    def test_datenschutz_paten(self):
+        # Gast: lebender und vertraulicher Pate ganz weg (webtrees zeigt Gaesten nicht einmal den Namen -
+        # SHOW_LIVING_NAMES steht auf "Mitglieder"); Gegenrichtung ohne verborgene Datensaetze
+        taufe = self.fakt(None, "I1", "CHR")
+        self.assertEqual(["I2", "I4"], [a["xref"] for a in taufe["associates"]])
+        self.assertEqual([False, False], [a["private"] for a in taufe["associates"]])
+        wo = U.sitzung().get("Individual", "testbaum", xref="I1").json["associatedIn"]
+        self.assertEqual(["I2"], [e["record"] for e in wo])
+        # Mitglied: sieht Lebende, den Vertraulichen nur als Verweis ohne Namen
+        taufe = self.fakt("mitglied", "I1", "CHR")
+        paten = {a["xref"]: a for a in taufe["associates"]}
+        self.assertEqual(["I2", "I3", "I5", "I4"], list(paten))
+        self.assertEqual("Lebhart Markerlebend", paten["I3"]["name"])
+        self.assertEqual((None, None, True), (paten["I5"]["name"], paten["I5"]["sex"], paten["I5"]["private"]))
+        wo = U.sitzung("mitglied").get("Individual", "testbaum", xref="I1").json["associatedIn"]
+        self.assertEqual(["I3", "I2"], [e["record"] for e in wo])
+
+
 class Schreiben(unittest.TestCase):
     def fakten(self, s, xref):
         return s.get("Individual", "testbaum", xref=xref).json["facts"]
@@ -217,7 +315,7 @@ class Schreiben(unittest.TestCase):
         einzeln = s.get("Source", "testbaum", xref="S1").json
         self.assertEqual("Taufen, Trauungen, Begräbnisse", einzeln["text"])
         self.assertEqual(["Digitalisat im Archiv"], einzeln["notes"])
-        self.assertEqual({("I1", ("Geburt",)), ("I2", ("Tod",))}, {(p["xref"], tuple(p["facts"])) for p in einzeln["individuals"]})
+        self.assertEqual({("I1", ("Geburt", "Kindstaufe")), ("I2", ("Tod",))}, {(p["xref"], tuple(p["facts"])) for p in einzeln["individuals"]})
         self.assertEqual("private", s.get("Source", "testbaum", xref="S2").json["error"])
         verwalter = U.sitzung("verwalter").get("Sources", "testbaum").json
         self.assertEqual(["Kirchenbuch Offenbach", "Markerkonfidenz-Quelle"], [x["title"] for x in verwalter["sources"]])

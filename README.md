@@ -175,7 +175,7 @@ file's path inside the tree's media folder, for naming the same file to another 
 ### Compatibility
 
 The interface only grows. Every release that adds routes or fields raises the **API level** (`apiVersion` in `Info`,
-18 today); existing routes, parameters and fields keep their names, types and meaning. A client built for level N works
+19 today); existing routes, parameters and fields keep their names, types and meaning. A client built for level N works
 with every module from level N on, and an older client keeps working with a newer module – it simply does not see
 the new fields. New fields are optional, so clients should ignore what they do not know. The tests check every answer
 against the documented schema, so a field cannot disappear unnoticed. Where a limit is raised (generations, page
@@ -208,11 +208,23 @@ Every person in an answer comes as the same short form: `xref`, `name`, `sortNam
 `BAPM`), `buri` (burial, `BURI` or else `CREM`) – both like `birth` – and `occupation` (the first `OCCU`, or `null`).
 For people the user may not see, all of these stay empty.
 
+Every fact (`facts[]` in `Individual`, `Family`, `Export`) carries `id`, `tag`, `label`, `known`, `value`, `type`,
+`date`, `place`, `notes` (strings) and `sources` (citations, complete from level 18). **Level 19 adds, per fact:**
+`typeLabel` (the `TYPE` as webtrees shows it, e.g. `CIVIL` → “Civil marriage” for `MARR`; `null` without a type),
+`noteKinds` (parallel to `notes`: `note` or `associates`), `associates` (people linked with `2 _ASSO`: godparents,
+witnesses … – `xref`, `name`, `sex`, `rela` as in the file, `role` normalised to `godparent`, `witness` or `other`,
+`label` as webtrees shows it by the linked person's sex, `private`, `level1`, `notes`, `sources`) and
+`freeAssociates` (people without a record, from notes beginning with `Paten:`, `Taufpaten:`, `Gevattern:`,
+`Trauzeugen:` or `Zeugen:` – separated by `;`, `name` up to the first comma, `detail` the rest; the older form with
+commas only gives a single entry with `name: null` and the whole `text`). A `1 ASSO` on the person stays a fact `ASSO`
+as before and, for a godparent, is added to the christening's `associates` with `level1: true`. A linked person the
+user may not see comes with `private: true` and no name; one whose name they may not see is left out.
+
 | Action | Tree | Parameters | Content |
 | - | - | - | - |
 | `Info` | – | – | versions, `api` level, user, visible trees with role, rights, number of individuals and (for moderators) of records with pending changes, `maxUpload` in bytes, CSRF token, `trees[].lastChange` (number of the latest change in the tree: a different value than last time means “reload”; compare for equality only, a new GEDCOM import resets it) |
 | `Individuals` | yes | `q`, `page`, `scope?` | people by sort name, 50 per page, `nextPage`. `q` searches names; with `scope=all` every word must appear somewhere in the person's visible facts (`Huber Wien` finds the Hubers with Wien as birth place, residence …); error `too-many-results` when webtrees refuses the search |
-| `Individual` | yes | `xref`, `relativeTo?` | person, facts (`known: false` marks vendor tags webtrees has no definition for), parent and spouse families, `stepFamilies` (the parents' families with other partners, i.e. half-siblings; `parent` names the shared parent), media, `relationship` to `relativeTo` (default: the user's own record), e.g. “great-grandmother”. Each fact date carries `gedcom` (`"ABT 1850"`) next to the display `text`, for pre-filling an edit form; each media entry carries `factId` and `primary` (the photo webtrees shows for the person). The person and everyone in these families carry `hasParents`, `partnersCount`, `childrenCount` |
+| `Individual` | yes | `xref`, `relativeTo?` | person, facts (`known: false` marks vendor tags webtrees has no definition for), parent and spouse families, `stepFamilies` (the parents' families with other partners, i.e. half-siblings; `parent` names the shared parent), media, `relationship` to `relativeTo` (default: the user's own record), e.g. “great-grandmother”. Each fact date carries `gedcom` (`"ABT 1850"`) next to the display `text`, for pre-filling an edit form; each media entry carries `factId` and `primary` (the photo webtrees shows for the person). The person and everyone in these families carry `hasParents`, `partnersCount`, `childrenCount`. Level 19: `associatedIn` – where this person is a godparent, witness … (the other person's or family's event with `record`, `recordType`, `name`, `tag`, `label`, `factId`, `date`, `place`, `rela`, `role`, `label2`, `level1`, `url`; only visible records and facts, sorted by date) |
 | `Family` | yes | `xref` | family with facts, children, media |
 | `Pedigree` | yes | `xref`, `generations` (1–12, before 1.9.0: 1–7), `siblings?` | ancestors with ahnentafel number `n`; `hasParents` tells a client that the branch can be expanded further. With `siblings=1` (level 15) each ancestor carries `siblings`: the other children of the parents' family shown above it (no half-siblings), as short persons |
 | `Descendants` | yes | `xref`, `generations` (1–10, before 1.8.0: 1–4) | descendants as a tree |
