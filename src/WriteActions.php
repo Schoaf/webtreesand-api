@@ -162,7 +162,7 @@ trait WriteActions
      *   passt - die bisherige Schreibweise von RELA ("Godfather"); note ersetzt nur die eingebettete Notiz, wenn genannt.
      *   Verknuepfungen zu Personen, die der Schreibende nicht einmal als Verweis sehen darf, bleiben immer stehen.
      * - free ersetzt die Personen ohne Datensatz: "2 _GODP <Text>" (Paten) und "2 _WITN <Text>" (Zeugen), je Person
-     *   eine Zeile wie Ahnenblatt; alte Notizen "Paten: …"/"Trauzeugen: …" am Ereignis gehen dabei in diese Form ueber.
+     *   eine Zeile (GEDCOM-L); alte Notizen "Paten: …"/"Trauzeugen: …" am Ereignis gehen dabei in diese Form ueber.
      * - convertLevel1: true verschiebt "1 ASSO" der Person, die in linked stehen, in die Taufe (nur CHR/BAPM einer Person);
      *   ihre Unterzeilen (Notiz, Quelle) kommen mit.
      * Nicht genannte Teile (linked oder free) bleiben, wie sie sind. Antwort: factId (die neue Kennung des Ereignisses).

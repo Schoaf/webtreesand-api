@@ -7,7 +7,7 @@
   godparent`/`witness`; `other` with a free `rela`). An individual already linked keeps its sub-lines (`3 SOUR` …) and
   its RELA spelling (“Godfather”) when the role matches; `note` replaces only its embedded note. Links to individuals
   the writer may not even see as a reference are always kept. `free` replaces the people without a record, one line
-  each as `2 _GODP` (godparents) or `2 _WITN` (witnesses) – the form Ahnenblatt writes; notes “Paten: …” /
+  each as `2 _GODP` (godparents) or `2 _WITN` (witnesses) – the GEDCOM-L form; notes “Paten: …” /
   “Trauzeugen: …” on the fact are converted into it, other notes stay. `convertLevel1: true` moves the person's
   `1 ASSO` for individuals in `linked` into the baptism, with their note and source. Parts not named stay untouched.
   Answer: the new `factId`. Moderation and change log as for `POST Fact`.
@@ -27,11 +27,11 @@ fields (spec: `docs/spec-paten-quellen.md`, read side).
   `godparent` for godparent/godfather/godmother/Pate/Patin/Taufpate/Gevatter, `witness` for witness/Trauzeuge/Zeuge,
   else `other`), `label` as webtrees shows it (`RelationIsDescriptor` by the linked person's sex: “Pate”/“Patin”),
   `private`, `level1`, and the association's own `notes` and `sources` (same form as on facts).
-- A `1 ASSO` on the person (GEDCOM 5.5.1, older GenPlus exports) stays a fact `ASSO` as before – now with
+- A `1 ASSO` on the person (GEDCOM 5.5.1, older exports) stays a fact `ASSO` as before – now with
   `associates` so that `RELA` is no longer lost – and, when it names a godparent and the person has a christening
   (`CHR`, else `BAPM`), is added to that christening's `associates` with `level1: true`. Nothing is rewritten.
-- `freeAssociates[]`: people without a record. First from Ahnenblatt's own tags `2 _GODP <text>` under `CHR`/`BAPM`
-  (godparents) and `2 _WITN <text>` under `MARR` (witnesses; GEDCOM-L, webtrees knows both): Ahnenblatt writes one
+- `freeAssociates[]`: people without a record. First from the GEDCOM-L tags `2 _GODP <text>` under `CHR`/`BAPM`
+  (godparents) and `2 _WITN <text>` under `MARR` (witnesses; GEDCOM-L, webtrees knows both), one
   person per line (“Friedrich Plate, Anbauer zu Celle”), so each line is one entry with `name` up to the first comma
   and `detail` the rest – a line with `;` is a list like a note. Then from fact notes beginning with `Paten:`,
   `Taufpaten:`, `Gevattern:`, `Trauzeugen:` or `Zeugen:` (any case) – entries separated by `;`, `name` up to the first
@@ -169,7 +169,7 @@ can tell exactly which of them a server has.
   `family`), the relationship `name` as webtrees words it and the `commonAncestors` at the top of the path. With
   pedigree collapse there are several paths of the same length. Privacy as in the chart; new error `chart-disabled`.
 - **Level 14 – `call`, `chr`, `buri`, `occupation`** on every person: the call name (given name marked with `*`, or
-  `_RUFNAME` as written by Ahnenblatt and GEDCOM-L), christening (`CHR`, else `BAPM`) and burial (`BURI`, else
+  `_RUFNAME` as in GEDCOM-L), christening (`CHR`, else `BAPM`) and burial (`BURI`, else
   `CREM`) with date and place like `birth`/`death`, and the first occupation. For charts and lists that show more
   than birth and death without fetching each person.
 - **Level 15 – `Pedigree?siblings=1`**: each ancestor carries `siblings`, the other children of the family its parents

@@ -132,7 +132,7 @@ trait JsonBuilders
     }
 
     /**
-     * Rufname: der mit * markierte Vorname ("Johann Heinrich*") oder, wie Ahnenblatt und GEDCOM-L ihn schreiben,
+     * Rufname: der mit * markierte Vorname ("Johann Heinrich*") oder, wie GEDCOM-L ihn schreibt,
      * 2 _RUFNAME unter dem ersten Namen. '' wenn keiner angegeben ist.
      */
     private function callName(Individual $individual, string $full_name): string
@@ -276,7 +276,7 @@ trait JsonBuilders
                 'id'             => $fact->id(),
                 'tag'            => $tag,
                 'label'          => $this->factLabel($fact),
-                // false: ein Tag, das webtrees nicht kennt (Hersteller-Tag ohne Definition, z. B. Ahnenblatts _INET).
+                // false: ein Tag, das webtrees nicht kennt (Hersteller-Tag ohne Definition, z. B. _INET).
                 // Clients koennen solche Zeilen ausblenden; in webtrees selbst bleiben sie unveraendert erhalten.
                 'known'          => !Registry::elementFactory()->make($fact->tag()) instanceof UnknownElement,
                 'value'          => $this->factValue($fact, $tree),
@@ -302,7 +302,7 @@ trait JsonBuilders
     }
 
     /**
-     * "1 ASSO @I…@" + "2 RELA godparent" an der Person (GEDCOM 5.5.1, alte GenPlus_Win-Exporte): der Pate erscheint
+     * "1 ASSO @I…@" + "2 RELA godparent" an der Person (GEDCOM 5.5.1, ältere Exporte): der Pate erscheint
      * zusaetzlich bei der Taufe (CHR, sonst BAPM) mit level1: true. Der Fakt ASSO selbst bleibt in der Liste stehen -
      * so, wie ihn aeltere Clients kennen; neuere blenden ihn aus, wenn sie ihn ueber die Taufe zeigen.
      *
@@ -688,8 +688,8 @@ trait JsonBuilders
 
     /**
      * Notizen eines Ereignisses (2 NOTE) samt Einordnung: notes (Texte, wie bisher), noteKinds (parallel dazu:
-     * "note" oder "associates") und freeAssociates - zuerst aus Ahnenblatts eigenen Tags "2 _GODP <Text>" (Paten, unter
-     * CHR/BAPM) und "2 _WITN <Text>" (Zeugen; GEDCOM-L, webtrees kennt sie). Ahnenblatt schreibt je Person eine Zeile
+     * "note" oder "associates") und freeAssociates - zuerst aus den GEDCOM-L-Tags "2 _GODP <Text>" (Paten, unter
+     * CHR/BAPM) und "2 _WITN <Text>" (Zeugen; GEDCOM-L, webtrees kennt sie), je Person eine Zeile
      * ("Friedrich Plate, Anbauer zu Celle"): name bis zum ersten Komma, detail der Rest; eine Zeile mit ";" zaehlt wie
      * eine Notiz "Paten: …" als Liste. Danach die Eintraege aus solchen Notizen (siehe freeAssociates()).
      *
