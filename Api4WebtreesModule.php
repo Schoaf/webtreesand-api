@@ -95,7 +95,9 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     //     ihren Ereignissen dort, Unterorte, _LOC mit GOV, Koordinaten, Notizen, Quellen, Medien)
     // 22: Orte schreiben - POST Place (GOV-Kennung, Koordinaten, Notiz in den _LOC; legt ihn an, Verweise bei
     //     mehrdeutigem Blattnamen; mapData: auch in die Geografischen Daten, nur Administratoren)
-    public const int    API_VERSION = 22;
+    // 23: Orte umbenennen und zusammenfuehren - POST PlaceRename (mit Vorschau; Orte darunter wandern mit, _LOC werden
+    //     zusammengelegt)
+    public const int    API_VERSION = 23;
 
     /** Benutzereinstellung je Baum: die Merkliste als Liste von Personenkennungen. */
     private const string BOOKMARKS_PREF = 'api4webtrees_bookmarks';

@@ -246,7 +246,7 @@ class Orte(unittest.TestCase):
         orte = {o["name"]: o for o in U.sitzung("verwalter").get("Places", "testbaum", list=1).json["places"]}
         self.assertEqual(["Bieber, Gelnhausen", "Bieber, Offenbach", "Markerkonfidenzort", "Markerlebendort", "Offenbach"], sorted(orte))
         off = orte["Offenbach"]
-        self.assertEqual((2, 1, 0, "L1", "OFFACHJO40BC", "location"), (off["events"], off["individuals"], off["families"], off["location"], off["gov"], off["coordSource"]))
+        self.assertEqual((3, 2, 0, "L1", "OFFACHJO40BC", "location"), (off["events"], off["individuals"], off["families"], off["location"], off["gov"], off["coordSource"]))
         self.assertAlmostEqual(50.1, off["lat"])
         self.assertIsNone(orte["Bieber, Offenbach"]["location"], "Blattname Bieber hat keinen _LOC")
         self.assertEqual("L2", orte["Markerkonfidenzort"]["location"], "Blattname eindeutig: _LOC gefunden")
@@ -255,11 +255,11 @@ class Orte(unittest.TestCase):
 
     def test_ein_ort(self):
         o = U.sitzung("verwalter").get("Place", "testbaum", name="offenbach").json
-        self.assertEqual(("Offenbach", ["Offenbach"], None, 2), (o["name"], o["levels"], o["parent"], o["events"]))
+        self.assertEqual(("Offenbach", ["Offenbach"], None, 3), (o["name"], o["levels"], o["parent"], o["events"]))
         self.assertEqual([{"name": "Bieber, Offenbach"}], o["children"])
-        self.assertEqual(["I1"], [p["xref"] for p in o["individuals"]])
-        self.assertEqual(["BIRT", "CHR"], [f["tag"] for f in o["individuals"][0]["facts"]])
-        self.assertEqual(1800, o["individuals"][0]["facts"][0]["date"]["year"])
+        self.assertEqual(["I2", "I1"], [p["xref"] for p in o["individuals"]], "nach Namen: Anna vor Theodor")
+        self.assertEqual(["BIRT", "CHR"], [f["tag"] for f in o["individuals"][1]["facts"]])
+        self.assertEqual(1800, o["individuals"][1]["facts"][0]["date"]["year"])
         loc = o["location"]
         self.assertEqual(("L1", "Offenbach", "OFFACHJO40BC", ["Stadt am Main"]), (loc["xref"], loc["name"], loc["gov"], loc["notes"]))
         self.assertEqual([("S1", "Ortsbeschreibung")], [(q["xref"], q["page"]) for q in loc["sources"]])
@@ -312,6 +312,41 @@ class Orte(unittest.TestCase):
         self.assertEqual("invalid-gov", s.post("Place", "testbaum", {"name": "Offenbach", "gov": "a b"}).json["error"])
         self.assertEqual("not-found", b.post("Place", "testbaum", {"name": "Markerkonfidenzort", "gov": "X"}).json["error"])
 
+    def test_zzz_umbenennen_und_zusammenfuehren(self):
+        """Stufe 23: POST PlaceRename - nach dem Schreibtest, weil es den Testbaum aendert."""
+        s = U.sitzung("admin")
+        # Vorschau: Offenbach -> Offenbach am Main, mit dem Ort darunter; aendert nichts
+        v = s.post("PlaceRename", "testbaum", {"from": "Offenbach", "to": "Offenbach am Main", "preview": True}).json
+        self.assertEqual((True, False, 3, 4, 1, 0, "L1"), (v["preview"], v["merge"], v["records"], v["events"], v["subPlaces"], v["skipped"], v["location"]["from"]), v)
+        self.assertEqual(True, s.get("Place", "testbaum", name="Offenbach").json.get("ok", True))
+        # Ausfuehren
+        a = s.post("PlaceRename", "testbaum", {"from": "Offenbach", "to": "Offenbach am Main"}).json
+        self.assertEqual((True, False, 4), (a["ok"], a["preview"], a["events"]), a)
+        self.assertEqual("not-found", s.get("Place", "testbaum", name="Offenbach").json["error"])
+        o = s.get("Place", "testbaum", name="Offenbach am Main").json
+        self.assertEqual(("L1", "Offenbach am Main", 3), (o["location"]["xref"], o["location"]["name"], o["events"]))
+        self.assertEqual(["Bieber, Offenbach am Main"], [c["name"] for c in o["children"]])
+        ged = umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = 'I1'")[0][0]
+        self.assertEqual(2, ged.count("2 PLAC Offenbach am Main\n3 _LOC @L1@"), "Geburt und Taufe zeigen auf den _LOC")
+        # Bearbeiter: das gesperrte Ereignis (RESI von I2) bleibt
+        v = U.sitzung("bearbeiter").post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": "Offenbach a. M.", "preview": True}).json
+        self.assertEqual((3, 1), (v["events"], v["skipped"]), v)
+        # Zusammenfuehren: Bieber unter Offenbach am Main -> Bieber, Gelnhausen (beide mit _LOC, GOV weicht ab)
+        von = s.get("Place", "testbaum", name="Bieber, Offenbach am Main").json["location"]["xref"]
+        nach = s.get("Place", "testbaum", name="Bieber, Gelnhausen").json["location"]["xref"]
+        v = s.post("PlaceRename", "testbaum", {"from": "Bieber, Offenbach am Main", "to": "Bieber, Gelnhausen", "preview": True}).json
+        self.assertEqual((True, von, nach, ["gov"]), (v["merge"], v["location"]["from"], v["location"]["to"], v["location"]["conflicts"]), v)
+        a = s.post("PlaceRename", "testbaum", {"from": "Bieber, Offenbach am Main", "to": "Bieber, Gelnhausen"}).json
+        self.assertEqual(True, a["ok"], a)
+        b = s.get("Place", "testbaum", name="Bieber, Gelnhausen").json
+        self.assertEqual((nach, ["I4"], ["F2"]), (b["location"]["xref"], [p["xref"] for p in b["individuals"]], [f["xref"] for f in b["families"]]))
+        self.assertIn("Dorf im Kinzigtal", b["location"]["notes"], "Notiz des Ziels bleibt")
+        self.assertEqual([], umgebung.sql("SELECT o_id FROM wt_other WHERE o_id = ?", von), "der alte _LOC ist weg")
+        self.assertIn("3 _LOC @" + nach + "@", umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = 'I4'")[0][0])
+        # Fehler und Rechte
+        self.assertEqual("not-editable", U.sitzung("mitglied").post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": "X"}).json["error"])
+        self.assertEqual("not-found", U.sitzung("bearbeiter").post("PlaceRename", "testbaum", {"from": "Markerkonfidenzort", "to": "X"}).json["error"])
+        self.assertEqual("name-missing", s.post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": " , "}).json["error"])
 
 class Schreiben(unittest.TestCase):
     def fakten(self, s, xref):

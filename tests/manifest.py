@@ -96,6 +96,14 @@ ROUTEN = [
      "webtrees' geographic data (site administrators only) – webtrees' own maps read only those and `MAP` at the events.",
      [], "`{name, gov?, lat?, lng?, note?, mapData?}` – `lat`/`lng` together, `null` removes the coordinates. "
      "Answer: `{ok, xref, pending, linked, mapData}`, status 201 when the `_LOC` was created."),
+    ("post", "PlaceRename", True, 23, "editor",
+     "Rename a place or merge it into another. Every event at `from` gets `to`; places below move along "
+     "(`Kortau, Allenstein` → `Kortau, Olsztyn`). If `to` already exists it is a merge: the two `_LOC` records become one "
+     "(gaps filled, notes, sources and media appended, differing GOV identifier or coordinates reported in `conflicts`) "
+     "and the `3 _LOC` pointers point to it. Events the user may not edit (locked, confidential) stay and are counted in "
+     "`skipped`. With `preview: true` nothing changes. Without automatic acceptance the changes are pending as usual.",
+     [], "`{from, to, preview?}`. Answer: `{ok, preview, from, to, merge, records, events, subPlaces, skipped, "
+     "location: {from, to, conflicts}, pending?}`."),
     ("post", "Fact", True, 1, "editor",
      "Add or change a fact or event. Unmentioned sub-lines (sources, media …) are kept when changing.",
      [XREF], "`{factId?, tag, value?, date?, place?, note?, type?}` or `{factId?, gedcom: \"1 BIRT\\n2 DATE …\"}`. "
@@ -269,6 +277,7 @@ def sammeln(u):
     merken("post", "Source", quelle)
     merken("post", "Source", admin.post("Source", "testbaum", {"publication": "Manifeststadt, 1900"}, xref=quelle.json["xref"]))
     merken("post", "Place", admin.post("Place", "testbaum", {"name": "Bieber, Gelnhausen", "gov": "MANIFEST1", "lat": 50.2, "lng": 9.3, "note": "Manifestort"}))
+    merken("post", "PlaceRename", admin.post("PlaceRename", "testbaum", {"from": "Bieber, Gelnhausen", "to": "Bieber, Main-Kinzig", "preview": True}))
     fakt = admin.post("Fact", "testbaum", {"tag": "OCCU", "value": "Manifestberuf", "date": "1850"}, xref="I4")
     merken("post", "Fact", fakt)
     occu = [f for f in admin.get("Individual", "testbaum", xref="I4").json["facts"] if f.get("tag") == "OCCU"]

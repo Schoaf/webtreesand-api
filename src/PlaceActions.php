@@ -35,24 +35,33 @@ use function arsort;
 use function count;
 use function explode;
 use function implode;
+use function in_array;
 use function is_array;
 use function is_numeric;
 use function is_string;
 use function json_decode;
+use function ltrim;
+use function mb_strlen;
+use function mb_substr;
+use function md5;
 use function max;
 use function mb_strtolower;
 use function preg_match;
 use function preg_match_all;
 use function preg_quote;
+use function preg_replace;
+use function preg_replace_callback;
 use function preg_split;
 use function response;
 use function rtrim;
 use function sprintf;
 use function str_contains;
+use function str_replace;
 use function str_ends_with;
 use function trim;
 use function usort;
 
+use const PREG_SET_ORDER;
 use const PREG_SPLIT_NO_EMPTY;
 
 /**
@@ -321,6 +330,221 @@ trait PlaceActions
         }
 
         return $n;
+    }
+
+    /**
+     * Ort umbenennen oder zusammenfuehren (ab Stufe 23): Rumpf { from, to, preview? }. Jedes Ereignis mit dem Ort
+     * "from" bekommt "to"; Orte darunter wandern mit ("Kortau, Allenstein" -> "Kortau, Olsztyn"). Gibt es "to" schon,
+     * ist es ein Zusammenfuehren: die beiden _LOC werden zu einem (Luecken fuellen, Notizen, Quellen und Medien
+     * anhaengen, Abweichungen melden), die Verweise "3 _LOC" zeigen danach auf ihn. Ereignisse, die der Benutzer nicht
+     * bearbeiten darf (gesperrt, vertraulich), bleiben und werden gezaehlt. preview: true aendert nichts und liefert
+     * nur die Zahlen. Ohne Sofortfreigabe entstehen gewoehnliche ausstehende Aenderungen.
+     */
+    public function postPlaceRenameAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree    = Validator::attributes($request)->tree();
+        $body    = $this->body($request);
+        $from    = $this->placeName($this->str($body, 'from'));
+        $to      = $this->placeName($this->str($body, 'to'));
+        $preview = ($body['preview'] ?? false) === true;
+
+        if ($from === '' || $to === '') {
+            return $this->error(400, 'name-missing');
+        }
+
+        if (!Auth::isEditor($tree)) {
+            return $this->error(403, 'not-editable');
+        }
+
+        if (GedcomText::looksLikePointer($to) || str_contains($to, "\n")) {
+            return $this->error(400, 'invalid-value');
+        }
+
+        $fromKey = mb_strtolower($from);
+        $toKey   = mb_strtolower($to);
+        $ids     = $this->placeIds($tree);
+        $fromId  = $ids[$fromKey] ?? null;
+
+        // Der Ort muss fuer den Benutzer sichtbar an einem Ereignis stehen - sonst gibt es ihn fuer ihn nicht.
+        $sichtbar = $fromId === null ? [] : $this->linkedRecords($tree, $fromId, $from);
+        $here     = $this->placeUsage($sichtbar, true, $fromKey)[$fromKey] ?? null;
+        if ($here === null && ($fromId === null || !$this->placeVisible($tree, $fromId))) {
+            return $this->error(404, 'not-found');
+        }
+
+        $here ??= ['name' => $from, 'events' => 0, 'individuals' => [], 'families' => [], 'lat' => null, 'lng' => null, 'locs' => [], 'facts' => []];
+        $merge   = $fromKey !== $toKey && isset($ids[$toKey]);
+        $context = $this->placeContext($tree);
+        $fromLoc = $this->placeLocation($tree, $here, $context);
+        $toLoc   = null;
+        $ziel    = null;
+
+        if ($merge) {
+            $zielRecords = $this->linkedRecords($tree, $ids[$toKey], $to);
+            $ziel        = $this->placeUsage($zielRecords, true, $toKey)[$toKey] ?? null;
+            $toLoc       = $ziel === null ? null : $this->placeLocation($tree, $ziel, $context);
+        }
+        if ($toLoc !== null && $fromLoc !== null && $toLoc->xref() === $fromLoc->xref()) {
+            $toLoc = null;
+        }
+
+        // Alle Personen und Familien an "from" oder darunter, auch die der Benutzer nicht sieht (die werden gezaehlt)
+        $rows = [];
+        foreach (['individuals' => ['i', Registry::individualFactory()->mapper($tree)], 'families' => ['f', Registry::familyFactory()->mapper($tree)]] as $table => [$p, $mapper]) {
+            $q = DB::table($table)
+                ->join('placelinks', static function ($join) use ($p): void {
+                    $join->on('pl_gid', '=', $p . '_id')->on('pl_file', '=', $p . '_file');
+                })
+                ->where($p . '_file', '=', $tree->id())
+                ->where('pl_p_id', '=', $fromId ?? -1)
+                ->select([$table . '.*'])
+                ->get();
+            foreach ($q as $row) {
+                $rows[] = $mapper($row);
+            }
+        }
+
+        $zielLoc   = $toLoc ?? $fromLoc;
+        $aenderung = [];
+        $events    = 0;
+        $skipped   = 0;
+        $unterorte = [];
+
+        foreach ($rows as $record) {
+            $darf  = $record->canShow() && $record->canEdit();
+            $neu   = $record->gedcom();
+            $n     = 0;
+            $neu   = (string) preg_replace_callback('/\n1 \S+[^\n]*(?:\n[2-9] [^\n]*)*/', function (array $m) use ($record, $fromKey, $to, $from, $darf, $zielLoc, $fromLoc, &$n, &$skipped, &$unterorte): string {
+                $block = $m[0];
+                if (preg_match('/\n2 PLAC ([^\n]*)/', $block, $pl) !== 1) {
+                    return $block;
+                }
+                $name = $this->placeName($pl[1]);
+                $key  = mb_strtolower($name);
+                $genau = $key === $fromKey;
+                if (!$genau && !str_ends_with($key, ', ' . $fromKey)) {
+                    return $block;
+                }
+                $fact = new Fact(ltrim($block, "\n"), $record, md5(ltrim($block, "\n")));
+                if (!$darf || !$fact->canShow() || !$fact->canEdit()) {
+                    $skipped++;
+                    return $block;
+                }
+                $neuName = $genau ? $to : mb_substr($name, 0, mb_strlen($name) - mb_strlen($from)) . $to;
+                if (!$genau) {
+                    $unterorte[$key] = true;
+                }
+                $block = str_replace($pl[0], "\n2 PLAC " . $neuName, $block);
+                // Der Verweis auf den _LOC: beim Zusammenfuehren auf den bleibenden; am Ort selbst immer setzen, wenn
+                // es einen _LOC gibt - nach dem Umbenennen findet ihn der Name vielleicht nicht mehr eindeutig.
+                if ($genau && $zielLoc !== null) {
+                    $block = (string) preg_replace('/\n3 _LOC @[^@]*@/', '', $block);
+                    $block = (string) preg_replace('/(\n2 PLAC [^\n]*(?:\n[3-9] [^\n]*)*)/', '$1' . "\n3 _LOC @" . $zielLoc->xref() . '@', $block, 1);
+                } elseif ($fromLoc !== null && $zielLoc !== null) {
+                    $block = str_replace('@' . $fromLoc->xref() . '@', '@' . $zielLoc->xref() . '@', $block);
+                }
+                $n++;
+
+                return $block;
+            }, "\n" . $neu);
+            $neu = ltrim($neu, "\n");
+
+            if ($n > 0) {
+                $aenderung[] = [$record, $neu];
+                $events += $n;
+            }
+        }
+
+        $konflikte = $toLoc !== null && $fromLoc !== null ? $this->locConflicts($fromLoc, $toLoc) : [];
+        $antwort   = [
+            'from'      => $from,
+            'to'        => $to,
+            'merge'     => $merge,
+            'records'   => count($aenderung),
+            'events'    => $events,
+            'subPlaces' => count($unterorte),
+            'skipped'   => $skipped,
+            'location'  => ['from' => $fromLoc?->xref(), 'to' => $toLoc?->xref(), 'conflicts' => $konflikte],
+        ];
+
+        if ($preview) {
+            return response(['ok' => true, 'preview' => true] + $antwort);
+        }
+
+        foreach ($aenderung as [$record, $neu]) {
+            $record->updateRecord($neu, true);
+        }
+
+        if ($fromLoc !== null && $toLoc !== null) {
+            // Zusammenfuehren: alles vom alten _LOC in den bleibenden, dann den alten loeschen - aber nur, wenn
+            // nichts mehr auf ihn zeigt (uebersprungene Ereignisse behalten ihren Verweis).
+            if ($toLoc->canEdit()) {
+                $toLoc->updateRecord($this->locMerge($toLoc->gedcom(), $fromLoc->gedcom()), true);
+            }
+            $rest = DB::table('link')->where('l_file', '=', $tree->id())->where('l_to', '=', $fromLoc->xref())->count();
+            if ($skipped === 0 && $rest === 0 && $fromLoc->canEdit()) {
+                $fromLoc->deleteRecord();
+            }
+        } elseif ($fromLoc !== null && $fromLoc->canEdit()) {
+            // Umbenannt (oder in einen Ort ohne _LOC zusammengefuehrt): der _LOC heisst wie der neue Blattname
+            if ($merge && $ziel !== null) {
+                $this->linkEvents($ziel, $fromLoc->xref());
+            }
+            $leaf = explode(', ', $to)[0];
+            $neu  = (string) preg_replace('/\n1 NAME [^\n]*/', "\n1 NAME " . GedcomText::line($leaf), $fromLoc->gedcom(), 1);
+            if ($neu !== $fromLoc->gedcom()) {
+                $fromLoc->updateRecord($neu, true);
+            }
+        }
+
+        $pending = DB::table('change')->where('gedcom_id', '=', $tree->id())->where('status', '=', 'pending')
+            ->whereIn('xref', array_map(static fn (array $a): string => $a[0]->xref(), $aenderung))->exists();
+
+        return response(['ok' => true, 'preview' => false, 'pending' => $pending] + $antwort);
+    }
+
+    /**
+     * Was beim Zusammenfuehren zweier _LOC nicht zusammenpasst: abweichende GOV-Kennung oder Koordinaten.
+     *
+     * @return list<string>
+     */
+    private function locConflicts(Location $from, Location $to): array
+    {
+        $konflikte = [];
+        $govA = $this->locGov($from);
+        $govB = $this->locGov($to);
+        if ($govA !== null && $govB !== null && $govA !== $govB) {
+            $konflikte[] = 'gov';
+        }
+        [$la, $lo] = $this->locCoordinates($from);
+        [$lb, $lob] = $this->locCoordinates($to);
+        if ($la !== null && $lb !== null && (abs($la - $lb) > 0.01 || abs($lo - $lob) > 0.01)) {
+            $konflikte[] = 'coordinates';
+        }
+
+        return $konflikte;
+    }
+
+    /**
+     * Den alten _LOC in den bleibenden einarbeiten: GOV und Koordinaten nur, wo sie fehlen; Notizen, Quellen, Medien
+     * und alles Weitere angehaengt, wenn es so nicht schon dasteht. NAME, CHAN und die Kennung bleiben die des Ziels.
+     */
+    private function locMerge(string $ziel, string $alt): string
+    {
+        preg_match_all('/\n1 (\S+)[^\n]*(?:\n[2-9] [^\n]*)*/', "\n" . $alt, $bloecke, PREG_SET_ORDER);
+        foreach ($bloecke as [$block, $tag]) {
+            if (in_array($tag, ['NAME', 'CHAN', '_UID'], true)) {
+                continue;
+            }
+            if (in_array($tag, ['_GOV', 'MAP'], true) && preg_match('/\n1 ' . $tag . '\b/', $ziel) === 1) {
+                continue;
+            }
+            if (!str_contains($ziel, $block)) {
+                $ziel .= $block;
+            }
+        }
+
+        return $ziel;
     }
 
     /**
