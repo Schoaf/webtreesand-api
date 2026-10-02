@@ -328,6 +328,8 @@ class Orte(unittest.TestCase):
         self.assertEqual(["Bieber, Offenbach am Main"], [c["name"] for c in o["children"]])
         ged = umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = 'I1'")[0][0]
         self.assertEqual(2, ged.count("2 PLAC Offenbach am Main\n3 _LOC @L1@"), "Geburt und Taufe zeigen auf den _LOC")
+        # Hin und zurueck: der alte Name steht noch in der Ortstabelle von webtrees, ist aber kein Zusammenfuehren
+        self.assertEqual(False, s.post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": "Offenbach", "preview": True}).json["merge"])
         # Bearbeiter: das gesperrte Ereignis (RESI von I2) bleibt
         v = U.sitzung("bearbeiter").post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": "Offenbach a. M.", "preview": True}).json
         self.assertEqual((3, 1), (v["events"], v["skipped"]), v)

@@ -373,7 +373,9 @@ trait PlaceActions
         }
 
         $here ??= ['name' => $from, 'events' => 0, 'individuals' => [], 'families' => [], 'lat' => null, 'lng' => null, 'locs' => [], 'facts' => []];
-        $merge   = $fromKey !== $toKey && isset($ids[$toKey]);
+        // Zusammenfuehren nur, wenn am Ziel noch etwas haengt - webtrees laesst alte Orte in seiner Ortstabelle stehen
+        $merge   = $fromKey !== $toKey && isset($ids[$toKey])
+            && DB::table('placelinks')->where('pl_file', '=', $tree->id())->where('pl_p_id', '=', $ids[$toKey])->exists();
         $context = $this->placeContext($tree);
         $fromLoc = $this->placeLocation($tree, $here, $context);
         $toLoc   = null;
