@@ -9270,6 +9270,9 @@
             "canEdit": {
              "type": "boolean"
             },
+            "country": {
+             "type": "null"
+            },
             "gov": {
              "type": [
               "null",
@@ -9295,19 +9298,37 @@
               "type": "string"
              }
             },
+            "postalCode": {
+             "type": [
+              "null",
+              "string"
+             ]
+            },
+            "region": {
+             "type": [
+              "null",
+              "string"
+             ]
+            },
             "sources": {
              "type": "array",
              "items": {
               "type": "object",
               "properties": {
                "page": {
-                "type": "string"
+                "type": [
+                 "null",
+                 "string"
+                ]
                },
                "title": {
                 "type": "string"
                },
                "xref": {
-                "type": "string"
+                "type": [
+                 "null",
+                 "string"
+                ]
                }
               },
               "required": [
@@ -9327,12 +9348,15 @@
            },
            "required": [
             "canEdit",
+            "country",
             "gov",
             "lat",
             "lng",
             "media",
             "name",
             "notes",
+            "postalCode",
+            "region",
             "sources",
             "url",
             "xref"

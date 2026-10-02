@@ -216,7 +216,7 @@ trait PlaceActions
             return $this->error(403, 'not-editable');
         }
 
-        foreach (['gov', 'note'] as $feld) {
+        foreach (['gov', 'note', 'postalCode', 'region', 'country'] as $feld) {
             if (GedcomText::looksLikePointer($this->str($body, $feld))) {
                 return $this->error(400, 'invalid-value');
             }
@@ -307,6 +307,21 @@ trait PlaceActions
             // Nur die eingebettete Notiz ersetzen; Verweise auf Notiz-Datensaetze bleiben
             $rest = (string) preg_replace('/\n1 NOTE (?!@)[^\n]*(\n2 CON[CT][^\n]*)*/', '', $rest);
             $rest .= $note === '' ? '' : "\n1 NOTE " . $note;
+        }
+
+        // Postleitzahl, Region, Land - vorhandene Schreibweise (POST/_POST) bleibt, neu als _POST
+        foreach (['postalCode' => ['_POST', 'POST'], 'region' => ['_STAE'], 'country' => ['_CTRY']] as $feld => $tags) {
+            if (array_key_exists($feld, $body)) {
+                $wert = GedcomText::line($this->str($body, $feld));
+                $tag  = $tags[0];
+                foreach ($tags as $t) {
+                    if (preg_match('/\n1 ' . $t . '\b/', $rest) === 1) {
+                        $tag = $t;
+                    }
+                    $rest = (string) preg_replace('/\n1 ' . $t . '(?: [^\n]*)?(?:\n[2-9] [^\n]*)*/', '', $rest);
+                }
+                $rest .= $wert === '' ? '' : "\n1 " . $tag . ' ' . $wert;
+            }
         }
 
         // Die verknuepften Medienobjekte (wie bei Source): die Liste ersetzt alle "1 OBJE @M@"
@@ -1011,6 +1026,10 @@ trait PlaceActions
             'xref'    => $location->xref(),
             'name'    => GedcomText::ersterWert($location->gedcom(), 1, 'NAME'),
             'gov'     => $this->locGov($location),
+            // Postleitzahl, Region, Land: GEDCOM-L kennt _POST; _STAE und _CTRY (und POST) schreiben andere Programme
+            'postalCode' => $this->locWert($location, ['_POST', 'POST']),
+            'region'     => $this->locWert($location, ['_STAE']),
+            'country'    => $this->locWert($location, ['_CTRY']),
             'lat'     => $lat,
             'lng'     => $lng,
             'notes'   => $location->facts(['NOTE'])->filter(static fn (Fact $f): bool => $f->canShow())
@@ -1021,6 +1040,23 @@ trait PlaceActions
             'canEdit' => $location->canEdit(),
             'url'     => $location->url(),
         ];
+    }
+
+    /**
+     * Der erste Wert einer der Zeilen "1 <tag>" am _LOC.
+     *
+     * @param list<string> $tags
+     */
+    private function locWert(Location $location, array $tags): string|null
+    {
+        foreach ($tags as $tag) {
+            $wert = trim(GedcomText::ersterWert($location->gedcom(), 1, $tag));
+            if ($wert !== '') {
+                return $wert;
+            }
+        }
+
+        return null;
     }
 
     private function locGov(Location $location): string|null

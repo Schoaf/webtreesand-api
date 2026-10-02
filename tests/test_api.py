@@ -263,7 +263,8 @@ class Orte(unittest.TestCase):
         self.assertEqual(1800, o["individuals"][1]["facts"][0]["date"]["year"])
         loc = o["location"]
         self.assertEqual(("L1", "Offenbach", "OFFACHJO40BC", ["Stadt am Main"]), (loc["xref"], loc["name"], loc["gov"], loc["notes"]))
-        self.assertEqual([("S1", "Ortsbeschreibung")], [(q["xref"], q["page"]) for q in loc["sources"]])
+        self.assertEqual([(None, "https://de.wikipedia.org/wiki/Offenbach_am_Main"), ("S1", "Ortsbeschreibung")], [(q["xref"], q["page"] or q["title"]) for q in loc["sources"]])
+        self.assertEqual(("63065", "Hessen", None), (loc["postalCode"], loc["region"], loc["country"]))
         self.assertAlmostEqual(8.766667, loc["lng"], places=5)
         b = U.sitzung("verwalter").get("Place", "testbaum", name="Bieber, Offenbach").json
         self.assertEqual(("Offenbach", ["I4"], None), (b["parent"], [p["xref"] for p in b["individuals"]], b["location"]))
@@ -281,7 +282,7 @@ class Orte(unittest.TestCase):
         a = s.post("Place", "testbaum", {"name": "Offenbach", "gov": "OFFACHJO40BD"})
         self.assertEqual((True, "L1", 0), (a.json["ok"], a.json["xref"], a.json["linked"]), a)
         loc = s.get("Place", "testbaum", name="Offenbach").json["location"]
-        self.assertEqual(("OFFACHJO40BD", ["Stadt am Main"], 1, 50.1), (loc["gov"], loc["notes"], len(loc["sources"]), loc["lat"]))
+        self.assertEqual(("OFFACHJO40BD", ["Stadt am Main"], 2, 50.1), (loc["gov"], loc["notes"], len(loc["sources"]), loc["lat"]))
         # Koordinaten und Notiz ersetzen, auch in die Geografischen Daten (Admin)
         a = s.post("Place", "testbaum", {"name": "Offenbach", "lat": 50.104444, "lng": -8.766, "note": "Stadt am Main\nzweite Zeile", "mapData": True})
         self.assertEqual((True, True), (a.json["ok"], a.json["mapData"]), a)
@@ -304,6 +305,12 @@ class Orte(unittest.TestCase):
         a = s.post("Citation", "testbaum", {"source": "S1", "page": "Ortschronik S. 3"}, xref="L1")
         self.assertEqual(True, a.json["ok"], a)
         self.assertIn(("S1", "Ortschronik S. 3"), [(q["xref"], q["page"]) for q in s.get("Place", "testbaum", name="Offenbach").json["location"]["sources"]])
+        # Postleitzahl (vorhandene Schreibweise POST bleibt), Region, Land
+        self.assertEqual(True, s.post("Place", "testbaum", {"name": "Offenbach", "postalCode": "63067", "country": "Deutschland"}).json["ok"])
+        loc = s.get("Place", "testbaum", name="Offenbach").json["location"]
+        self.assertEqual(("63067", "Hessen", "Deutschland"), (loc["postalCode"], loc["region"], loc["country"]))
+        ged = umgebung.sql("SELECT o_gedcom FROM wt_other WHERE o_id = 'L1'")[0][0]
+        self.assertIn("1 POST 63067", ged); self.assertIn("1 _CTRY Deutschland", ged); self.assertNotIn("_POST", ged)
         # Koordinaten entfernen
         s.post("Place", "testbaum", {"name": "Offenbach", "lat": None, "lng": None})
         self.assertIsNone(s.get("Place", "testbaum", name="Offenbach").json["location"]["lat"])
