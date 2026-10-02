@@ -309,6 +309,16 @@ trait PlaceActions
             $rest .= $note === '' ? '' : "\n1 NOTE " . $note;
         }
 
+        // Die verknuepften Medienobjekte (wie bei Source): die Liste ersetzt alle "1 OBJE @M@"
+        if (array_key_exists('media', $body) && is_array($body['media'])) {
+            $rest = (string) preg_replace('/\n1 OBJE @[^\n]*(?:\n[2-9] [^\n]*)*/', '', $rest);
+            foreach ($body['media'] as $m) {
+                if (preg_match('/^@?([A-Za-z0-9:_.-]+)@?$/', (string) $m, $mm) === 1) {
+                    $rest .= "\n1 OBJE @" . $mm[1] . '@';
+                }
+            }
+        }
+
         return $kopf . $rest;
     }
 

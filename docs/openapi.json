@@ -9442,7 +9442,7 @@
       }
      }
     },
-    "x-body": "`{name, gov?, lat?, lng?, note?, mapData?}` – `lat`/`lng` together, `null` removes the coordinates. Answer: `{ok, xref, pending, linked, mapData}`, status 201 when the `_LOC` was created."
+    "x-body": "`{name, gov?, lat?, lng?, note?, media?, mapData?}` – `lat`/`lng` together, `null` removes the coordinates; `media` replaces the linked media objects (upload new ones with route Media and the `_LOC` identifier). Answer: `{ok, xref, pending, linked, mapData}`, status 201 when the `_LOC` was created."
    }
   },
   "/module/_api4webtrees_/PlaceRename/{tree}": {

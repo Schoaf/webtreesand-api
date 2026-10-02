@@ -289,6 +289,21 @@ class Orte(unittest.TestCase):
         self.assertEqual((50.104444, -8.766, ["Stadt am Main\nzweite Zeile"]), (loc["lat"], loc["lng"], loc["notes"]))
         self.assertIn("2 LONG W8.766", umgebung.sql("SELECT o_gedcom FROM wt_other WHERE o_id = 'L1'")[0][0])
         self.assertEqual([(50.104444, -8.766)], [(float(a), float(b)) for a, b in umgebung.sql("SELECT latitude, longitude FROM wt_place_location WHERE place = 'Offenbach'")])
+        # Medien am _LOC: hochladen (Route Media mit der Kennung des _LOC), dann ueber die Liste loesen
+        rumpf, art = manifest.multipart({"title": "Ortsansicht", "link": "true"}, ("ansicht.png", manifest.PNG, "image/png"))
+        req = urllib.request.Request(s.url("/module/_api4webtrees_/Media/testbaum", xref="L1"), data=rumpf, method="POST")
+        req.add_header("Content-Type", art); req.add_header("X-CSRF-TOKEN", s.csrf)
+        m = s._senden(req).json
+        self.assertEqual(True, m["ok"], m)
+        self.assertEqual(["Ortsansicht"], [x["title"] for x in s.get("Place", "testbaum", name="Offenbach").json["location"]["media"]])
+        self.assertEqual(True, s.post("Place", "testbaum", {"name": "Offenbach", "media": []}).json["ok"])
+        self.assertEqual([], s.get("Place", "testbaum", name="Offenbach").json["location"]["media"])
+        self.assertEqual(True, s.post("Place", "testbaum", {"name": "Offenbach", "media": [m["media"]]}).json["ok"])
+        self.assertEqual(1, len(s.get("Place", "testbaum", name="Offenbach").json["location"]["media"]))
+        # allgemeiner Quellenverweis am _LOC (Route Citation ohne factId)
+        a = s.post("Citation", "testbaum", {"source": "S1", "page": "Ortschronik S. 3"}, xref="L1")
+        self.assertEqual(True, a.json["ok"], a)
+        self.assertIn(("S1", "Ortschronik S. 3"), [(q["xref"], q["page"]) for q in s.get("Place", "testbaum", name="Offenbach").json["location"]["sources"]])
         # Koordinaten entfernen
         s.post("Place", "testbaum", {"name": "Offenbach", "lat": None, "lng": None})
         self.assertIsNone(s.get("Place", "testbaum", name="Offenbach").json["location"]["lat"])
