@@ -165,12 +165,22 @@ trait PlaceActions
 
         $levels = explode(', ', $here['name']);
 
+        // Ereignisse nach Art (wie die Kacheln im Ortsregister): alle sichtbaren, nicht nur die gelieferten Personen
+        $zaehlen = ['birth' => 0, 'marriage' => 0, 'death' => 0, 'other' => 0];
+        foreach ($here['facts'] as $facts) {
+            foreach ($facts as $fact) {
+                $tag = explode(':', $fact->tag())[1] ?? $fact->tag();
+                $zaehlen[match ($tag) { 'BIRT' => 'birth', 'MARR' => 'marriage', 'DEAT' => 'death', default => 'other' }]++;
+            }
+        }
+
         return response([
             'name'            => $here['name'],
             'levels'          => $levels,
             'parent'          => count($levels) > 1 ? implode(', ', array_slice($levels, 1)) : null,
             'children'        => $children,
             'events'          => $here['events'],
+            'eventCounts'     => $zaehlen,
             'lat'             => $lat,
             'lng'             => $lng,
             'coordSource'     => $source,

@@ -257,6 +257,7 @@ class Orte(unittest.TestCase):
         o = U.sitzung("verwalter").get("Place", "testbaum", name="offenbach").json
         self.assertEqual(("Offenbach", ["Offenbach"], None, 3), (o["name"], o["levels"], o["parent"], o["events"]))
         self.assertEqual([{"name": "Bieber, Offenbach"}], o["children"])
+        self.assertEqual({"birth": 1, "marriage": 0, "death": 0, "other": 2}, o["eventCounts"], "Geburt I1; Taufe I1 und Wohnort I2")
         self.assertEqual(["I2", "I1"], [p["xref"] for p in o["individuals"]], "nach Namen: Anna vor Theodor")
         self.assertEqual(["BIRT", "CHR"], [f["tag"] for f in o["individuals"][1]["facts"]])
         self.assertEqual(1800, o["individuals"][1]["facts"][0]["date"]["year"])

@@ -9136,6 +9136,30 @@
             "string"
            ]
           },
+          "eventCounts": {
+           "type": "object",
+           "properties": {
+            "birth": {
+             "type": "integer"
+            },
+            "death": {
+             "type": "integer"
+            },
+            "marriage": {
+             "type": "integer"
+            },
+            "other": {
+             "type": "integer"
+            }
+           },
+           "required": [
+            "birth",
+            "death",
+            "marriage",
+            "other"
+           ],
+           "additionalProperties": false
+          },
           "events": {
            "type": "integer"
           },
@@ -9335,6 +9359,7 @@
           "canEdit",
           "children",
           "coordSource",
+          "eventCounts",
           "events",
           "families",
           "individuals",

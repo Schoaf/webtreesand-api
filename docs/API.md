@@ -245,7 +245,7 @@ One place: levels, sub-places one level down, coordinates with origin, the `_LOC
 |---|---|---|
 | `name` | required | The place as written at the event, e.g. `Kortau, Allenstein` |
 
-Answer fields: `canEdit`, `children`, `coordSource`, `events`, `families`, `individuals`, `lat`, `levels`, `lng`, `location`, `moreFamilies`, `moreIndividuals`, `name`, `parent` – full schema in openapi.json.
+Answer fields: `canEdit`, `children`, `coordSource`, `eventCounts`, `events`, `families`, `individuals`, `lat`, `levels`, `lng`, `location`, `moreFamilies`, `moreIndividuals`, `name`, `parent` – full schema in openapi.json.
 
 ### `POST Place/{tree}`
 
