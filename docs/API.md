@@ -247,7 +247,7 @@ Answer fields: `ok`, `pending`, `xref` – full schema in openapi.json.
 
 ### `POST Association/{tree}`
 
-Write godparents, witnesses and other associates of a fact. `linked` replaces the linked individuals (`2 _ASSO` + `3 RELA`, written as webtrees does: `godparent`/`witness`; `other` needs `rela`); an individual already linked keeps its sub-lines (sources) and its RELA spelling when the role matches; `note` replaces its embedded note. `free` replaces people without a record, one line each as `2 _GODP` (godparents) or `2 _WITN` (witnesses) like Ahnenblatt – old notes "Paten: …"/"Trauzeugen: …" on the fact are converted. `convertLevel1` moves the person's `1 ASSO` for individuals named in `linked` into the baptism. Parts not named stay. Answer: new `factId`.
+Write godparents, witnesses and other associates of a fact. `linked` replaces the linked individuals (`2 _ASSO` + `3 RELA`, written as webtrees does: `godparent`/`witness`; `other` needs `rela`); an individual already linked keeps its sub-lines (sources) and its RELA spelling when the role matches; `note` replaces its embedded note. `free` replaces people without a record, one line each as `2 _GODP` (godparents) or `2 _WITN` (witnesses) as in GEDCOM-L – old notes "Paten: …"/"Trauzeugen: …" on the fact are converted. `convertLevel1` moves the person's `1 ASSO` for individuals named in `linked` into the baptism. Parts not named stay. Answer: new `factId`.
 
 | parameter | | |
 |---|---|---|
