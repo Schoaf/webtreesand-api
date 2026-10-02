@@ -8,9 +8,12 @@ use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\Contracts\UserInterface;
 use Fisharebest\Webtrees\DB;
 use Fisharebest\Webtrees\FlashMessages;
+use Fisharebest\Webtrees\Http\Exceptions\HttpTooManyRequestsException;
 use Fisharebest\Webtrees\I18N;
 use Fisharebest\Webtrees\Log;
 use Fisharebest\Webtrees\Registry;
+use Fisharebest\Webtrees\Services\RateLimitService;
+use Fisharebest\Webtrees\Services\RegistrationService;
 use Fisharebest\Webtrees\Services\TreeService;
 use Fisharebest\Webtrees\Services\UserService;
 use Fisharebest\Webtrees\Tree;
@@ -37,6 +40,7 @@ use function random_bytes;
 use function redirect;
 use function response;
 use function str_starts_with;
+use function strlen;
 use function strtolower;
 use function strtoupper;
 use function substr;
@@ -272,6 +276,72 @@ trait AppPages
         $user->setPreference(self::hintKey($request->getHeaderLine('User-Agent')), 'connected');
 
         return response(['ok' => true, 'tree' => $tree_name, 'user' => $user->userName()]);
+    }
+
+    /**
+     * Neues Konto anlegen - Rumpf { username, email, realName, password, comments }. Entspricht dem Webformular
+     * (RegisterAction), weil das hier tatsaechlich derselbe Code ist: RegistrationService (webtrees-Kern) prueft
+     * die Angaben und legt das Konto an - dasselbe Ergebnis wie im Webformular (sofort angelegt, aber erst nach
+     * E-Mail-Bestaetigung UND Freischaltung durch einen Verwalter nutzbar), nur der Weg dorthin ist jetzt die App
+     * statt der Browser (Apple-Vorgabe 5.1.1: Kontoerstellung muss in der App selbst moeglich sein). Das
+     * Webformular bremst Bots zusaetzlich mit einem JavaScript-Zeittrick, der fuer eine native App wirkungslos
+     * waere; hier greift stattdessen nur die serverweite Rate-Begrenzung, die das Webformular ohnehin schon hat.
+     */
+    public function postRegisterAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $registration_service = Registry::container()->get(RegistrationService::class);
+
+        if (!$registration_service->registrationAllowed()) {
+            return $this->error(403, 'registration-disabled');
+        }
+
+        $tree = Validator::attributes($request)->treeOptional();
+        $body = $this->body($request);
+
+        $username = trim($this->str($body, 'username'));
+        $email    = trim($this->str($body, 'email'));
+        $realname = trim($this->str($body, 'realName'));
+        $password = $this->str($body, 'password');
+        $comments = trim($this->str($body, 'comments'));
+        $base_url = Validator::attributes($request)->string('base_url');
+
+        // RegistrationService selbst prueft keine Mindestlaenge - im Webformular macht das nur ein
+        // HTML-Attribut (pattern=".{8,}"), das eine native App gar nicht erst durchlaeuft.
+        if ($password !== '' && strlen($password) < 8) {
+            return $this->error(400, 'weak-password');
+        }
+
+        $error = $registration_service->checkRegistrationDetails($username, $email, $realname, $comments, $password, $base_url);
+
+        if ($error !== null) {
+            return $this->error(400, match (true) {
+                $error === I18N::translate('Duplicate username. A user with that username already exists. Please choose another username.') => 'username-taken',
+                $error === I18N::translate('Duplicate email address. A user with that email already exists.') => 'email-taken',
+                $error === I18N::translate('All fields must be completed.') => 'missing-fields',
+                default => 'comments-link',
+            });
+        }
+
+        try {
+            Registry::container()->get(RateLimitService::class)->limitRateForSite(5, 300, 'rate-limit-registration');
+        } catch (HttpTooManyRequestsException) {
+            return $this->error(429, 'rate-limited');
+        }
+
+        Log::addAuthenticationLog('User registration requested for: ' . $username);
+
+        $registration_service->register(
+            $username,
+            $email,
+            $realname,
+            $password,
+            $comments,
+            $base_url,
+            $tree,
+            Validator::attributes($request)->string('client-ip')
+        );
+
+        return response(['ok' => true]);
     }
 
     /**
