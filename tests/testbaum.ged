@@ -10,6 +10,7 @@
 1 BIRT
 2 DATE 1 MAR 1800
 2 PLAC Offenbach
+3 _LOC @L1@
 2 SOUR @S1@
 3 PAGE Taufen 1800,
 4 CONT Nr. 4
@@ -64,6 +65,7 @@
 1 SEX M
 1 BIRT
 2 DATE 1830
+2 PLAC Bieber, Offenbach
 1 CHR
 2 DATE 1830
 2 _GODP Hans Meier, Bauer; Grete Meier, Witwe
@@ -129,6 +131,22 @@
 0 @S2@ SOUR
 1 TITL Markerkonfidenz-Quelle
 1 RESN confidential
+0 @L1@ _LOC
+1 NAME Offenbach
+1 _GOV OFFACHJO40BC
+1 MAP
+2 LATI N50.1
+2 LONG E8.766667
+1 NOTE Stadt am Main
+1 SOUR @S1@
+2 PAGE Ortsbeschreibung
+0 @L2@ _LOC
+1 NAME Markerkonfidenzort
+1 RESN confidential
+1 NOTE Markerkonfidenz-Ortsnotiz
+1 MAP
+2 LATI N51.0
+2 LONG E9.0
 0 @R1@ REPO
 1 NAME Bistumsarchiv Mainz
 0 TRLR

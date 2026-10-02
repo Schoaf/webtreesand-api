@@ -105,6 +105,9 @@ def main(groessen):
                 ("Anniversaries", baum, {"days": 14}),   # Startseite der Apps
                 ("Anniversaries", baum, {"days": 60}),   # groesster erlaubter Wert
                 ("Places", baum, {"q": ""}),
+                ("Places", baum, {"list": 1}),
+                ("Place", baum, {"name": "Offenbach, Offenbach, Hessen, Deutschland"}),
+                ("Place", baum, {"name": "Hessen, Deutschland"}),
                 ("Tags", baum, {"type": "INDI"}),
                 ("MediaList", baum, {}),
                 ("Pending", baum, {}),

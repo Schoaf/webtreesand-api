@@ -77,8 +77,18 @@ ROUTEN = [
     ("get", "Tags", True, 1, "visitor", "Facts and events the client may offer for adding, with labels.",
      [P("type", "`INDI` or `FAM`", pflicht=True)], None),
     ("get", "Places", True, 8, "editor",
-     "Place suggestions while typing, like webtrees' own autocomplete. `Berlin, Deu` searches per level.",
-     [P("q", "Beginning or part of the place name")], None),
+     "Place suggestions while typing, like webtrees' own autocomplete. `Berlin, Deu` searches per level. "
+     "With `list=1` (level 21, visitor): every place at a visible fact – as written there – with the number of "
+     "events, individuals and families, coordinates and their origin (`location`: the GEDCOM-L `_LOC` record, "
+     "`mapData`: webtrees' geographic data, `event`: `MAP` at a fact), the `_LOC` record and its GOV identifier.",
+     [P("q", "Beginning or part of the place name"), P("list", "`1`: list of all places (level 21)", "integer")], None),
+    ("get", "Place", True, 21, "visitor",
+     "One place: levels, sub-places one level down, coordinates with origin, the `_LOC` record (GOV identifier, "
+     "coordinates, notes, sources, media) and the individuals and families with their events at this place "
+     "(at most 1000 each). The `_LOC` record is found like the Ortsregister module does: `3 _LOC` at the events, "
+     "the module's binding, its GOV identifier, the leaf name if unique on both sides. `not-found` if no visible "
+     "event names the place.",
+     [P("name", "The place as written at the event, e.g. `Kortau, Allenstein`", pflicht=True)], None),
     ("post", "Fact", True, 1, "editor",
      "Add or change a fact or event. Unmentioned sub-lines (sources, media …) are kept when changing.",
      [XREF], "`{factId?, tag, value?, date?, place?, note?, type?}` or `{factId?, gedcom: \"1 BIRT\\n2 DATE …\"}`. "

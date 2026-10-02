@@ -78,7 +78,10 @@ def leseaufrufe(baum="testbaum"):
         ("Tags", baum, {"type": "FAM"}),
         ("Places", baum, {"q": ""}),
         ("Places", baum, {"q": "Marker"}),
+        ("Places", baum, {"list": 1}),
     ]
+    for ort in ["Offenbach", "Bieber, Offenbach", "Markerlebendort", "Markerkonfidenzort", "Gibtesnicht"]:
+        aufrufe.append(("Place", baum, {"name": ort}))
     return aufrufe
 
 
@@ -96,10 +99,11 @@ class Lecktest(unittest.TestCase):
                     self.assertEqual([], abweichung[:5], f"Manifest veraltet? {aktion} {params} (tests/manifest.py)")
                 # Die Suche nennt das Suchwort in der Antwort - das ist kein Leck.
                 text = a.text.replace(json.dumps(params.get("q", "")), '""')
+                # Place nennt den erfragten Namen nicht, wenn es den Ort nicht zu sehen gibt (not-found).
                 for wort in verboten:
                     # Ortsnamen schuetzt webtrees nicht (Ortsliste, Ortsvorschlaege: SearchService::searchPlaces) -
                     # die Route Places nutzt dieselbe Funktion, nur fuer Bearbeiter. Kein Leck des Moduls.
-                    if aktion == "Places" and wort == KONFIDENZ:
+                    if aktion == "Places" and "q" in params and wort == KONFIDENZ:
                         continue
                     self.assertNotIn(wort, text, f"LECK fuer {benutzer or 'Gast'}: {aktion} {b} {params} zeigt {wort}")
 
@@ -235,6 +239,41 @@ class Paten(unittest.TestCase):
         self.assertEqual(["I3", "I2"], [e["record"] for e in wo])
 
 
+class Orte(unittest.TestCase):
+    """Stufe 21: Ortsliste und ein Ort (PlaceActions)."""
+
+    def test_ortsliste(self):
+        orte = {o["name"]: o for o in U.sitzung("verwalter").get("Places", "testbaum", list=1).json["places"]}
+        self.assertEqual(["Bieber, Offenbach", "Markerkonfidenzort", "Markerlebendort", "Offenbach"], sorted(orte))
+        off = orte["Offenbach"]
+        self.assertEqual((2, 1, 0, "L1", "OFFACHJO40BC", "location"), (off["events"], off["individuals"], off["families"], off["location"], off["gov"], off["coordSource"]))
+        self.assertAlmostEqual(50.1, off["lat"])
+        self.assertIsNone(orte["Bieber, Offenbach"]["location"], "Blattname Bieber hat keinen _LOC")
+        self.assertEqual("L2", orte["Markerkonfidenzort"]["location"], "Blattname eindeutig: _LOC gefunden")
+        gast = [o["name"] for o in U.sitzung().get("Places", "testbaum", list=1).json["places"]]
+        self.assertEqual(["Bieber, Offenbach", "Offenbach"], gast, "Orte verborgener Personen fehlen")
+
+    def test_ein_ort(self):
+        o = U.sitzung("verwalter").get("Place", "testbaum", name="offenbach").json
+        self.assertEqual(("Offenbach", ["Offenbach"], None, 2), (o["name"], o["levels"], o["parent"], o["events"]))
+        self.assertEqual([{"name": "Bieber, Offenbach"}], o["children"])
+        self.assertEqual(["I1"], [p["xref"] for p in o["individuals"]])
+        self.assertEqual(["BIRT", "CHR"], [f["tag"] for f in o["individuals"][0]["facts"]])
+        self.assertEqual(1800, o["individuals"][0]["facts"][0]["date"]["year"])
+        loc = o["location"]
+        self.assertEqual(("L1", "Offenbach", "OFFACHJO40BC", ["Stadt am Main"]), (loc["xref"], loc["name"], loc["gov"], loc["notes"]))
+        self.assertEqual([("S1", "Ortsbeschreibung")], [(q["xref"], q["page"]) for q in loc["sources"]])
+        self.assertAlmostEqual(8.766667, loc["lng"], places=5)
+        b = U.sitzung("verwalter").get("Place", "testbaum", name="Bieber, Offenbach").json
+        self.assertEqual(("Offenbach", ["I4"], None), (b["parent"], [p["xref"] for p in b["individuals"]], b["location"]))
+
+    def test_unbekannt_und_verborgen(self):
+        self.assertEqual("not-found", U.sitzung().get("Place", "testbaum", name="Markerlebendort").json["error"])
+        self.assertEqual("not-found", U.sitzung("bearbeiter").get("Place", "testbaum", name="Markerkonfidenzort").json["error"])
+        self.assertEqual("not-found", U.sitzung("verwalter").get("Place", "testbaum", name="Gibtesnicht").json["error"])
+        self.assertEqual("name-missing", U.sitzung("verwalter").get("Place", "testbaum").json["error"])
+
+
 class Schreiben(unittest.TestCase):
     def fakten(self, s, xref):
         return s.get("Individual", "testbaum", xref=xref).json["facts"]
@@ -320,7 +359,7 @@ class Schreiben(unittest.TestCase):
         liste = s.get("Sources", "testbaum").json
         self.assertEqual(["S1"], [x["xref"] for x in liste["sources"]])  # S2 ist vertraulich
         s1 = liste["sources"][0]
-        self.assertEqual(("Pfarramt Offenbach", "Offenbach, 1790–1830", "Bistumsarchiv Mainz", "KB 12", 2),
+        self.assertEqual(("Pfarramt Offenbach", "Offenbach, 1790–1830", "Bistumsarchiv Mainz", "KB 12", 3),
                          (s1["author"], s1["publication"], s1["repository"], s1["callNumber"], s1["uses"]))
         einzeln = s.get("Source", "testbaum", xref="S1").json
         self.assertEqual("Taufen, Trauungen, Begräbnisse", einzeln["text"])

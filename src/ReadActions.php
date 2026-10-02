@@ -1125,6 +1125,11 @@ trait ReadActions
     {
         $tree = Validator::attributes($request)->tree();
 
+        // Ab Stufe 21: ?list=1 - die Ortsliste fuer jeden, der den Baum sieht (PlaceActions).
+        if (Validator::queryParams($request)->string('list', '') === '1') {
+            return $this->placeList($tree);
+        }
+
         if (!Auth::isEditor($tree)) {
             return $this->error(403, 'not-editor');
         }

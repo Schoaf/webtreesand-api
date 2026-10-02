@@ -63,6 +63,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     use ReadActions;
     use WriteActions;
     use JsonBuilders;
+    use PlaceActions;
 
 
     // webtrees benennt ein eigenes Modul nach seinem Ordner ("_api4webtrees_") - was setName() im Modul sagt,
@@ -90,7 +91,9 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     //     noteKinds, typeLabel (MARR:TYPE uebersetzt); Individual.associatedIn (Gegenrichtung); NOTE/TEXT mit CONC
     // 20: Paten und Trauzeugen schreiben - POST Association (verknuepfte als 2 _ASSO + RELA, freie als 2 _GODP/_WITN,
     //     1 ASSO in die Taufe verschieben); Fact.type (Art des Ereignisses, MARR in webtrees-Form CIVIL/RELIGIOUS ...)
-    public const int    API_VERSION = 20;
+    // 21: Orte - Places?list=1 (alle Orte mit Zahlen, Koordinaten, _LOC), Place (ein Ort: Personen und Familien mit
+    //     ihren Ereignissen dort, Unterorte, _LOC mit GOV, Koordinaten, Notizen, Quellen, Medien)
+    public const int    API_VERSION = 21;
 
     /** Benutzereinstellung je Baum: die Merkliste als Liste von Personenkennungen. */
     private const string BOOKMARKS_PREF = 'api4webtrees_bookmarks';
