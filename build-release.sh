@@ -36,5 +36,11 @@ for file in sorted(pathlib.Path('resources/lang').glob('*.php')):
         print(f"  {file.name}: {len(dead)} veraltet, {len(missing)} fehlen (von {len(reference)})")
 PYCHECK
 
+# Tests gegen ein echtes webtrees (tests/test_api.py): kein Release, wenn einer rot ist. Ein Fehler hier traefe
+# alle Apps, nas4webtrees und die lokale Fassung von wtWin zugleich. Nur im Notfall: OHNE_TESTS=1.
+if [ "${OHNE_TESTS:-}" != "1" ]; then
+    python3 -W ignore tests/test_api.py || { echo "Tests rot - kein Release." >&2; exit 1; }
+fi
+
 git archive --prefix=api4webtrees/ --format=zip -o "api4webtrees-v$VERSION.zip" HEAD
 echo "api4webtrees-v$VERSION.zip"

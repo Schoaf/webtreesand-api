@@ -2,6 +2,16 @@
 
 **English** · [Deutsch](README.de.md)
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/thobgg/app4webtrees/main/docs/icon/icon-512.png" alt="wtAnd logo" width="112">
+</p>
+
+<p align="center">
+  <a href="https://github.com/thobgg/api4webtrees/releases/latest"><img src="https://img.shields.io/badge/webtrees-module%20ZIP-1F5F99?style=for-the-badge" alt="webtrees module api4webtrees (ZIP)"></a>
+  <a href="https://github.com/thobgg/app4webtrees/releases/latest"><img src="https://img.shields.io/badge/Android-wtAnd%20APK-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android: wtAnd (APK)"></a>
+  <a href="https://github.com/thobgg/app4webtrees/releases/latest"><img src="https://img.shields.io/badge/Linux-wtTux%20.deb-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux: wtTux (.deb)"></a>
+</p>
+
 A [webtrees](https://webtrees.net/) module that gives the native Android app **[wtAnd](https://github.com/thobgg/app4webtrees)**
 a JSON interface for reading **and** writing. It is an ordinary custom module: it lives in
 `modules_v4/`, the webtrees core is not modified.
@@ -60,24 +70,34 @@ module list). The page offers the app download, the status (https, upload limit)
 **which family trees the app may reach.** Trees that are not ticked cannot be reached through this module at all,
 for any user, whatever their rights in webtrees. Default: all trees.
 
-**Another app (optional):** here a second app that follows the same interface can be entered, for iPhone and iPad, say.
-With the fields empty nothing changes. See [Connecting other apps](#connecting-other-apps).
+**Apps:** the apps the module knows (wtAnd, wtWin, wtTux, wtMac, and any added by pull request), each with a tick. Unticked apps
+disappear from the “App” page, the note and the footer. Default: all on. See [Apps on the “App” page](#apps-on-the-app-page).
 
-![Settings page: install the app, family trees for the app, another app, status](docs/einstellungen.png)
+![Settings page: install the app, family trees for the app, apps, status](docs/einstellungen.png)
 
-## For family members: the “App” page
+## For users: the “App” page
 
-Signed-in users see a note **“The family tree on your phone”** at the top of the page with a button to the “App” page.
-The note disappears for good once their app is connected (or when they click *Do not show again*); after that the
-link **App for Android** in the footer leads there, for example for a new phone. The page offers two steps:
+Signed-in users see a note at the top of the page with a button to the “App” page – at a Windows or Linux PC
+**“The family tree as a program on your PC”** (wtWin/wtTux), on a phone **“The family tree on your phone”** (wtAnd).
+Phone and PC are remembered separately: the note disappears for that kind of device once its app is connected (or when
+they click *Do not show again*); after that the links in the footer lead there. The page shows the apps for the
+visitor's device first (own apps before others), wtWin and wtAnd always open, the rest folded below. On an iPhone or iPad
+it says that there is no app yet and recommends the browser. Each app has two steps:
 
-1. **Install the app:** a button and a QR code lead to the download.
-2. **Connect your account:** one tap (or a QR code when sitting at a computer) hands the server address, the tree and
-   a one-time code to the app. There is nothing to type, and the password never reaches the phone.
+1. **Install:** a button to the newest download (`.exe`, `.deb` or APK), for the phone also as a QR code.
+2. **Connect your account – nothing to type, the password never reaches the device:**
+   - **PC:** the button *Connect with wtWin* puts the connect link with a one-time code on the clipboard and opens it
+     as `wtwin://connect?…` (`wttux://` on Linux). wtWin/wtTux (from 1.21) take it from the clipboard while they wait
+     for a connection, or receive it from the browser – they register themselves for their scheme at first start,
+     without admin rights. They ask once for confirmation, then the tree opens. If the page is older than the code,
+     it reloads by itself when you come back to it (e.g. after download and installation).
+   - **Phone:** one tap, or at a computer a QR code for the phone camera.
+   - By hand, *Copy address* is still there: the programs fill it in by themselves, then sign in with username and password.
 
 The one-time code is shown only to the signed-in user, is valid for 10 minutes and exactly once, and is only offered over
-https. Only its hash is stored. Do not untick the module under *Control panel → Modules → Footers*: in webtrees that switches
-off the whole module, including the API.
+https – or over http inside the home network (private addresses, `.local`, `.lan`, `.fritz.box` …), the same rule by which
+the apps accept http. Only its hash is stored. Do not untick the module under *Control panel → Modules → Footers*: in
+webtrees that switches off the whole module, including the API.
 
 ## Privacy and permissions
 
@@ -92,6 +112,14 @@ The module deliberately has no login and no permission system of its own:
   log and moderation (“pending changes”) therefore work exactly as in the web interface. Every POST
   passes webtrees' CSRF check.
 
+## Behind SSO or password protection
+
+If a sign-in sits in front of webtrees (Authelia, Authentik, oauth2-proxy, Cloudflare Access, basic auth), the app
+cannot get through; wtAnd and wtWin say so from their next version. Fix: in the sign-in service, let through only
+requests whose `route` contains `_api4webtrees_`, `media-thumbnail` or `media-download`, not the whole site. The webtrees
+login still protects everything behind it. Then connect the app via the “App” page: you sign in through SSO in the
+browser, and the app needs no password.
+
 ## One media folder per tree
 
 If several trees are used by different groups of people, give each tree its **own media folder**
@@ -101,6 +129,8 @@ does not use yet (“unused files”). With a shared folder, editors of one tree
 of another.
 
 ## For developers
+
+Complete reference of all routes, answer schemas and performance figures: **[docs/API.md](docs/API.md)** (machine-readable: [docs/openapi.json](docs/openapi.json), generated from real answers and checked by the tests).
 
 ### Addresses
 
@@ -142,32 +172,65 @@ Rules for clients:
 Image addresses (`thumb`, `file`) are webtrees' signed media routes and need the same cookie. `path` (level 9) is the
 file's path inside the tree's media folder, for naming the same file to another module; `null` for media linked by URL.
 
-### Connecting other apps
+### Compatibility
 
-Any client can use the interface with the normal sign-in above. A second app can also take part in the one-tap
-connection if a manager enters it under *Settings → Another app* with its name, download addresses (https only) and its own URL
-scheme; it then appears next to wtAnd on the “App” page and when connecting. The contract is the one
-wtAnd uses:
+The interface only grows. Every release that adds routes or fields raises the **API level** (`apiVersion` in `Info`,
+19 today); existing routes, parameters and fields keep their names, types and meaning. A client built for level N works
+with every module from level N on, and an older client keeps working with a newer module – it simply does not see
+the new fields. New fields are optional, so clients should ignore what they do not know. The tests check every answer
+against the documented schema, so a field cannot disappear unnoticed. Where a limit is raised (generations, page
+sizes), the answer reports what was actually delivered. Should something ever have to change incompatibly, it would
+be a new route, never a changed one.
+
+### Apps on the “App” page
+
+Any client can use the interface with the normal sign-in above – nothing in the JSON endpoints, rights or privacy is
+specific to one app. The “App” page, the “Connect” page, the note and the footer show the apps listed in
+`src/Apps.php`. To add an app, send a pull request with one entry: name, author, kind (phone or PC), devices, download
+addresses (https), the URL scheme for one-tap connecting and, for a store link, the store badge under `resources/img`.
+Conditions: the app is publicly installable (store or release), and it accepts the connect link below. The tests reject
+entries with missing fields, non-https links or a scheme already taken. Managers can untick any app in the settings.
+
+The contract for one-tap connecting is the one wtAnd uses:
 
 1. The “App” page and the “Connect” page open `<scheme>://connect?url=<base URL>&code=<48 hex>&tree=<tree name>&user=<user name>`
    in the app. `tree` and `user` are hints for the display; `url` is the webtrees base URL.
 2. The app calls `GET <url>…/Info` to obtain a session cookie and the `csrf` token, then `POST …/Pair` with header
    `X-CSRF-TOKEN` and body `{"code": "<code>"}` – like every other POST. Answer: `{"ok":true,"tree":"…","user":"…"}` – the session
    is now signed in as that user – or `{"ok":false,"error":"pair-invalid"|"pair-expired"}`.
-3. The rules for the code are those [above](#for-family-members-the-app-page), whichever app redeems it.
-
-Nothing else in the module is specific to one app: the JSON endpoints, rights and privacy are the same for every client.
+3. The rules for the code are those [above](#for-users-the-app-page), whichever app redeems it.
 
 ### Reading (GET)
+
+Every person in an answer comes as the same short form: `xref`, `name`, `sortName`, `given`, `surname`, `sex`,
+`isDead`, `private`, `lifespan`, `birth` and `death` (`{date, place}` or `null`), `thumb`, `url`, and from level 14
+`call` (call name: the given name marked with `*` or `_RUFNAME`, else empty), `chr` (christening, `CHR` or else
+`BAPM`), `buri` (burial, `BURI` or else `CREM`) – both like `birth` – and `occupation` (the first `OCCU`, or `null`).
+For people the user may not see, all of these stay empty.
+
+Every fact (`facts[]` in `Individual`, `Family`, `Export`) carries `id`, `tag`, `label`, `known`, `value`, `type`,
+`date`, `place`, `notes` (strings) and `sources` (citations, complete from level 18). **Level 19 adds, per fact:**
+`typeLabel` (the `TYPE` as webtrees shows it, e.g. `CIVIL` → “Civil marriage” for `MARR`; `null` without a type),
+`noteKinds` (parallel to `notes`: `note` or `associates`), `associates` (people linked with `2 _ASSO`: godparents,
+witnesses … – `xref`, `name`, `sex`, `rela` as in the file, `role` normalised to `godparent`, `witness` or `other`,
+`label` as webtrees shows it by the linked person's sex, `private`, `level1`, `notes`, `sources`) and
+`freeAssociates` (people without a record: first from Ahnenblatt's tags `2 _GODP` under `CHR`/`BAPM` and `2 _WITN`
+under `MARR`, one person per line as Ahnenblatt writes them, then from notes beginning with `Paten:`, `Taufpaten:`,
+`Gevattern:`, `Trauzeugen:` or `Zeugen:` – entries separated by `;`; `name` up to the first comma, `detail` the rest. A
+note without `;` (the older comma-only form) gives a single entry with `name: null` and the whole `text`, no guessing). A `1 ASSO` on the person stays a fact `ASSO`
+as before and, for a godparent, is added to the christening's `associates` with `level1: true`. A linked person the
+user may not see comes with `private: true` and no name; one whose name they may not see is left out.
 
 | Action | Tree | Parameters | Content |
 | - | - | - | - |
 | `Info` | – | – | versions, `api` level, user, visible trees with role, rights, number of individuals and (for moderators) of records with pending changes, `maxUpload` in bytes, CSRF token, `trees[].lastChange` (number of the latest change in the tree: a different value than last time means “reload”; compare for equality only, a new GEDCOM import resets it) |
 | `Individuals` | yes | `q`, `page`, `scope?` | people by sort name, 50 per page, `nextPage`. `q` searches names; with `scope=all` every word must appear somewhere in the person's visible facts (`Huber Wien` finds the Hubers with Wien as birth place, residence …); error `too-many-results` when webtrees refuses the search |
-| `Individual` | yes | `xref`, `relativeTo?` | person, facts (`known: false` marks vendor tags webtrees has no definition for), parent and spouse families, media, `relationship` to `relativeTo` (default: the user's own record), e.g. “great-grandmother”. Each fact date carries `gedcom` (`"ABT 1850"`) next to the display `text`, for pre-filling an edit form; each media entry carries `factId` and `primary` (the photo webtrees shows for the person) |
+| `Individual` | yes | `xref`, `relativeTo?` | person, facts (`known: false` marks vendor tags webtrees has no definition for), parent and spouse families, `stepFamilies` (the parents' families with other partners, i.e. half-siblings; `parent` names the shared parent), media, `relationship` to `relativeTo` (default: the user's own record), e.g. “great-grandmother”. Each fact date carries `gedcom` (`"ABT 1850"`) next to the display `text`, for pre-filling an edit form; each media entry carries `factId` and `primary` (the photo webtrees shows for the person). The person and everyone in these families carry `hasParents`, `partnersCount`, `childrenCount`. Level 19: `associatedIn` – where this person is a godparent, witness … (the other person's or family's event with `record`, `recordType`, `name`, `tag`, `label`, `factId`, `date`, `place`, `rela`, `role`, `label2`, `level1`, `url`, for families `husband` and `wife` as xrefs of the visible partners; only visible records and facts, sorted by date) |
 | `Family` | yes | `xref` | family with facts, children, media |
-| `Pedigree` | yes | `xref`, `generations` (1–7) | ancestors with ahnentafel number `n`; `hasParents` tells a client that the branch can be expanded further |
-| `Descendants` | yes | `xref`, `generations` (1–4) | descendants as a tree |
+| `Pedigree` | yes | `xref`, `generations` (1–12, before 1.9.0: 1–7), `siblings?` | ancestors with ahnentafel number `n`; `hasParents` tells a client that the branch can be expanded further. With `siblings=1` (level 15) each ancestor carries `siblings`: the other children of the parents' family shown above it (no half-siblings), as short persons |
+| `Descendants` | yes | `xref`, `generations` (1–10, before 1.8.0: 1–4) | descendants as a tree |
+| `Relationship` | yes | `xref1`, `xref2`, `ancestors?` | level 13: how the two are related, like webtrees' relationship chart. `paths`: the shortest paths (at most 5, `more` if there are further ones of the same length; with pedigree collapse there are several). Each path has `name` (what `xref2` is to `xref1`, e.g. “great-aunt”), `commonAncestors` (xrefs at the top of the path: the parents of the family where it turns, a single person on a half-sibling line or when one is the other's ancestor; empty when the path goes through a spouse) and `steps` from `xref1` to `xref2`: `{person, relation, family}` with `relation` what this person is to the previous one: `father`, `mother`, `parent`, `son`, `daughter`, `child`, `husband`, `wife`, `spouse`, `brother`, `sister`, `sibling` (`null` on the first step). `ancestors=1` searches via common ancestors only; the tree setting “ancestors only” always applies. Privacy as in the chart: error `chart-disabled` if the chart is not available to the user, `private` if one of the two may not be shown (unless the tree shows private relationships, webtrees' default); people on the way appear as “Private” |
+| `Export` | yes | `page` | level 17: the whole tree as far as the user may see it, for lists and books. First all individuals, then all families, 250 records per page, `nextPage`; `total` gives the number of individuals and families for a progress bar (a page may hold fewer when records are hidden). Individuals: the short form plus `famc`, `fams` (family xrefs), `facts` and `media` as in `Individual`. Families: `xref`, `private`, `husband`, `wife`, `children` (xrefs), `marriage`, `facts`, `media`. Links come from webtrees itself: with the tree setting “show private relationships” (webtrees' default) hidden people and families appear as placeholders with `private: true` and no facts or media, as in the charts; without it they are left out. `lastChange` as in `Info`: if it changes between pages, start again |
 | `Pending` | yes | – | moderators only: records with pending changes (`new`, `changed`, `deleted`), who changed them and when |
 | `Bookmarks` | yes | – | the signed-in user's bookmark list for this tree (persons); stored as a user preference per tree, level 11 |
 | `Anniversaries` | yes | `days` (1–60, default 14) | births, marriages and deaths whose anniversary falls into the next days, with the number of years |
@@ -193,7 +256,7 @@ Header `X-CSRF-TOKEN: <csrf from Info>`, JSON body. Answer: `{"ok":true,"xref":"
 | `UnlinkMedia` | `xref` | `{media}` – removes the link to the media object; the media object and its file stay |
 | `PrimaryMedia` | `xref` | `{media}` – makes this the person's main photo by moving its link before all other media links. While the change is pending, a further edit of the same person restores the old order (webtrees keeps the order of the accepted record; its own “re-order media” page behaves the same) |
 
-Dates in GEDCOM format (`12 MAR 1890`, `ABT 1850`, `BET 1900 AND 1910`). Error codes: `not-found`, `link-not-found`, `link-exists`, `invalid-relation`, `too-many-results`,
+Dates in GEDCOM format (`12 MAR 1890`, `ABT 1850`, `BET 1900 AND 1910`). Error codes: `not-found`, `chart-disabled`, `link-not-found`, `link-exists`, `invalid-relation`, `too-many-results`,
 `private`, `not-editable`, `not-editor`, `fact-locked`, `family-locked`, `fact-not-found`,
 `invalid-date`, `invalid-gedcom` (only one level-1 line, sub-lines 2–9 with a valid tag), `invalid-value` (text of the form `@X@` would be a pointer), `invalid-name` (surname between exactly two slashes), `link-tag-not-allowed`, `parent-exists`, `family-required`,
 `family-not-found`, `name-required`, `upload-not-allowed`, `upload-failed`.
@@ -214,6 +277,7 @@ Taken from the demo tree, shortened (`…`). Addresses are abbreviated to `<base
     "birth": { "date": { "text": "14. März 1985", "year": 1985, "jd": 2446139 },
                "place": { "name": "Hannover, Niedersachsen, Deutschland", "short": "…", "lat": null, "lng": null } },
     "death": null,
+    "call": "", "chr": null, "buri": null, "occupation": "Bauingenieur",
     "thumb": "<base>/index.php?route=/tree/falkenrath/media-thumbnail&xref=X88&…",
     "url": "<base>/index.php?route=/tree/falkenrath/individual/I1/Jonas-Falkenrath"
   },

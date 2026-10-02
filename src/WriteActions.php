@@ -21,7 +21,19 @@ use League\Flysystem\FilesystemException;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
+use function array_column;
 use function array_key_exists;
+use function min;
+use function max;
+use function md5;
+use function ltrim;
+use function count;
+use function array_values;
+use function array_map;
+use function array_splice;
+use function array_pad;
+use function array_keys;
+use function array_filter;
 use function class_exists;
 use function explode;
 use function implode;
@@ -30,9 +42,13 @@ use function is_array;
 use function preg_match;
 use function preg_quote;
 use function preg_replace;
+use function preg_replace_callback;
 use function response;
+use function str_contains;
 use function str_replace;
+use function str_starts_with;
 use function strlen;
+use function strtolower;
 use function strtoupper;
 use function substr;
 use function trim;
@@ -135,6 +151,641 @@ trait WriteActions
         }
 
         return $this->written($record);
+    }
+
+    /**
+     * Paten, Trauzeugen und andere Beteiligte eines Ereignisses schreiben (ab Stufe 20): ?xref=I123 bzw. ?xref=F12
+     * Rumpf: { factId, linked?: [{ xref, role, rela?, note? }], free?: [{ text, role }], convertLevel1? }
+     * - linked ersetzt die Liste der verknuepften Personen ("2 _ASSO @I…@" + "3 RELA") in dieser Reihenfolge. role:
+     *   godparent oder witness (RELA wird so geschrieben, klein, wie webtrees selbst), other mit rela als freiem Text.
+     *   Stand die Person schon am Ereignis, bleiben ihre weiteren Unterzeilen (3 SOUR ...) und - wenn sie zur Rolle
+     *   passt - die bisherige Schreibweise von RELA ("Godfather"); note ersetzt nur die eingebettete Notiz, wenn genannt.
+     *   Verknuepfungen zu Personen, die der Schreibende nicht einmal als Verweis sehen darf, bleiben immer stehen.
+     * - free ersetzt die Personen ohne Datensatz: "2 _GODP <Text>" (Paten) und "2 _WITN <Text>" (Zeugen), je Person
+     *   eine Zeile wie Ahnenblatt; alte Notizen "Paten: …"/"Trauzeugen: …" am Ereignis gehen dabei in diese Form ueber.
+     * - convertLevel1: true verschiebt "1 ASSO" der Person, die in linked stehen, in die Taufe (nur CHR/BAPM einer Person);
+     *   ihre Unterzeilen (Notiz, Quelle) kommen mit.
+     * Nicht genannte Teile (linked oder free) bleiben, wie sie sind. Antwort: factId (die neue Kennung des Ereignisses).
+     */
+    public function postAssociationAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree   = Validator::attributes($request)->tree();
+        $record = Registry::gedcomRecordFactory()->make($this->xref($request), $tree);
+        $denied = $this->denyEdit($record);
+
+        if ($denied !== null) {
+            return $denied;
+        }
+
+        $body    = $this->body($request);
+        $fact_id = $this->str($body, 'factId');
+        $old     = null;
+
+        foreach ($record->facts([], false, null, true) as $fact) {
+            if ($fact->id() === $fact_id) {
+                $old = $fact;
+                break;
+            }
+        }
+
+        if ($old === null) {
+            return $this->error(404, 'fact-not-found');
+        }
+
+        if (!$old->canEdit()) {
+            return $this->error(403, 'fact-locked');
+        }
+
+        $tag    = $this->shortTag($old->tag());
+        $gedcom = $old->gedcom();
+        [$kopf] = explode("\n", $gedcom, 2);
+        preg_match_all('/\n2 [^\n]*(?:\n[3-9] [^\n]*)*/', substr($gedcom, strlen($kopf)), $treffer);
+        $bloecke = $treffer[0];
+        $level1  = [];
+
+        // 1 ASSO der Person (fuer convertLevel1): xref => [Fakt-ID, Unterzeilen eine Ebene tiefer]
+        if (($body['convertLevel1'] ?? false) === true) {
+            if (!$record instanceof Individual || !in_array($tag, ['CHR', 'BAPM'], true)) {
+                return $this->error(400, 'not-a-baptism');
+            }
+
+            foreach ($record->facts(['ASSO'], false, null, true) as $fact) {
+                if (preg_match('/^1 ASSO @([^@]+)@((?:\n[2-9] [^\n]*)*)$/', $fact->gedcom(), $m) === 1 && $fact->canEdit()) {
+                    $unter = (string) preg_replace_callback('/\n([2-8]) /', static fn (array $x): string => "\n" . ((int) $x[1] + 1) . ' ', $m[2]);
+                    $level1[$m[1]] ??= [$fact->id(), (string) preg_replace('/\n3 RELA [^\n]*/', '', $unter)];
+                }
+            }
+        }
+
+        if (array_key_exists('linked', $body)) {
+            if (!is_array($body['linked'])) {
+                return $this->error(400, 'invalid-value');
+            }
+
+            // Bisherige Verknuepfungen: Position, Kennung, Block
+            $alt = [];
+
+            foreach ($bloecke as $i => $block) {
+                if (preg_match('/^\n2 _ASSO @([^@]+)@/', $block, $m) === 1) {
+                    $alt[] = [$i, $m[1], $block];
+                }
+            }
+
+            $neu      = [];
+            $benutzt  = [];
+            $verschoben = [];
+
+            foreach ($body['linked'] as $eintrag) {
+                if (!is_array($eintrag)) {
+                    return $this->error(400, 'invalid-value');
+                }
+
+                $xref = trim((string) ($eintrag['xref'] ?? ''), '@ ');
+                $role = strtolower(trim((string) ($eintrag['role'] ?? '')));
+                $rela = GedcomText::line((string) ($eintrag['rela'] ?? ''));
+                $note = array_key_exists('note', $eintrag) ? (string) $eintrag['note'] : null;
+
+                if (!Registry::individualFactory()->make($xref, $tree) instanceof Individual) {
+                    return $this->error(404, 'individual-not-found');
+                }
+
+                if (!in_array($role, ['godparent', 'witness', 'other'], true) || ($role === 'other' && $rela === '')) {
+                    return $this->error(400, 'invalid-role');
+                }
+
+                if (GedcomText::looksLikePointer($rela) || ($note !== null && GedcomText::looksLikePointer($note))) {
+                    return $this->error(400, 'invalid-value');
+                }
+
+                // Unterzeilen der bisherigen Verknuepfung derselben Person behalten (oder des 1 ASSO, der hereinkommt)
+                $unter = '';
+                $rela_alt = '';
+
+                foreach ($alt as $n => [, $x, $block]) {
+                    if ($x === $xref && !isset($benutzt[$n])) {
+                        $benutzt[$n] = true;
+                        $unter       = (string) preg_replace('/^\n2 _ASSO [^\n]*/', '', $block);
+                        break;
+                    }
+                }
+
+                if ($unter === '' && isset($level1[$xref]) && !isset($verschoben[$xref])) {
+                    $verschoben[$xref] = $level1[$xref][0];
+                    $unter             = $level1[$xref][1];
+                }
+
+                if (preg_match('/\n3 RELA ([^\n]*)/', $unter, $m) === 1) {
+                    $rela_alt = trim($m[1]);
+                }
+
+                $unter = (string) preg_replace('/\n3 RELA [^\n]*/', '', $unter);
+                $rela  = match ($role) {
+                    'godparent', 'witness' => $rela_alt !== '' && $this->associateRole($rela_alt) === $role ? $rela_alt : $role,
+                    default => $rela,
+                };
+
+                if ($note !== null) {
+                    $unter = (string) preg_replace('/\n3 NOTE (?!@)[^\n]*(\n4 CON[CT][^\n]*)*/', '', $unter);
+                    $text  = GedcomText::multiline($note, 4);
+                    $unter = ($text === '' ? '' : "\n3 NOTE " . $text) . $unter;
+                }
+
+                $neu[] = "\n2 _ASSO @" . $xref . "@\n3 RELA " . $rela . $unter;
+            }
+
+            // Verweise, die der Schreibende nicht sehen darf, bleiben stehen - die App kennt sie gar nicht
+            foreach ($alt as $n => [, $x, $block]) {
+                $person = Registry::individualFactory()->make($x, $tree);
+
+                if (!isset($benutzt[$n]) && $person instanceof Individual && !$person->canShowName()) {
+                    $neu[] = $block;
+                }
+            }
+
+            $stelle  = $alt === [] ? $this->stelleFuerBeteiligte($bloecke) : $alt[0][0];
+            $bloecke = $this->bloeckeErsetzen($bloecke, array_column($alt, 0), $stelle, $neu);
+        } else {
+            $verschoben = [];
+        }
+
+        if (array_key_exists('free', $body)) {
+            if (!is_array($body['free'])) {
+                return $this->error(400, 'invalid-value');
+            }
+
+            $neu = [];
+
+            foreach ($body['free'] as $eintrag) {
+                $role = strtolower(trim((string) (is_array($eintrag) ? ($eintrag['role'] ?? '') : '')));
+                $text = GedcomText::line(str_replace("\n", ' ', (string) (is_array($eintrag) ? ($eintrag['text'] ?? '') : $eintrag)));
+
+                if (!in_array($role, ['godparent', 'witness'], true)) {
+                    return $this->error(400, 'invalid-role');
+                }
+
+                if (GedcomText::looksLikePointer($text)) {
+                    return $this->error(400, 'invalid-value');
+                }
+
+                if ($text !== '') {
+                    $neu[] = "\n2 " . ($role === 'godparent' ? '_GODP' : '_WITN') . ' ' . $text;
+                }
+            }
+
+            $weg = [];
+
+            foreach ($bloecke as $i => $block) {
+                $frei_notiz = preg_match('/^\n2 NOTE (?!@)/', $block) === 1
+                    && preg_match('/^(paten|taufpaten|gevattern|trauzeugen|zeugen):/iu', trim(GedcomText::mitFortsetzung(
+                        (string) preg_replace('/^\n2 NOTE ?([^\n]*)[\s\S]*$/', '$1', $block),
+                        (string) preg_replace('/^\n2 NOTE[^\n]*/', '', $block),
+                        2,
+                    ))) === 1;
+
+                if (preg_match('/^\n2 (_GODP|_WITN)( |$)/', $block) === 1 || $frei_notiz) {
+                    $weg[] = $i;
+                }
+            }
+
+            $stelle  = $weg === [] ? $this->stelleFuerBeteiligte($bloecke) : $weg[0];
+            $bloecke = $this->bloeckeErsetzen($bloecke, $weg, $stelle, $neu);
+        }
+
+        $gedcom_neu = $kopf . implode('', $bloecke);
+
+        if (($problem = GedcomText::factGedcomProblem($gedcom_neu)) !== null) {
+            return $this->error(400, $problem);
+        }
+
+        if ($gedcom_neu !== $gedcom) {
+            $record->updateFact($fact_id, $gedcom_neu, true);
+        }
+
+        foreach ($verschoben as $asso_id) {
+            $record->deleteFact($asso_id, true);
+        }
+
+        return $this->written($record, ['factId' => md5($gedcom_neu)]);
+    }
+
+    /**
+     * Wohin neue Paten/Zeugen kommen, wenn es noch keine gibt: vor die erste Notiz, Quelle oder Medium des Ereignisses
+     * (also hinter Datum, Ort, Art ...), sonst ans Ende.
+     *
+     * @param array<int,string> $bloecke
+     */
+    private function stelleFuerBeteiligte(array $bloecke): int
+    {
+        foreach ($bloecke as $i => $block) {
+            if (preg_match('/^\n2 (NOTE|SOUR|OBJE|RESN)( |$|\n)/', $block) === 1) {
+                return $i;
+            }
+        }
+
+        return count($bloecke);
+    }
+
+    /**
+     * Die Bloecke [$weg] entfernen und [$neu] an der Stelle [$stelle] (Index vor dem Entfernen) einsetzen.
+     *
+     * @param array<int,string> $bloecke
+     * @param array<int,int>    $weg
+     * @param array<int,string> $neu
+     *
+     * @return array<int,string>
+     */
+    private function bloeckeErsetzen(array $bloecke, array $weg, int $stelle, array $neu): array
+    {
+        $vorher = 0;
+
+        foreach ($weg as $i) {
+            if ($i < $stelle) {
+                $vorher++;
+            }
+            unset($bloecke[$i]);
+        }
+
+        $bloecke = array_values($bloecke);
+        array_splice($bloecke, $stelle - $vorher, 0, $neu);
+
+        return $bloecke;
+    }
+
+    /**
+     * Quellenverweis (ab Stufe 18): ?xref=I123
+     * Rumpf: { factId?, index?, delete?, moveTo?, source?, page?, quality?, date?, text?, note?, media? }
+     * - factId: das Ereignis; ohne factId ein allgemeiner Verweis am Datensatz ("1 SOUR"). Ist factId selbst ein
+     *   solcher allgemeiner Verweis (Tag SOUR), wird dieser bearbeitet.
+     * - index: der wievielte Verweis des Ereignisses (ab 0); ohne index wird ein neuer angehaengt.
+     * - delete: true entfernt ihn; moveTo: neue Stelle (ab 0) - beides ohne weitere Aenderung.
+     * - source: Kennung einer Quelle ("S1") oder freier Text ("laut Martha Meier"); fehlt sie, bleibt die Quelle.
+     * - page, quality (0-3, "" = weg), date, text, note, media (Liste von Kennungen): nur genannte Teile werden
+     *   ersetzt, alles andere am Verweis und am Ereignis bleibt, wie es ist.
+     */
+    public function postCitationAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree   = Validator::attributes($request)->tree();
+        $record = Registry::gedcomRecordFactory()->make($this->xref($request), $tree);
+        $denied = $this->denyEdit($record);
+
+        if ($denied !== null) {
+            return $denied;
+        }
+
+        $body    = $this->body($request);
+        $fact_id = $this->str($body, 'factId');
+
+        foreach (['source', 'page', 'text', 'note'] as $key) {
+            if ($key !== 'source' && GedcomText::looksLikePointer($this->str($body, $key))) {
+                return $this->error(400, 'invalid-value');
+            }
+        }
+
+        // Die Qualitaet kommt als Zahl (3) oder Text ("3"); "" oder null = weg
+        if (array_key_exists('quality', $body)) {
+            $body['quality'] = $body['quality'] === null ? '' : trim((string) $body['quality']);
+        }
+
+        if (array_key_exists('quality', $body) && $this->str($body, 'quality') !== '' && preg_match('/^[0-3]$/', $this->str($body, 'quality')) !== 1) {
+            return $this->error(400, 'invalid-quality');
+        }
+
+        if (array_key_exists('date', $body) && $this->str($body, 'date') !== '' && !(new Date(strtoupper($this->str($body, 'date'))))->isOK()) {
+            return $this->error(400, 'invalid-date');
+        }
+
+        if (array_key_exists('source', $body)) {
+            $source = $this->str($body, 'source');
+
+            if ($source === '') {
+                return $this->error(400, 'source-missing');
+            }
+
+            if (preg_match('/^@?([A-Za-z0-9:_.-]+)@?$/', $source, $m) === 1 && Registry::sourceFactory()->make($m[1], $tree) !== null) {
+                $body['source'] = '@' . $m[1] . '@';
+            } elseif (GedcomText::looksLikePointer($source)) {
+                return $this->error(404, 'source-not-found');
+            }
+        }
+
+        // Allgemeiner Verweis am Datensatz: neu anlegen
+        if ($fact_id === '') {
+            if (!array_key_exists('source', $body)) {
+                return $this->error(400, 'source-missing');
+            }
+
+            $neu = $this->citationGedcom(1, '', $body);
+            $record->createFact($neu, true);
+
+            // Die Kennung des Ereignisses ist ein Hash seines Inhalts - nach dem Schreiben braucht die App die neue.
+            return $this->written($record, ['factId' => md5($neu)]);
+        }
+
+        $old = null;
+
+        foreach ($record->facts([], false, null, true) as $fact) {
+            if ($fact->id() === $fact_id) {
+                $old = $fact;
+                break;
+            }
+        }
+
+        if ($old === null) {
+            return $this->error(404, 'fact-not-found');
+        }
+
+        if (!$old->canEdit()) {
+            return $this->error(403, 'fact-locked');
+        }
+
+        $gedcom = $old->gedcom();
+
+        // Der allgemeine Verweis ist selbst das Ereignis ("1 SOUR @S1@ ...")
+        if ($this->shortTag($old->tag()) === 'SOUR') {
+            if (($body['delete'] ?? false) === true) {
+                $record->deleteFact($fact_id, true);
+
+                return $this->written($record);
+            }
+
+            $neu = $this->citationGedcom(1, $gedcom, $body);
+            $record->updateFact($fact_id, $neu, true);
+
+            return $this->written($record, ['factId' => md5($neu)]);
+        }
+
+        // Das Ereignis in seine Ebene-2-Bloecke zerlegen; die Verweise sind die Bloecke "2 SOUR"
+        [$kopf] = explode("\n", $gedcom, 2);
+        preg_match_all('/\n2 [^\n]*(?:\n[3-9] [^\n]*)*/', substr($gedcom, strlen($kopf)), $treffer);
+        $bloecke   = $treffer[0];
+        $positionen = array_values(array_filter(array_keys($bloecke), static fn (int $i): bool => str_starts_with($bloecke[$i], "\n2 SOUR")));
+        $index     = array_key_exists('index', $body) && $body['index'] !== null && $body['index'] !== '' ? (int) $body['index'] : null;
+
+        if ($index !== null && !array_key_exists($index, $positionen)) {
+            return $this->error(404, 'citation-not-found');
+        }
+
+        if ($index === null) {
+            if (!array_key_exists('source', $body)) {
+                return $this->error(400, 'source-missing');
+            }
+
+            $bloecke[] = $this->citationGedcom(2, '', $body);
+        } elseif (($body['delete'] ?? false) === true) {
+            unset($bloecke[$positionen[$index]]);
+        } elseif (array_key_exists('moveTo', $body)) {
+            $ziel = max(0, min(count($positionen) - 1, (int) $body['moveTo']));
+            // Nur die Verweise untereinander umsortieren, alle anderen Bloecke bleiben an ihrer Stelle
+            $verweise = array_map(static fn (int $i): string => $bloecke[$i], $positionen);
+            $block    = $verweise[$index];
+            unset($verweise[$index]);
+            array_splice($verweise, $ziel, 0, [$block]);
+            foreach ($positionen as $n => $i) {
+                $bloecke[$i] = $verweise[$n];
+            }
+        } else {
+            $bloecke[$positionen[$index]] = $this->citationGedcom(2, $bloecke[$positionen[$index]], $body);
+        }
+
+        $neu = $kopf . implode('', $bloecke);
+
+        if (($problem = GedcomText::factGedcomProblem($neu)) !== null) {
+            return $this->error(400, $problem);
+        }
+
+        $record->updateFact($fact_id, $neu, true);
+
+        return $this->written($record, ['factId' => md5($neu)]);
+    }
+
+    /**
+     * Ein Verweis als GEDCOM ("\n2 SOUR @S1@\n3 PAGE ..." bzw. "1 SOUR ..." ohne fuehrenden Umbruch fuer Ebene 1).
+     * [$alt]: der bisherige Block (leer = neu). Nur im Rumpf genannte Teile werden ersetzt; Unterzeilen, die die App
+     * nicht kennt, bleiben.
+     *
+     * @param array<string,mixed> $body
+     */
+    private function citationGedcom(int $ebene, string $alt, array $body): string
+    {
+        $u        = $ebene + 1;
+        $praefix  = $ebene === 1 ? '' : "\n";
+        $alt_ohne = $ebene === 1 && $alt !== '' ? "\n" . $alt : $alt;
+        [$kopf, $rest] = $alt_ohne === '' ? ['', ''] : (array_pad(explode("\n", ltrim($alt_ohne, "\n"), 2), 2, ''));
+        $rest = $rest === '' ? '' : "\n" . $rest;
+
+        // Die Quelle selbst: neu oder wie bisher (samt CONT-Fortsetzungen einer Text-Quelle)
+        if (array_key_exists('source', $body)) {
+            $wert = $this->str($body, 'source');
+            $kopf = $ebene . ' SOUR ' . (str_starts_with($wert, '@') ? $wert : GedcomText::multiline($wert, $u));
+            $rest = (string) preg_replace('/^(\n' . $u . ' CON[CT] ?[^\n]*)+/', '', $rest);
+        } elseif ($kopf === '') {
+            $kopf = $ebene . ' SOUR';
+        }
+
+        $ersetzen = function (string $tag, string $neu) use (&$rest, $u): void {
+            $rest = (string) preg_replace('/\n' . $u . ' ' . $tag . '(?: [^\n]*)?(?:\n[' . ($u + 1) . '-9] [^\n]*)*/', '', $rest);
+            $rest .= $neu;
+        };
+
+        if (array_key_exists('page', $body)) {
+            $page = GedcomText::multiline($this->str($body, 'page'), $u + 1);
+            $ersetzen('PAGE', $page === '' ? '' : "\n" . $u . ' PAGE ' . $page);
+        }
+
+        if (array_key_exists('quality', $body)) {
+            $q = $this->str($body, 'quality');
+            $ersetzen('QUAY', $q === '' ? '' : "\n" . $u . ' QUAY ' . $q);
+        }
+
+        if (array_key_exists('date', $body) || array_key_exists('text', $body)) {
+            // DATA buendelt Datum und Text der Fundstelle; nicht genannte Teile aus dem alten DATA uebernehmen
+            $alt_data = GedcomText::unterzeilen($rest, $u, 'DATA')[0][1] ?? '';
+            $datum    = array_key_exists('date', $body) ? strtoupper(GedcomText::line($this->str($body, 'date'))) : (GedcomText::unterzeilen($alt_data, $u + 1, 'DATE')[0][0] ?? '');
+            $text     = array_key_exists('text', $body) ? $this->str($body, 'text') : GedcomText::ersterWert(ltrim($alt_data, "\n"), $u + 1, 'TEXT');
+            $data     = '';
+
+            if ($datum !== '') {
+                $data .= "\n" . ($u + 1) . ' DATE ' . $datum;
+            }
+
+            if (trim($text) !== '') {
+                $data .= "\n" . ($u + 1) . ' TEXT ' . GedcomText::multiline($text, $u + 2);
+            }
+
+            $ersetzen('DATA', $data === '' ? '' : "\n" . $u . ' DATA' . $data);
+        }
+
+        if (array_key_exists('note', $body)) {
+            $note = GedcomText::multiline($this->str($body, 'note'), $u + 1);
+            // Nur eingebettete Notizen ersetzen; Verweise auf Notiz-Datensaetze bleiben
+            $rest = (string) preg_replace('/\n' . $u . ' NOTE (?!@)[^\n]*(\n' . ($u + 1) . ' CONT[^\n]*)*/', '', $rest);
+            $rest .= $note === '' ? '' : "\n" . $u . ' NOTE ' . $note;
+        }
+
+        if (array_key_exists('media', $body) && is_array($body['media'])) {
+            $rest = (string) preg_replace('/\n' . $u . ' OBJE @[^\n]*/', '', $rest);
+
+            foreach ($body['media'] as $m) {
+                if (preg_match('/^@?([A-Za-z0-9:_.-]+)@?$/', (string) $m, $mm) === 1) {
+                    $rest .= "\n" . $u . ' OBJE @' . $mm[1] . '@';
+                }
+            }
+        }
+
+        return $praefix . $kopf . $rest;
+    }
+
+    /**
+     * Quelle anlegen oder aendern (ab Stufe 18): ohne ?xref neu (title Pflicht), mit ?xref=S1 aendern.
+     * Rumpf: { title?, author?, publication?, abbreviation?, text?, note?, repository?, callNumber?, media? }
+     * Nur genannte Teile werden ersetzt; repository: Kennung eines Archivs ("R1") oder "" (weg), callNumber: Signatur
+     * am (ersten) Archiv; media: die verknuepften Medienobjekte (Kennungen, ersetzt die Liste). Eine neue Datei kommt
+     * ueber die Route Media mit ?xref=S1 (verknuepft gleich) oder mit link=false und dann hier. Antwort: xref.
+     */
+    public function postSourceAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree = Validator::attributes($request)->tree();
+        $xref = $this->xrefOptional($request);
+        $body = $this->body($request);
+
+        foreach (['title', 'author', 'publication', 'abbreviation', 'text', 'note', 'callNumber'] as $key) {
+            if (GedcomText::looksLikePointer($this->str($body, $key))) {
+                return $this->error(400, 'invalid-value');
+            }
+        }
+
+        if (array_key_exists('repository', $body) && $this->str($body, 'repository') !== '') {
+            $repo = preg_replace('/^@|@$/', '', $this->str($body, 'repository'));
+
+            if (Registry::repositoryFactory()->make($repo, $tree) === null) {
+                return $this->error(404, 'repository-not-found');
+            }
+
+            $body['repository'] = $repo;
+        }
+
+        if ($xref === '') {
+            if (!Auth::isEditor($tree)) {
+                return $this->error(403, 'not-editable');
+            }
+
+            if (GedcomText::line($this->str($body, 'title')) === '') {
+                return $this->error(400, 'title-missing');
+            }
+
+            $source = $tree->createRecord($this->sourceGedcom("0 @@ SOUR", $body));
+
+            return $this->written($source, ['xref' => $source->xref()], 201);
+        }
+
+        $source = Registry::sourceFactory()->make($xref, $tree);
+        $denied = $this->denyEdit($source);
+
+        if ($denied !== null) {
+            return $denied;
+        }
+
+        $source->updateRecord($this->sourceGedcom($source->gedcom(), $body), true);
+
+        return $this->written($source, ['xref' => $source->xref()]);
+    }
+
+    /**
+     * Das GEDCOM einer Quelle mit den im Rumpf genannten Teilen ersetzt; alles andere (Medien, weitere Archive,
+     * Notiz-Datensaetze, unbekannte Zeilen) bleibt.
+     *
+     * @param array<string,mixed> $body
+     */
+    private function sourceGedcom(string $alt, array $body): string
+    {
+        [$kopf, $rest] = array_pad(explode("\n", $alt, 2), 2, '');
+        $rest = $rest === '' ? '' : "\n" . $rest;
+
+        $ersetzen = static function (string $tag, string $neu) use (&$rest): void {
+            $rest = (string) preg_replace('/\n1 ' . $tag . '(?: [^\n]*)?(?:\n[2-9] [^\n]*)*/', '', $rest);
+            $rest .= $neu;
+        };
+
+        foreach (['title' => 'TITL', 'author' => 'AUTH', 'publication' => 'PUBL', 'abbreviation' => 'ABBR', 'text' => 'TEXT'] as $key => $tag) {
+            if (array_key_exists($key, $body)) {
+                $wert = GedcomText::multiline($this->str($body, $key), 2);
+                $ersetzen($tag, $wert === '' ? '' : "\n1 " . $tag . ' ' . $wert);
+            }
+        }
+
+        if (array_key_exists('note', $body)) {
+            $note = GedcomText::multiline($this->str($body, 'note'), 2);
+            // Nur die eingebettete Notiz ersetzen; Verweise auf Notiz-Datensaetze bleiben
+            $rest = (string) preg_replace('/\n1 NOTE (?!@)[^\n]*(\n2 CONT[^\n]*)*/', '', $rest);
+            $rest .= $note === '' ? '' : "\n1 NOTE " . $note;
+        }
+
+        if (array_key_exists('repository', $body)) {
+            $repo = $this->str($body, 'repository');
+            // Das erste Archiv ersetzen, weitere bleiben
+            $alte = GedcomText::unterzeilen($rest, 1, 'REPO');
+            $alt_caln = $alte === [] ? '' : (GedcomText::unterzeilen($alte[0][1], 2, 'CALN')[0][0] ?? '');
+            $caln = array_key_exists('callNumber', $body) ? GedcomText::line($this->str($body, 'callNumber')) : $alt_caln;
+            $rest = (string) preg_replace('/\n1 REPO(?: [^\n]*)?(?:\n[2-9] [^\n]*)*/', '', $rest, 1);
+            if ($repo !== '') {
+                $rest .= "\n1 REPO @" . $repo . '@' . ($caln === '' ? '' : "\n2 CALN " . $caln);
+            }
+        } elseif (array_key_exists('callNumber', $body)) {
+            $caln = GedcomText::line($this->str($body, 'callNumber'));
+            $rest = (string) preg_replace_callback('/(\n1 REPO [^\n]*)((?:\n[2-9] [^\n]*)*)/', static function (array $m) use ($caln): string {
+                $unter = (string) preg_replace('/\n2 CALN(?: [^\n]*)?(?:\n[3-9] [^\n]*)*/', '', $m[2]);
+
+                return $m[1] . ($caln === '' ? '' : "\n2 CALN " . $caln) . $unter;
+            }, $rest, 1);
+        }
+
+        if (array_key_exists('media', $body) && is_array($body['media'])) {
+            $rest = (string) preg_replace('/\n1 OBJE @[^\n]*(?:\n[2-9] [^\n]*)*/', '', $rest);
+
+            foreach ($body['media'] as $m) {
+                if (preg_match('/^@?([A-Za-z0-9:_.-]+)@?$/', (string) $m, $mm) === 1) {
+                    $rest .= "\n1 OBJE @" . $mm[1] . '@';
+                }
+            }
+        }
+
+        return $kopf . $rest;
+    }
+
+    /**
+     * Archiv anlegen oder umbenennen (ab Stufe 18): ohne ?xref neu, mit ?xref=R1 aendern. Rumpf: { name }
+     */
+    public function postRepositoryAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree = Validator::attributes($request)->tree();
+        $xref = $this->xrefOptional($request);
+        $name = GedcomText::line($this->str($this->body($request), 'name'));
+
+        if ($name === '' || GedcomText::looksLikePointer($name)) {
+            return $this->error(400, 'name-missing');
+        }
+
+        if ($xref === '') {
+            if (!Auth::isEditor($tree)) {
+                return $this->error(403, 'not-editable');
+            }
+
+            $repo = $tree->createRecord("0 @@ REPO\n1 NAME " . $name);
+
+            return $this->written($repo, ['xref' => $repo->xref()], 201);
+        }
+
+        $repo   = Registry::repositoryFactory()->make($xref, $tree);
+        $denied = $this->denyEdit($repo);
+
+        if ($denied !== null) {
+            return $denied;
+        }
+
+        $gedcom = (string) preg_replace('/\n1 NAME [^\n]*(\n[2-9] [^\n]*)*/', '', $repo->gedcom());
+        $repo->updateRecord($gedcom . "\n1 NAME " . $name, true);
+
+        return $this->written($repo, ['xref' => $repo->xref()]);
     }
 
     /**
@@ -539,16 +1190,65 @@ trait WriteActions
             return $this->error(400, 'upload-failed');
         }
 
-        $gedcom = "0 @@ OBJE\n" . Registry::container()->get(MediaFileService::class)->createMediaFileGedcom($file, 'photo', $title, $note);
+        // Art der Datei (ab Stufe 18 waehlbar): "document" fuer Scans von Urkunden und Kirchenbuchseiten, sonst "photo".
+        $type   = in_array($this->str($body, 'type'), ['photo', 'document', 'certificate', 'book', 'newspaper', 'card', 'map', 'tombstone', 'audio', 'video', 'other'], true) ? $this->str($body, 'type') : 'photo';
+        $gedcom = "0 @@ OBJE\n" . Registry::container()->get(MediaFileService::class)->createMediaFileGedcom($file, $type, $title, $note);
         $media  = $tree->createMediaObject($gedcom);
 
         // Wie webtrees selbst: das Medienobjekt sofort annehmen, damit Dateisystem und Baum zusammenpassen.
         // Die Verknuepfung zur Person bleibt eine normale (ggf. ausstehende) Aenderung.
         Registry::container()->get(PendingChangesService::class)->acceptRecord($media);
 
-        $record->createFact('1 OBJE @' . $media->xref() . '@', true);
+        // link=false (ab Stufe 18): nur das Medienobjekt anlegen, ohne Verknuepfung - die App haengt es danach an
+        // einen Quellenverweis (Route Citation, media) oder an eine Quelle (Route Source, media).
+        if (($body['link'] ?? true) !== false && $this->str($body, 'link') !== 'false') {
+            $record->createFact('1 OBJE @' . $media->xref() . '@', true);
+        }
 
         return $this->written($record, ['media' => $media->xref()], 201);
+    }
+
+    /**
+     * Medienobjekt aus einer Datei, die schon im Medienordner liegt (ab Stufe 18) - etwa ein Kirchenbuchscan aus dem
+     * Archiv (Modul Sammlungen): ?xref=<Datensatz, nur fuer die Rechtepruefung>  Rumpf: { file, title?, type? }
+     * Gibt es zu der Datei schon ein Medienobjekt, kommt dessen Kennung zurueck; sonst entsteht eines - ohne
+     * Verknuepfung. Die Datei bleibt, wo sie ist; verknuepft wird erst, was die App danach ausdruecklich zuordnet.
+     */
+    public function postMediaFromFileAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree = Validator::attributes($request)->tree();
+
+        if (!Auth::canUploadMedia($tree, Auth::user())) {
+            return $this->error(403, 'upload-not-allowed');
+        }
+
+        $body = $this->body($request);
+        $file = trim(str_replace('\\', '/', $this->str($body, 'file')), '/');
+
+        if ($file === '' || str_contains($file, '..') || str_contains($file, "\n")) {
+            return $this->error(400, 'invalid-value');
+        }
+
+        if (!$tree->mediaFilesystem()->fileExists($file)) {
+            return $this->error(404, 'file-not-found');
+        }
+
+        $vorhanden = DB::table('media_file')
+            ->where('m_file', '=', $tree->id())
+            ->where('multimedia_file_refn', '=', $file)
+            ->value('m_id');
+
+        if ($vorhanden !== null) {
+            return response(['ok' => true, 'pending' => false, 'media' => $vorhanden, 'existing' => true]);
+        }
+
+        $title = Registry::elementFactory()->make('OBJE:FILE:TITL')->canonical($this->str($body, 'title'));
+        $type  = in_array($this->str($body, 'type'), ['photo', 'document', 'certificate', 'book', 'newspaper', 'card', 'map', 'tombstone', 'audio', 'video', 'other'], true) ? $this->str($body, 'type') : 'document';
+        $media = $tree->createMediaObject("0 @@ OBJE\n" . Registry::container()->get(MediaFileService::class)->createMediaFileGedcom($file, $type, $title, ''));
+        // Wie beim Hochladen: sofort annehmen, damit Datei und Baum zusammenpassen
+        Registry::container()->get(PendingChangesService::class)->acceptRecord($media);
+
+        return response(['ok' => true, 'pending' => false, 'media' => $media->xref(), 'existing' => false]);
     }
 
     /**
@@ -661,7 +1361,7 @@ trait WriteActions
     private function checkedFactGedcom(array $body, string $old): array
     {
         // Ein Wert der Form @X@ waere fuer GEDCOM ein Verweis auf einen Datensatz, kein Text.
-        foreach (['value', 'place', 'note'] as $key) {
+        foreach (['value', 'place', 'note', 'type'] as $key) {
             if (GedcomText::looksLikePointer($this->str($body, $key))) {
                 return ['', 'invalid-value'];
             }
@@ -698,16 +1398,24 @@ trait WriteActions
                 // Fortsetzungszeilen des alten Werts entfernen
                 $rest = (string) preg_replace('/^(\n2 CONT ?.*)+/', '', $rest);
 
+                // GIVN, SURN und NSFX stehen im Namen selbst und werden unten neu gesetzt. Spitzname und Praefixe
+                // (NICK, NPFX, SPFX) lassen sich nicht aus dem Namen ableiten - sie bleiben, wie alles andere darunter.
                 if ($tag === 'NAME') {
-                    $rest = (string) preg_replace('/\n2 (GIVN|SURN|NPFX|NSFX|SPFX|NICK) .*/', '', $rest);
+                    $rest = (string) preg_replace('/\n2 (GIVN|SURN|NSFX) .*/', '', $rest);
                 }
             }
 
             $gedcom .= $rest;
         }
 
-        if ($tag === 'NAME' && array_key_exists('value', $body) && preg_match('#^([^/]*)/([^/]*)/#', $this->str($body, 'value'), $match) === 1) {
-            $insert = (trim($match[1]) === '' ? '' : "\n2 GIVN " . trim($match[1])) . (trim($match[2]) === '' ? '' : "\n2 SURN " . trim($match[2]));
+        if ($tag === 'NAME' && array_key_exists('value', $body) && preg_match('#^([^/]*)/([^/]*)/(.*)$#s', $this->str($body, 'value'), $match) === 1) {
+            $given = trim($match[1]);
+            // Ein vorhandenes Praefix ("Dr.") steht vorn im Namen, gehoert aber nicht zu den Vornamen.
+            if (preg_match('/\n2 NPFX (.+)/', $gedcom, $npfx) === 1 && str_starts_with($given, trim($npfx[1]) . ' ')) {
+                $given = trim(substr($given, strlen(trim($npfx[1]))));
+            }
+            $insert = ($given === '' ? '' : "\n2 GIVN " . $given) . (trim($match[2]) === '' ? '' : "\n2 SURN " . trim($match[2]))
+                . (trim($match[3]) === '' ? '' : "\n2 NSFX " . trim($match[3]));
             $gedcom = GedcomText::insertAfterFirstLine($gedcom, $insert);
         }
 
@@ -728,10 +1436,37 @@ trait WriteActions
             $gedcom = GedcomText::insertAfterFirstLine($gedcom, $date === '' ? '' : "\n2 DATE " . $date);
         }
 
+        // Art des Ereignisses (ab Stufe 20), bei der Heirat in webtrees' Form: CIVIL, RELIGIOUS, PARTNERS, COMMON LAW
+        if (array_key_exists('type', $body)) {
+            $type = GedcomText::line($this->str($body, 'type'));
+
+            if ($tag === 'MARR') {
+                $type = match (strtolower($type)) {
+                    'civil' => 'CIVIL',
+                    'religious', 'reli' => 'RELIGIOUS',
+                    'partners', 'partnership' => 'PARTNERS',
+                    'common law', 'common' => 'COMMON LAW',
+                    default => $type,
+                };
+            }
+
+            $gedcom = (string) preg_replace('/\n2 TYPE.*(\n[3-9] .*)*/', '', $gedcom);
+            $gedcom = GedcomText::insertAfterFirstLine($gedcom, $type === '' ? '' : "\n2 TYPE " . $type);
+        }
+
         if (array_key_exists('note', $body)) {
             $note   = GedcomText::multiline($this->str($body, 'note'), 3);
-            // Nur die erste eingebettete Notiz ersetzen; Verweise auf Notiz-Datensaetze bleiben.
-            $gedcom = (string) preg_replace('/\n2 NOTE (?!@)[^\n]*(\n3 CONT[^\n]*)*/', '', $gedcom, 1);
+            // Nur die erste eingebettete Notiz ersetzen; Verweise auf Notiz-Datensaetze bleiben. Eine Patenliste
+            // ("Paten: …", "Trauzeugen: …") ist keine gewoehnliche Notiz - die pflegt die Route Association (ab Stufe 20).
+            $erledigt = false;
+            $gedcom   = (string) preg_replace_callback('/\n2 NOTE (?!@)([^\n]*)((?:\n3 CON[CT][^\n]*)*)/', function (array $m) use (&$erledigt): string {
+                if ($erledigt || preg_match('/^(paten|taufpaten|gevattern|trauzeugen|zeugen):/iu', trim(GedcomText::mitFortsetzung($m[1], $m[2], 2))) === 1) {
+                    return $m[0];
+                }
+                $erledigt = true;
+
+                return '';
+            }, $gedcom);
             $gedcom .= $note === '' ? '' : "\n2 NOTE " . $note;
         }
 

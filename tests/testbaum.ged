@@ -1,0 +1,134 @@
+0 HEAD
+1 SOUR api4webtrees-tests
+1 GEDC
+2 VERS 5.5.1
+2 FORM LINEAGE-LINKED
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME Theodor /Offen/
+1 SEX M
+1 BIRT
+2 DATE 1 MAR 1800
+2 PLAC Offenbach
+2 SOUR @S1@
+3 PAGE Taufen 1800,
+4 CONT Nr. 4
+3 QUAY 3
+3 DATA
+4 DATE 2 MAR 1800
+4 TEXT Theodor, Sohn des
+5 CONT Schmieds, getauft
+3 NOTE Eintrag gut lesbar
+1 CHR
+2 DATE 3 MAR 1800
+2 PLAC Offenbach
+2 _ASSO @I2@
+3 RELA godparent
+3 NOTE Schwester der Mutter
+3 SOUR @S1@
+4 PAGE Taufen 1800, Nr. 4
+2 _ASSO @I3@
+3 RELA Godparent
+2 _ASSO @I5@
+3 RELA godfather
+2 NOTE Paten: Friedrich Plate, Anbauer zu Celle; Marie Offen, Witwe
+2 NOTE Eintrag am Rand
+1 ASSO @I4@
+2 RELA Godfather
+1 DEAT
+2 DATE 5 JUN 1870
+2 SOUR @S2@
+3 PAGE Markerkonfidenz-Seite
+1 OCCU Schmied
+2 SOUR laut Martha Meier
+3 NOTE mündlich 1950
+1 OCCU Markerberuf
+2 RESN privacy
+1 RELI katholisch
+2 RESN locked
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Anna /Offen/
+1 SEX F
+1 BIRT
+2 DATE 1805
+1 DEAT
+2 DATE 1880
+2 SOUR @S1@
+3 PAGE Begräbnisse 1880
+1 ASSO @I1@
+2 RELA friend
+1 FAMS @F1@
+0 @I4@ INDI
+1 NAME Karl /Offen/
+1 SEX M
+1 BIRT
+2 DATE 1830
+1 CHR
+2 DATE 1830
+2 _GODP Hans Meier, Bauer; Grete Meier, Witwe
+2 _GODP Peter Schulz und Paul Schulz
+1 DEAT
+2 DATE 1900
+1 FAMC @F1@
+1 FAMS @F2@
+0 @I5@ INDI
+1 NAME Konrad /Markername/
+1 SEX M
+1 RESN confidential
+1 BIRT
+2 DATE 1835
+2 PLAC Markerkonfidenzort
+1 CHR
+2 DATE 1835
+2 _ASSO @I1@
+3 RELA godparent
+2 NOTE Paten: Markerkonfidenz-Pate, Bauer
+1 DEAT
+2 DATE 1890
+1 NOTE Markerkonfidenz-Notiz
+1 FAMC @F1@
+0 @I3@ INDI
+1 NAME Lebhart /Markerlebend/
+1 SEX M
+1 BIRT
+2 DATE 12 APR 1990
+2 PLAC Markerlebendort
+1 CHR
+2 DATE 20 APR 1990
+2 _ASSO @I1@
+3 RELA godmother
+2 NOTE Paten: Markerlebend-Pate, Bauer
+1 FAMC @F2@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR
+2 DATE 1828
+2 TYPE civil
+2 _ASSO @I4@
+3 RELA witness
+2 NOTE Trauzeugen: Hans Müller, Bauer, Offenbach
+2 _WITN Fritz Krause, Schneider
+2 NOTE Trauung in der
+3 CONC  Stadtkirche
+3 CONT zweite Zeile
+1 CHIL @I4@
+1 CHIL @I5@
+0 @F2@ FAM
+1 HUSB @I4@
+1 CHIL @I3@
+0 @S1@ SOUR
+1 TITL Kirchenbuch Offenbach
+1 AUTH Pfarramt Offenbach
+1 PUBL Offenbach, 1790–1830
+1 TEXT Taufen, Trauungen, Begräbnisse
+1 NOTE Digitalisat im Archiv
+1 REPO @R1@
+2 CALN KB 12
+0 @S2@ SOUR
+1 TITL Markerkonfidenz-Quelle
+1 RESN confidential
+0 @R1@ REPO
+1 NAME Bistumsarchiv Mainz
+0 TRLR

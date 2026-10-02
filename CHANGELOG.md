@@ -1,5 +1,198 @@
 # Changelog
 
+## 1.12.0 – 2026-10-01
+**API level 20: godparents and witnesses – writing.** New route `POST Association` and `type` for `POST Fact`.
+- `POST Association` (`?xref=` individual or family): `{factId, linked?, free?, convertLevel1?}`. `linked` replaces the
+  linked individuals of the fact in the given order and writes them as webtrees does (`2 _ASSO @I…@` + `3 RELA
+  godparent`/`witness`; `other` with a free `rela`). An individual already linked keeps its sub-lines (`3 SOUR` …) and
+  its RELA spelling (“Godfather”) when the role matches; `note` replaces only its embedded note. Links to individuals
+  the writer may not even see as a reference are always kept. `free` replaces the people without a record, one line
+  each as `2 _GODP` (godparents) or `2 _WITN` (witnesses) – the form Ahnenblatt writes; notes “Paten: …” /
+  “Trauzeugen: …” on the fact are converted into it, other notes stay. `convertLevel1: true` moves the person's
+  `1 ASSO` for individuals in `linked` into the baptism, with their note and source. Parts not named stay untouched.
+  Answer: the new `factId`. Moderation and change log as for `POST Fact`.
+- `POST Fact` takes `type` (the fact's `2 TYPE`); for `MARR` it is written in webtrees' form (civil → `CIVIL`,
+  religious → `RELIGIOUS`, `PARTNERS`, `COMMON LAW`), anything else as given.
+- `POST Fact` with `note` no longer overwrites a godparent list (“Paten: …”, “Trauzeugen: …”) that happens to be the
+  first note of the fact; it replaces the first ordinary note.
+- Tests: write godparents (order, kept sources and spelling, private links, free entries, `1 ASSO` into the baptism,
+  errors) and marriage type with witnesses.
+
+## 1.11.0 – 2026-10-01
+**API level 19: godparents and witnesses – reading.** Until now the API ignored `_ASSO` entirely, so the apps saw
+godparents only from notes. Everything here is additive; older clients keep working and simply do not see the new
+fields (spec: `docs/spec-paten-quellen.md`, read side).
+- Every fact carries `associates[]`: the people linked with `2 _ASSO` (godparents at `CHR`/`BAPM`, witnesses at
+  `MARR` …) with `xref`, `name`, `sex`, `rela` (raw, as in the file), `role` (normalised regardless of case:
+  `godparent` for godparent/godfather/godmother/Pate/Patin/Taufpate/Gevatter, `witness` for witness/Trauzeuge/Zeuge,
+  else `other`), `label` as webtrees shows it (`RelationIsDescriptor` by the linked person's sex: “Pate”/“Patin”),
+  `private`, `level1`, and the association's own `notes` and `sources` (same form as on facts).
+- A `1 ASSO` on the person (GEDCOM 5.5.1, older GenPlus exports) stays a fact `ASSO` as before – now with
+  `associates` so that `RELA` is no longer lost – and, when it names a godparent and the person has a christening
+  (`CHR`, else `BAPM`), is added to that christening's `associates` with `level1: true`. Nothing is rewritten.
+- `freeAssociates[]`: people without a record. First from Ahnenblatt's own tags `2 _GODP <text>` under `CHR`/`BAPM`
+  (godparents) and `2 _WITN <text>` under `MARR` (witnesses; GEDCOM-L, webtrees knows both): Ahnenblatt writes one
+  person per line (“Friedrich Plate, Anbauer zu Celle”), so each line is one entry with `name` up to the first comma
+  and `detail` the rest – a line with `;` is a list like a note. Then from fact notes beginning with `Paten:`,
+  `Taufpaten:`, `Gevattern:`, `Trauzeugen:` or `Zeugen:` (any case) – entries separated by `;`, `name` up to the first
+  comma, `detail` the rest. A note without `;` (commas only) gives one entry with `name: null` and the whole `text` –
+  no guessing. The note stays in `notes`; the new parallel `noteKinds[]` marks it as `associates` (others: `note`), so
+  clients do not show it twice.
+- `Individual.associatedIn[]`: where this person is a godparent, witness … – the other person's or family's event
+  (`record`, `recordType`, `name`, `tag`, `label`, `factId`, `date`, `place`, `rela`, `role`, `label2`, `level1`,
+  `url`, and for families `husband`/`wife` as xrefs of the visible partners, so a client can open the entry), like
+  webtrees' “associated events” over the `ASSO` and `_ASSO` links, but including `1 ASSO` on the
+  godchild. Only visible records and facts; sorted by date.
+- `typeLabel` on every fact with a `TYPE`: the value as webtrees displays it (`FAM:MARR:TYPE`: `CIVIL` → “Civil
+  marriage”, `RELIGIOUS` → “Religious marriage”), raw for unknown values, `null` without a type. `type` itself is
+  unchanged (webtrees' canonical form, upper case for `MARR`).
+- Notes and texts are read with `CONC` as well as `CONT` (`CONC` appends without a space). webtrees merges `CONC`
+  on import and on accepting a change, so this matters for pending changes and raw GEDCOM sent by clients.
+- Privacy: a linked person the user may not see comes with `xref`, `private: true` and no name or sex; one whose
+  name they may not see at all (visitors, with “show names of private people” at its default) is left out.
+  `associatedIn` drops hidden records and facts silently. The leak test covers the new fields for visitor, member
+  and editor; the test tree carries a living, a confidential and a visible godparent, a `1 ASSO`, free entries in both
+  forms, a civil marriage with a linked witness and a note with `CONC`. New tests: class `Paten`.
+- Cross-checked against the demo tree Falkenrath 1.2 (all cases of spec section 7).
+- `tests/manifest.py` takes the version from `Api4WebtreesModule.php`; `docs/API.md` and `docs/openapi.json` are
+  regenerated (they were still at 1.9.6). Writing (`POST Association`, `FactRequest.type`, the source gaps of spec
+  sections 2 and 4) is not part of this release.
+
+## 1.10.2 – 2026-09-30
+Settings: the name app4webtrees in the text is a link to the GitHub repository.
+
+## 1.10.1 – 2026-09-30
+**wtMac in the list** (test build for Macs with Apple chip or Intel, from the same code as wtWin/wtTux; connect scheme
+`wtmac://`). A Mac now gets its program on the “App” page instead of the browser note, which is left for iPhone and
+iPad. Settings text: the apps live on GitHub under app4webtrees in four editions; “users” instead of “family
+members” – whoever works on a tree. Note and footer say “computer” instead of “PC”.
+
+## 1.10.0 – 2026-09-30
+**The apps the module shows now live in the code, not in the settings.** `src/Apps.php` lists them (wtAnd, wtWin,
+wtTux) with name, devices, download, connect scheme and store badge; a further app joins by pull request with one
+entry, once it is publicly installable. The settings offer a tick per app instead of the four free-text fields for
+“Another app” (1.2.0), which nobody could sensibly fill in; values entered there are no longer read. The “App” page
+orders the apps by the visitor's device – matching ones first, own before others, wtWin and wtAnd always open, the rest
+folded – and each app gets its own heading with its devices, so two apps for different devices no longer look like one.
+iPhone, iPad and Mac show the browser note only while no app in the list fits them. The footer names the app for the
+device. The tests check the list (fields, https, unique schemes), so a faulty entry cannot be merged.
+**Compatibility promise** written down in the README: the interface only grows, every addition raises the API level,
+existing routes and fields keep their meaning; a client built for level N works with every module from level N on.
+**API level 18: sources.** New routes `Sources` (all visible sources with author, publication, repository, call
+number and how often they are cited) and `Source` (one source with text, notes, media, repositories and the
+individuals and families citing it, with the facts that carry the citation). Citations on facts now come complete:
+besides `page` also `quality` (QUAY 0–3), `date` and `text` of the entry (DATA), `notes` and `media` of the citation,
+and sources without a record ("according to Martha Meier") with an empty `xref`. Sources a viewer may not see are
+left out, as in webtrees. Tests: `test_quellenverweis_vollstaendig`, `test_quellen_liste_und_einzeln`; the leak test
+covers the new routes.
+**Writing citations:** new route `Citation` adds, changes, deletes or moves a citation on a fact, or a general
+citation on the record. Only the parts named in the body are replaced (`source`, `page`, `quality`, `date`, `text`,
+`note`, `media`); everything else on the citation and the fact stays. A fact's id is a hash of its content, so the
+answer carries the new `factId`. Test: `test_quellenverweis_schreiben`.
+**Managing sources and repositories:** `Source` (POST) creates a source or changes only the parts named (title, author,
+publication, abbreviation, text, note, repository with call number); `Repositories` lists the archives, `Repository`
+(POST) creates or renames one. `Media` accepts `type` (`document` for scans of records, default `photo`) and works
+with a source's `xref` too. Unused sources (`uses: 0`) can be removed with `DeleteRecord`. Test:
+`test_quelle_und_archiv_pflegen`.
+**Documents on sources and citations:** `Media` takes `link: false` to create the media object without linking it to
+the record, so a client can attach it to a citation (`Citation`, `media`) or to a source (`Source`, `media`, which
+replaces the list of linked media). Unlinking keeps the media object and the file, as in webtrees.
+**Files from the archive:** `MediaFromFile` (POST) turns a file that already lies in the media folder – e.g. a parish
+register scan from the *Sammlungen* archive – into a media object, or returns the existing one, without linking it.
+The file stays where it is; the client attaches the object to a source or citation only on the user's explicit
+choice. Test: `test_medienobjekt_aus_archivdatei`.
+
+Also: **Changing a name no longer loses its details.** Until now, editing a name through `Fact`
+removed the nickname (`NICK`) and the name prefixes (`NPFX`, `SPFX`) along with the parts derived from the name. Now
+only `GIVN`, `SURN` and `NSFX` are rebuilt from the new name (`NSFX` is new: the text after the surname, e.g. "jun."),
+everything else under the name stays; a prefix such as "Dr." is no longer counted among the given names. Test:
+`test_name_aendern_behaelt_unterangaben`.
+**Source citations carry their page.** Each entry in `sources` of a fact now has `page` – the `PAGE` of the citation
+("Baptisms 1833, no. 19"), multi-line with line breaks; empty if there is none. Only for sources the viewer may see,
+like the title. Older clients ignore the new field. Test: `test_quellenverweis_mit_seite`; the test tree has a public
+and a confidential source.
+
+## 1.9.6 – 2026-09-27
+API level 17, unchanged. **Anniversaries stay small on large trees.** A tree with 50,000 individuals has hundreds of
+anniversaries of long-dead people every day; 14 days came to 5.5 MB in 4 s. Now at most 100 entries are returned –
+per day living people first, then round anniversaries (25, 50, 75 …) – with short person entries (`xref`, `name`,
+`sex`, `isDead`, `private`, `lifespan`, `thumb`, `url`); new fields `total` and `more`. 14 days on 50,000 individuals:
+45 KB in 1.5 s. Clients read the answer as before.
+**Documentation and tests:** [docs/API.md](docs/API.md) and [docs/openapi.json](docs/openapi.json) describe every route,
+generated from real answers; `tests/` checks privacy (no role sees more than webtrees shows it), writing rights, CSRF
+and that every answer matches the documentation, on every push. Performance figures for 10,000 and 50,000 individuals
+are in the documentation.
+
+## 1.9.5 – 2026-09-27
+API level 17, unchanged. **Apple devices get an honest note.** There is no program for Mac, iPhone and iPad yet, so
+the page “App” now says so and recommends the browser instead of showing the Android app first; the note after signing
+in is not shown there. The footer names wtWin for everyone (“Program for the PC: wtWin · App for Android”) – wtTux is
+on the page “App”, opened for Linux PCs.
+
+## 1.9.4 – 2026-09-27
+API level 17, unchanged. **wtWin and wtTux connect with one click.** On the page “App” at the PC, step 2 is now a
+button “Connect with wtWin” (or wtTux): it puts the connect link with the one-time code on the clipboard and also opens
+it as `wtwin://connect?…` / `wttux://connect?…`. wtWin/wtTux 1.21 take it over by themselves and ask once for
+confirmation – no address, username or password to type. “Copy address” stays below as the manual way. The page reloads
+by itself when you come back after the code has run out (e.g. after download and installation). The note after
+signing in and the footer now also depend on the device: at the PC they point to wtWin/wtTux, and the note remembers
+phone and PC separately – whoever has connected wtAnd still hears about wtWin. The page “App” shows wtWin and wtAnd
+open (on a phone wtAnd first) and wtTux folded below, opened when the page is visited from a Linux PC.
+
+## 1.9.3 – 2026-09-27
+API level 17, unchanged. **The page “App” helps at the PC too.** It reads the browser's operating system and shows the
+matching program first: on Windows wtWin, on Linux wtTux, on phones wtAnd as before; the others fold away under
+“Other devices”. For the PC there are two steps: a download button for the newest `.exe` or `.deb` (looked up on
+GitHub only when clicked; otherwise it opens the release page), with the one sentence needed for the Windows
+warning, and the address of this family tree with a “Copy address” button – which also works over `http://` at home.
+wtWin/wtTux 1.20 pick up the copied address by themselves.
+
+## 1.9.2 – 2026-09-26
+API level 17, unchanged. **Apps at home without HTTPS** (for nas4webtrees, where webtrees runs under
+`http://<nas-ip>:8095`): the page “App” now offers the connect button and QR code also over `http://` inside the home
+network – private, loopback and link-local addresses (`10/8`, `172.16/12`, `192.168/16`, `127/8`, `169.254/16`,
+`::1`, `fc00::/7`, `fe80::/10`), host names without a dot and the endings `.local`, `.lan`, `.home`, `.home.arpa`,
+`.internal`, `.fritz.box`, `.box`. The same rule decides in the apps (from wtAnd/wtWin/wtTux 1.19). A short note says
+“Unencrypted – home network only”; the status line in the module settings shows the home network in yellow instead of
+red. Public `http://` addresses stay blocked.
+
+## 1.9.1 – 2026-09-26
+API level 17, unchanged. **Bug fix:** fact values over several lines – above all notes with `CONT` lines – lost
+their line breaks, so the lines ran together (“…seines Vaters.In der Familie…”). `facts[].value` now keeps line
+breaks as `\n` and paragraphs as a blank line; single-line values are unchanged. Found by the desktop client's book.
+
+## 1.9.0 – 2026-09-26
+New fields and actions only; existing answers keep all their fields. Each addition raises the API level, so a client
+can tell exactly which of them a server has.
+- **Level 13 – `Relationship`** `?xref1=…&xref2=…`: how two people are related, the way webtrees' relationship chart
+  finds it – the shortest paths through the families (at most 5), each with its steps (`person`, `relation`,
+  `family`), the relationship `name` as webtrees words it and the `commonAncestors` at the top of the path. With
+  pedigree collapse there are several paths of the same length. Privacy as in the chart; new error `chart-disabled`.
+- **Level 14 – `call`, `chr`, `buri`, `occupation`** on every person: the call name (given name marked with `*`, or
+  `_RUFNAME` as written by Ahnenblatt and GEDCOM-L), christening (`CHR`, else `BAPM`) and burial (`BURI`, else
+  `CREM`) with date and place like `birth`/`death`, and the first occupation. For charts and lists that show more
+  than birth and death without fetching each person.
+- **Level 15 – `Pedigree?siblings=1`**: each ancestor carries `siblings`, the other children of the family its parents
+  come from. For ancestor charts with siblings. Without the parameter the answer is unchanged.
+- **Level 16 – `Pedigree` allows 12 generations** (was 7), for large ancestor charts. `generations` in the answer
+  reports the depth actually delivered, so a client sees when an older module stopped at 7.
+- **Level 17 – `Export?page=…`**: the whole visible tree, page by page – individuals with all facts and media, then
+  families, linked by xref only. For lists and books in the desktop client. Privacy is webtrees' own: whoever
+  appears in a family or chart appears here, hidden records as placeholders without facts, following the tree
+  setting “show private relationships”.
+
+## 1.8.0 – 2026-09-26
+API level 12. New fields only; existing answers keep all their fields.
+- **`Individual.stepFamilies`**: the families of the parents with other partners – their children are the
+  half-siblings. Same form as `parentFamilies`, plus `parent` (the shared parent); `spouse` is the other partner.
+  webtrees shows the same in its "Families" tab.
+- **`hasParents`, `partnersCount`, `childrenCount`** for the person and everyone in its parent, spouse and step
+  families (`Individual` only, not in lists or search): whether a view can expand from there without fetching each
+  person. Suggested by Andreas Scharf for his own app.
+- **`Descendants` allows 10 generations** (was 4), for printable descendant charts in the desktop client. The answer
+  keeps its form; `generations` reports the depth actually delivered, so clients can tell an older module (4) and
+  fetch the rest piece by piece.
+
 ## 1.7.0 – 2026-09-23
 API level 11.
 - **`Bookmarks`** (GET) and **`Bookmarks`** (POST `{ xref, add }`): a bookmark list of persons per signed-in user and

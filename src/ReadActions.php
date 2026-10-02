@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Api4Webtrees;
 
+use Fisharebest\Algorithm\Dijkstra;
 use Fisharebest\ExtCalendar\GregorianCalendar;
 use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\Contracts\UserInterface;
@@ -14,11 +15,18 @@ use Fisharebest\Webtrees\Http\Exceptions\HttpServiceUnavailableException;
 use Fisharebest\Webtrees\I18N;
 use Fisharebest\Webtrees\Individual;
 use Fisharebest\Webtrees\Media;
+use Fisharebest\Webtrees\Module\ModuleChartInterface;
+use Fisharebest\Webtrees\Module\RelationshipsChartModule;
 use Fisharebest\Webtrees\Place;
 use Fisharebest\Webtrees\Registry;
+use Fisharebest\Webtrees\Repository;
+use Fisharebest\Webtrees\GedcomRecord;
+use Fisharebest\Webtrees\Source;
 use Fisharebest\Webtrees\Services\CalendarService;
 use Fisharebest\Webtrees\Services\LinkedRecordService;
+use Fisharebest\Webtrees\Services\ModuleService;
 use Fisharebest\Webtrees\Services\PendingChangesService;
+use Fisharebest\Webtrees\Services\RelationshipService;
 use Fisharebest\Webtrees\Services\SearchService;
 use Fisharebest\Webtrees\Services\TreeService;
 use Fisharebest\Webtrees\Session;
@@ -31,7 +39,14 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use InvalidArgumentException;
 
+use function array_filter;
+use function array_flip;
+use function array_keys;
 use function array_map;
+use function array_values;
+use function str_contains;
+use function array_unique;
+use function count;
 use function explode;
 use function implode;
 use function in_array;
@@ -39,6 +54,7 @@ use function max;
 use function mb_stripos;
 use function min;
 use function preg_match;
+use function preg_quote;
 use function preg_split;
 use function response;
 use function str_replace;
@@ -63,8 +79,9 @@ trait ReadActions
         $trees = [];
 
         // Eine angemeldete App fragt beim Start hier nach: dann braucht dieser Benutzer den Hinweis auf die App nicht mehr.
-        if (Auth::check() && $user->getPreference(self::HINT_SETTING) === '') {
-            $user->setPreference(self::HINT_SETTING, 'connected');
+        $hint = self::hintKey($request->getHeaderLine('User-Agent'));
+        if (Auth::check() && $user->getPreference($hint) === '') {
+            $user->setPreference($hint, 'connected');
         }
 
         foreach (Registry::container()->get(TreeService::class)->all() as $tree) {
@@ -245,22 +262,37 @@ trait ReadActions
             $spouses[] = $this->familyJson($family, $individual, true);
         }
 
+        // Familien der Eltern mit anderen Partnern (ab Stufe 12): ihre Kinder sind die Halbgeschwister. Wie der Reiter
+        // "Familien" in webtrees; "parent" ist der gemeinsame Elternteil, "spouse" dessen anderer Partner.
+        $own_parents = $individual->childFamilies()->flatMap(static fn (Family $family) => $family->spouses())
+            ->map(static fn (Individual $parent): string => $parent->xref());
+        $step = [];
+        foreach ($individual->childStepFamilies() as $family) {
+            $parent = $family->spouses()->first(static fn (Individual $spouse): bool => $own_parents->contains($spouse->xref()));
+            $step[] = ['parent' => $parent?->xref()] + $this->familyJson($family, $parent, true);
+        }
+
         return response([
-            'person'                => $this->personSummary($individual, true),
-            'relationship'          => $this->relationship($request, $individual),
-            'canEdit'               => $individual->canEdit(),
-            'facts'                 => $this->factsJson($individual),
-            'parentFamilies'        => $parents,
-            'spouseFamilies'        => $spouses,
+            'person'         => $this->personSummary($individual, true),
+            'relationship'   => $this->relationship($request, $individual),
+            'canEdit'        => $individual->canEdit(),
+            'facts'          => $this->factsJson($individual),
+            'parentFamilies' => $parents,
+            'spouseFamilies' => $spouses,
+            'stepFamilies'   => $step,
+            // Nur fuer webtrees-mobile 1.0.0 (siehe siblingsJson()/extraChildrenByParent()).
             'siblings'              => $this->siblingsJson($individual),
             'extraChildrenByParent' => $this->extraChildrenByParent($individual),
-            'media'                 => $this->mediaJson($individual),
+            'media'          => $this->mediaJson($individual),
+            // ab Stufe 19: wo diese Person Pate, Trauzeuge ... ist (Gegenrichtung zu associates an den Fakten)
+            'associatedIn'   => $this->associatedIn($individual),
         ]);
     }
 
     /**
-     * Vollgeschwister ueber die erste (primaere) Eltern-Familie - fuer die Stammbaum-Ansicht der App. Adoptiv-/
-     * Pflegefamilien (weitere Eintraege in childFamilies()) sind hier noch nicht beruecksichtigt.
+     * Eigene Erweiterung dieses Forks, nicht in api4webtrees: nur fuer webtrees-mobile 1.0.0. Ab 1.0.1 nimmt
+     * die App die Kinder von parentFamilies ohne die Person selbst - entfernen, sobald 1.0.0 nicht mehr im
+     * Umlauf ist.
      *
      * @return array<int,array<string,mixed>>
      */
@@ -283,9 +315,9 @@ trait ReadActions
     }
 
     /**
-     * Kinder, die ein Elternteil (aus der primaeren Eltern-Familie) mit ANDEREN Partnern hat - fuer den
-     * Stiefkind-Hinweis der Stammbaum-Ansicht. Beide Elternteile sind hier schon geladen (aus derselben
-     * childFamilies()-Abfrage), also kein zusaetzlicher Request.
+     * Eigene Erweiterung dieses Forks, nicht in api4webtrees: nur fuer webtrees-mobile 1.0.0 - Kinder, die ein
+     * Elternteil (aus der primaeren Eltern-Familie) mit ANDEREN Partnern hat. Ab 1.0.1 zaehlt die App das aus
+     * stepFamilies - entfernen, sobald 1.0.0 nicht mehr im Umlauf ist.
      *
      * @return array{father:int,mother:int}
      */
@@ -409,40 +441,56 @@ trait ReadActions
         $facts = Registry::container()->get(CalendarService::class)
             ->getEventsList($today, $today + $days - 1, 'BIRT MARR DEAT', false, 'anniv', $tree);
 
-        $data = [];
+        // Grosse Baeume haben an jedem Tag Hunderte Jahrestage laengst Verstorbener (Leistungscheck 27.09.2026:
+        // 50.000 Personen, 14 Tage = 5,5 MB in 4 s). Darum erst billig auswaehlen, dann nur die ersten ANNIV_LIMIT
+        // ausfuehrlich beschreiben: je Tag Lebende zuerst, dann runde Jahrestage (25, 50, 75 ...), dann der Rest.
+        $candidates = [];
 
         foreach ($facts as $fact) {
             $record = $fact->record();
 
-            if (!$record->canShow() || !$fact->canShow() || $fact->anniv <= 0) {
+            if ($fact->anniv <= 0 || !$record->canShow() || !$fact->canShow()) {
                 continue;
             }
 
-            $person = $record instanceof Individual ? $record : null;
+            $living = $record instanceof Individual
+                ? !$record->isDead()
+                : $record instanceof Family && $record->spouses()->every(static fn (Individual $spouse): bool => !$spouse->isDead());
+
+            $candidates[] = [$fact->jd - $today, $living ? 0 : 1, $fact->anniv % 25 === 0 ? 0 : 1, $record->xref(), $fact];
+        }
+
+        usort($candidates, static fn (array $a, array $b): int => array_slice($a, 0, 4) <=> array_slice($b, 0, 4));
+
+        $data = [];
+
+        foreach (array_slice($candidates, 0, self::ANNIV_LIMIT) as [$in_days, , , , $fact]) {
+            $record = $fact->record();
             $couple = [];
 
             if ($record instanceof Family) {
                 foreach ($record->spouses() as $spouse) {
-                    $couple[] = $this->personSummary($spouse);
+                    $couple[] = $this->personShort($spouse);
                 }
             }
 
             $data[] = [
-                'inDays'  => $fact->jd - $today,
+                'inDays'  => $in_days,
                 'tag'     => $this->shortTag($fact->tag()),
                 'label'   => $this->factLabel($fact),
                 'years'   => $fact->anniv,
                 'date'    => $this->dateJson($fact->date()),
                 'xref'    => $record->xref(),
                 'name'    => $this->plain($record->fullName()),
-                'person'  => $person instanceof Individual ? $this->personSummary($person) : null,
+                'person'  => $record instanceof Individual ? $this->personShort($record) : null,
                 'couple'  => $couple,
             ];
         }
 
+        // Innerhalb eines Tages alphabetisch, wie bisher.
         usort($data, static fn (array $a, array $b): int => [$a['inDays'], $a['name']] <=> [$b['inDays'], $b['name']]);
 
-        return response(['days' => $days, 'data' => $data]);
+        return response(['days' => $days, 'data' => $data, 'total' => count($candidates), 'more' => count($candidates) > count($data)]);
     }
 
     /**
@@ -466,6 +514,7 @@ trait ReadActions
 
     /**
      * Ahnentafel: ?xref=I123&generations=4  (Kekule-Nummern: 1 = Proband, 2 = Vater, 3 = Mutter ...)
+     * &siblings=1 (ab Stufe 15): je Vorfahr seine Geschwister aus derselben Elternfamilie, als Kurzfassung.
      */
     public function getPedigreeAction(ServerRequestInterface $request): ResponseInterface
     {
@@ -502,15 +551,32 @@ trait ReadActions
             }
         }
 
+        $with_siblings = Validator::queryParams($request)->boolean('siblings', false);
+        // Bei Ahnenschwund steht dieselbe Person mehrfach in der Tafel - ihre Geschwister nur einmal zusammenstellen.
+        $siblings = [];
+
         // hasParents: damit die App an der obersten Reihe ein "weiter nach oben"-Symbol zeigen kann.
         $data = [];
         foreach ($ancestors as $n => $individual) {
             $family = $individual->canShow() ? $individual->childFamilies()->first() : null;
-            $data[] = [
+            $entry  = [
                 'n'          => $n,
                 'person'     => $this->personSummary($individual),
                 'hasParents' => $family instanceof Family && ($family->husband() instanceof Individual || $family->wife() instanceof Individual),
             ];
+
+            if ($with_siblings) {
+                // Dieselbe Familie wie fuer die Eltern oben - Halbgeschwister gehoeren nicht dazu.
+                $entry['siblings'] = $siblings[$individual->xref()] ??= $family instanceof Family
+                    ? $family->children()
+                        ->filter(static fn (Individual $child): bool => $child->xref() !== $individual->xref())
+                        ->map(fn (Individual $child): array => $this->personSummary($child))
+                        ->values()
+                        ->all()
+                    : [];
+            }
+
+            $data[] = $entry;
         }
 
         return response([
@@ -518,6 +584,264 @@ trait ReadActions
             'generations' => $generations,
             'ancestors'   => $data,
         ]);
+    }
+
+    /**
+     * Verwandtschaft zweier Personen (ab Stufe 13): ?xref1=I1&xref2=I2[&ancestors=1]
+     *
+     * Wie das Diagramm "Verwandtschaft" von webtrees: kuerzeste Wege ueber die Familien (Dijkstra ueber FAMS/FAMC),
+     * hoechstens MAX_RELATIONSHIP_PATHS davon. Bei Ahnenschwund gibt es mehrere gleich kurze Wege. Je Weg die Schritte
+     * von xref1 nach xref2 - relation: was die Person des Schritts fuer die vorige ist -, die Bezeichnung ("Cousine"),
+     * wie webtrees sie fuer xref2 aus Sicht von xref1 bildet, und die gemeinsamen Vorfahren am Scheitel des Wegs.
+     *
+     * Datenschutz wie im Diagramm: das Diagramm muss fuer den Benutzer freigegeben sein, beide Personen sichtbar (oder
+     * die Baumeinstellung "private Verwandtschaften zeigen" an). Personen unterwegs erscheinen, wie im Diagramm, als
+     * Kurzfassung - fuer nicht sichtbare also "Privat" ohne Daten. "Nur ueber Vorfahren" des Baums gilt auch hier.
+     */
+    public function getRelationshipAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree   = Validator::attributes($request)->tree();
+        $params = Validator::queryParams($request);
+        $first  = Registry::individualFactory()->make($params->isXref()->string('xref1'), $tree);
+        $second = Registry::individualFactory()->make($params->isXref()->string('xref2'), $tree);
+
+        $chart = Registry::container()->get(ModuleService::class)
+            ->findByComponent(ModuleChartInterface::class, $tree, Auth::user())
+            ->first(static fn ($module): bool => $module instanceof RelationshipsChartModule);
+
+        if ($chart === null) {
+            return $this->error(403, 'chart-disabled');
+        }
+
+        if ($first === null || $second === null) {
+            return $this->error(404, 'not-found');
+        }
+
+        $show_private = $tree->getPreference('SHOW_PRIVATE_RELATIONSHIPS') === '1';
+
+        if (!$show_private && (!$first->canShow() || !$second->canShow())) {
+            return $this->error(403, 'private');
+        }
+
+        $ancestors = $tree->getPreference('RELATIONSHIP_ANCESTORS', RelationshipsChartModule::DEFAULT_ANCESTORS) === '1'
+            || $params->boolean('ancestors', false);
+
+        $all   = $first->xref() === $second->xref() ? [[$first->xref()]] : $this->relationshipPaths($first, $second, $ancestors);
+        $paths = [];
+
+        foreach ($all as $path) {
+            $json = $this->relationshipPathJson($tree, $path);
+
+            // Wie im Diagramm: ein Weg, dessen Glieder sich nicht zuordnen lassen, faellt weg.
+            if ($json !== null) {
+                $paths[] = $json;
+            }
+
+            if (count($paths) === self::MAX_RELATIONSHIP_PATHS) {
+                break;
+            }
+        }
+
+        return response([
+            'xref1'     => $first->xref(),
+            'xref2'     => $second->xref(),
+            'ancestors' => $ancestors,
+            'paths'     => $paths,
+            'more'      => count($all) > count($paths),
+        ]);
+    }
+
+    /**
+     * Die kuerzesten Wege von $first zu $second als abwechselnde Liste Person, Familie, Person ... - der Graph wie in
+     * RelationshipsChartModule::calculateRelationships() (dort privat, deshalb hier nachgebaut, ohne die Umwege).
+     *
+     * @return list<list<string>>
+     */
+    private function relationshipPaths(Individual $first, Individual $second, bool $ancestors): array
+    {
+        $tree_id = $first->tree()->id();
+        $rows    = DB::table('link')
+            ->where('l_file', '=', $tree_id)
+            ->whereIn('l_type', ['FAMS', 'FAMC'])
+            ->select(['l_from', 'l_to'])
+            ->get();
+
+        $keep    = $ancestors ? array_flip($this->relationshipAncestors($first->xref(), $second->xref(), $tree_id)) : [];
+        $exclude = $ancestors ? array_flip($this->commonSpouseFamilies($first->xref(), $second->xref(), $tree_id)) : [];
+
+        $graph = [];
+
+        foreach ($rows as $row) {
+            if (!$ancestors || isset($keep[$row->l_from]) && !isset($exclude[$row->l_to])) {
+                $graph[$row->l_from][$row->l_to] = 1;
+                $graph[$row->l_to][$row->l_from] = 1;
+            }
+        }
+
+        if (!isset($graph[$first->xref()], $graph[$second->xref()])) {
+            return [];
+        }
+
+        $paths = [];
+
+        foreach ((new Dijkstra($graph))->shortestPaths($first->xref(), $second->xref()) as $path) {
+            // Die Bibliothek macht aus Kennungen wie "123" Zahlen.
+            $path = array_map(static fn ($xref): string => (string) $xref, $path);
+
+            $paths[implode('-', $path)] = $path;
+        }
+
+        return array_values($paths);
+    }
+
+    /**
+     * Beide Personen und alle ihre Vorfahren (wie allAncestors() im Diagramm).
+     *
+     * @return list<string>
+     */
+    private function relationshipAncestors(string $xref1, string $xref2, int $tree_id): array
+    {
+        $found = [$xref1 => true, $xref2 => true];
+        $queue = [$xref1, $xref2];
+
+        while ($queue !== []) {
+            $parents = DB::table('link AS l1')
+                ->join('link AS l2', static function (JoinClause $join): void {
+                    $join
+                        ->on('l1.l_to', '=', 'l2.l_to')
+                        ->on('l1.l_file', '=', 'l2.l_file');
+                })
+                ->where('l1.l_file', '=', $tree_id)
+                ->where('l1.l_type', '=', 'FAMC')
+                ->where('l2.l_type', '=', 'FAMS')
+                ->whereIn('l1.l_from', $queue)
+                ->pluck('l2.l_from');
+
+            $queue = [];
+
+            foreach ($parents as $parent) {
+                if (!isset($found[$parent])) {
+                    $found[$parent] = true;
+                    $queue[]        = $parent;
+                }
+            }
+        }
+
+        return array_map(static fn ($xref): string => (string) $xref, array_keys($found));
+    }
+
+    /**
+     * Familien, in denen beide Personen Partner sind (wie excludeFamilies() im Diagramm).
+     *
+     * @return list<string>
+     */
+    private function commonSpouseFamilies(string $xref1, string $xref2, int $tree_id): array
+    {
+        return DB::table('link AS l1')
+            ->join('link AS l2', static function (JoinClause $join): void {
+                $join
+                    ->on('l1.l_to', '=', 'l2.l_to')
+                    ->on('l1.l_type', '=', 'l2.l_type')
+                    ->on('l1.l_file', '=', 'l2.l_file');
+            })
+            ->where('l1.l_file', '=', $tree_id)
+            ->where('l1.l_type', '=', 'FAMS')
+            ->where('l1.l_from', '=', $xref1)
+            ->where('l2.l_from', '=', $xref2)
+            ->pluck('l1.l_to')
+            ->map(static fn ($xref): string => (string) $xref)
+            ->all();
+    }
+
+    /**
+     * Ein Weg als JSON. null, wenn eine Familie des Wegs ihre Glieder nicht (mehr) enthaelt.
+     *
+     * @param list<string> $path Person, Familie, Person ...
+     *
+     * @return array<string,mixed>|null
+     */
+    private function relationshipPathJson(Tree $tree, array $path): array|null
+    {
+        $codes = [
+            'HUSB-HUSB' => ['husband', 'wife', 'spouse'], 'HUSB-WIFE' => ['husband', 'wife', 'spouse'],
+            'WIFE-HUSB' => ['husband', 'wife', 'spouse'], 'WIFE-WIFE' => ['husband', 'wife', 'spouse'],
+            'HUSB-CHIL' => ['son', 'daughter', 'child'],  'WIFE-CHIL' => ['son', 'daughter', 'child'],
+            'CHIL-HUSB' => ['father', 'mother', 'parent'], 'CHIL-WIFE' => ['father', 'mother', 'parent'],
+            'CHIL-CHIL' => ['brother', 'sister', 'sibling'],
+        ];
+
+        $first  = Registry::individualFactory()->make($path[0], $tree);
+        $nodes  = [$first];
+        $steps  = [['person' => $this->personSummary($first), 'relation' => null, 'family' => null]];
+        // Gemeinsame Vorfahren: wo der Weg vom Hinauf (Eltern) ins Hinab (Kinder, Geschwister) wechselt. Nur bei
+        // Blutsverwandtschaft - geht der Weg ueber einen Ehepartner, gibt es keine gemeinsamen Vorfahren.
+        $peak   = [];
+        $upward = false;
+        $inlaw  = false;
+
+        for ($i = 1, $count = count($path); $i < $count; $i += 2) {
+            $family = Registry::familyFactory()->make($path[$i], $tree);
+            $next   = Registry::individualFactory()->make($path[$i + 1], $tree);
+
+            if (!$family instanceof Family || !$next instanceof Individual) {
+                return null;
+            }
+
+            $role1 = $this->familyRole($family, $path[$i - 1]);
+            $role2 = $this->familyRole($family, $path[$i + 1]);
+            $set   = $codes[$role1 . '-' . $role2] ?? null;
+
+            if ($set === null) {
+                return null;
+            }
+
+            $relation = $set[match ($next->sex()) { 'M' => 0, 'F' => 1, default => 2 }];
+
+            if ($set[0] === 'father') {
+                $upward = true;
+            } elseif ($set[0] === 'husband') {
+                $inlaw = true;
+            } elseif ($set[0] === 'brother' && $peak === []) {
+                // Geschwister: die Eltern der gemeinsamen Familie
+                $peak   = array_values(array_filter([$this->familyMember($family, 'HUSB'), $this->familyMember($family, 'WIFE')]));
+                $upward = false;
+            } elseif ($set[0] === 'son' && $upward && $peak === []) {
+                // hinauf bis zu einer Person, von dort in einer anderen Familie hinab (Halbgeschwister-Linie)
+                $peak   = [$path[$i - 1]];
+                $upward = false;
+            }
+
+            $nodes[] = $family;
+            $nodes[] = $next;
+            $steps[] = ['person' => $this->personSummary($next), 'relation' => $relation, 'family' => $family->xref()];
+        }
+
+        // Nur hinauf: xref2 ist selbst Vorfahr von xref1.
+        if ($peak === [] && $upward) {
+            $peak = [$path[count($path) - 1]];
+        }
+
+        // Nur hinab: xref1 ist Vorfahr von xref2.
+        if ($peak === [] && count($path) > 1 && !$inlaw && !$upward) {
+            $peak = [$path[0]];
+        }
+
+        return [
+            'name'            => $this->plain(Registry::container()->get(RelationshipService::class)->nameFromPath($nodes, I18N::language())),
+            'commonAncestors' => $inlaw ? [] : $peak,
+            'steps'           => $steps,
+        ];
+    }
+
+    /** HUSB, WIFE oder CHIL - wie die Person in der Familie steht ('' wenn gar nicht). */
+    private function familyRole(Family $family, string $xref): string
+    {
+        return preg_match('/\n1 (HUSB|WIFE|CHIL) @' . preg_quote($xref, '/') . '@/', $family->gedcom(), $match) === 1 ? $match[1] : '';
+    }
+
+    private function familyMember(Family $family, string $tag): string|null
+    {
+        return preg_match('/\n1 ' . $tag . ' @([^@]+)@/', $family->gedcom(), $match) === 1 ? $match[1] : null;
     }
 
     /**
@@ -542,6 +866,113 @@ trait ReadActions
             'generations' => $generations,
             'tree'        => $this->descendantsJson($root, $generations),
         ]);
+    }
+
+    /**
+     * Der ganze sichtbare Baum fuer Listen und Buecher (ab Stufe 17): ?page=<n>
+     *
+     * Erst alle Personen, dann alle Familien, je Seite EXPORT_PAGE_SIZE Datensaetze. Verknuepft wird nur ueber
+     * Kennungen (famc, fams, husband, wife, children) - der Client setzt den Baum selbst zusammen. total nennt die
+     * Datensaetze insgesamt (fuer eine Fortschrittsanzeige); eine Seite kann weniger enthalten, wenn der Benutzer
+     * einzelne nicht sehen darf. lastChange wie in Info: aendert er sich waehrend des Abrufs, von vorn beginnen.
+     *
+     * Datenschutz macht webtrees selbst: wer in einer Familie erscheint und welche Familien einer Person
+     * sichtbar sind, kommt aus husband(), wife(), children(), childFamilies(), spouseFamilies() - mit der
+     * Baumeinstellung "private Verwandtschaften zeigen" also wie in den Diagrammen. Personen und Familien, die nur
+     * so verknuepft, aber nicht sichtbar sind, kommen als Platzhalter ohne Fakten und Medien (private: true).
+     */
+    public function getExportAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree   = Validator::attributes($request)->tree();
+        $page   = max(1, Validator::queryParams($request)->integer('page', 1));
+        $offset = ($page - 1) * self::EXPORT_PAGE_SIZE;
+
+        // Dieselbe Stufe, die webtrees fuer Verknuepfungen nimmt (siehe Individual::childFamilies()).
+        $link_level = $tree->getPreference('SHOW_PRIVATE_RELATIONSHIPS') === '1' ? Auth::PRIV_HIDE : Auth::accessLevel($tree);
+
+        $individual_count = DB::table('individuals')->where('i_file', '=', $tree->id())->count();
+        $family_count     = DB::table('families')->where('f_file', '=', $tree->id())->count();
+
+        $individuals = [];
+        $families    = [];
+
+        if ($offset < $individual_count) {
+            $rows = DB::table('individuals')
+                ->where('i_file', '=', $tree->id())
+                ->orderBy('i_id')
+                ->offset($offset)
+                ->limit(self::EXPORT_PAGE_SIZE)
+                ->get()
+                ->map(Registry::individualFactory()->mapper($tree));
+
+            foreach ($rows as $individual) {
+                if ($individual instanceof Individual && $individual->canShowName($link_level)) {
+                    $individuals[] = $this->exportIndividualJson($individual);
+                }
+            }
+        }
+
+        $family_offset = max(0, $offset - $individual_count);
+        $family_limit  = self::EXPORT_PAGE_SIZE - max(0, min(self::EXPORT_PAGE_SIZE, $individual_count - $offset));
+
+        if ($family_limit > 0 && $family_offset < $family_count) {
+            $rows = DB::table('families')
+                ->where('f_file', '=', $tree->id())
+                ->orderBy('f_id')
+                ->offset($family_offset)
+                ->limit($family_limit)
+                ->get()
+                ->map(Registry::familyFactory()->mapper($tree));
+
+            foreach ($rows as $family) {
+                if ($family instanceof Family && $family->canShow($link_level)) {
+                    $families[] = $this->exportFamilyJson($family);
+                }
+            }
+        }
+
+        return response([
+            'lastChange'  => (int) DB::table('change')->where('gedcom_id', '=', $tree->id())->max('change_id'),
+            'page'        => $page,
+            'nextPage'    => $offset + self::EXPORT_PAGE_SIZE < $individual_count + $family_count ? $page + 1 : null,
+            'total'       => ['individuals' => $individual_count, 'families' => $family_count],
+            'individuals' => $individuals,
+            'families'    => $families,
+        ]);
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function exportIndividualJson(Individual $individual): array
+    {
+        $visible = $individual->canShow();
+
+        return $this->personSummary($individual) + [
+            'famc'  => $individual->childFamilies()->map(static fn (Family $family): string => $family->xref())->values()->all(),
+            'fams'  => $individual->spouseFamilies()->map(static fn (Family $family): string => $family->xref())->values()->all(),
+            'facts' => $visible ? $this->factsJson($individual) : [],
+            'media' => $visible ? $this->mediaJson($individual) : [],
+        ];
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function exportFamilyJson(Family $family): array
+    {
+        $visible = $family->canShow();
+
+        return [
+            'xref'     => $family->xref(),
+            'private'  => !$visible,
+            'husband'  => $family->husband()?->xref(),
+            'wife'     => $family->wife()?->xref(),
+            'children' => $family->children()->map(static fn (Individual $child): string => $child->xref())->values()->all(),
+            'marriage' => $visible ? $this->eventJson($family->getMarriageDate(), $family->getMarriagePlace()) : null,
+            'facts'    => $visible ? $this->factsJson($family) : [],
+            'media'    => $visible ? $this->mediaJson($family) : [],
+        ];
     }
 
     /**
@@ -610,6 +1041,123 @@ trait ReadActions
     /**
      * Beschriftete Liste der Ereignisse, die die App zum Hinzufuegen anbietet: ?type=INDI|FAM
      */
+    /**
+     * Alle Quellen des Baums, die der Betrachter sehen darf (ab Stufe 18), nach Titel: Titel, Autor, Publikation,
+     * Kurztitel, erstes Archiv mit Signatur und wie viele Personen und Familien sie zitieren.
+     */
+    public function getSourcesAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree = Validator::attributes($request)->tree();
+
+        $uses = DB::table('link')
+            ->where('l_file', '=', $tree->id())
+            ->where('l_type', '=', 'SOUR')
+            ->groupBy(['l_to'])
+            ->selectRaw('l_to, COUNT(DISTINCT l_from) AS n')
+            ->pluck('n', 'l_to');
+
+        $sources = DB::table('sources')
+            ->where('s_file', '=', $tree->id())
+            ->get()
+            ->map(Registry::sourceFactory()->mapper($tree))
+            ->filter(static fn ($source): bool => $source instanceof Source && $source->canShow())
+            ->map(fn (Source $source): array => $this->sourceSummary($source) + ['uses' => (int) ($uses[$source->xref()] ?? 0)])
+            ->sort(static fn (array $a, array $b): int => I18N::comparator()($a['title'], $b['title']))
+            ->values()
+            ->all();
+
+        return response(['total' => count($sources), 'sources' => $sources]);
+    }
+
+    /**
+     * Alle Archive des Baums (ab Stufe 18): Kennung, Name, Anschrift und wie viele Quellen darauf verweisen.
+     */
+    public function getRepositoriesAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree = Validator::attributes($request)->tree();
+
+        $uses = DB::table('link')
+            ->where('l_file', '=', $tree->id())
+            ->where('l_type', '=', 'REPO')
+            ->groupBy(['l_to'])
+            ->selectRaw('l_to, COUNT(DISTINCT l_from) AS n')
+            ->pluck('n', 'l_to');
+
+        $repos = DB::table('other')
+            ->where('o_file', '=', $tree->id())
+            ->where('o_type', '=', 'REPO')
+            ->get()
+            ->map(Registry::repositoryFactory()->mapper($tree))
+            ->filter(static fn ($repo): bool => $repo instanceof Repository && $repo->canShow())
+            ->map(fn (Repository $repo): array => [
+                'xref'    => $repo->xref(),
+                'name'    => $this->plain($repo->fullName()),
+                'address' => GedcomText::ersterWert($repo->gedcom(), 1, 'ADDR'),
+                'canEdit' => $repo->canEdit(),
+                'uses'    => (int) ($uses[$repo->xref()] ?? 0),
+            ])
+            ->sort(static fn (array $a, array $b): int => I18N::comparator()($a['name'], $b['name']))
+            ->values()
+            ->all();
+
+        return response(['total' => count($repos), 'repositories' => $repos]);
+    }
+
+    /**
+     * Eine Quelle vollstaendig (ab Stufe 18): ?xref=S1 - dazu Text, Notizen, Medien, Archive und wer sie zitiert:
+     * Personen und Familien mit den Ereignissen, an denen der Verweis steht (hoechstens 1000 je Art).
+     */
+    public function getSourceAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree   = Validator::attributes($request)->tree();
+        $source = Registry::sourceFactory()->make($this->xref($request), $tree);
+
+        if ($source === null) {
+            return $this->error(404, 'not-found');
+        }
+
+        if (!$source->canShow()) {
+            return $this->error(403, 'private');
+        }
+
+        $linked = Registry::container()->get(LinkedRecordService::class);
+        $xref   = $source->xref();
+
+        // Die Ereignisse eines Datensatzes, die diese Quelle zitieren (auch die allgemeine Quelle "1 SOUR").
+        $wo = function (GedcomRecord $record) use ($xref): array {
+            $labels = [];
+            foreach ($record->facts() as $fact) {
+                if ($fact->canShow() && str_contains($fact->gedcom(), '@' . $xref . '@')) {
+                    $labels[] = $this->factLabel($fact);
+                }
+            }
+
+            return array_values(array_unique($labels));
+        };
+
+        $individuals = $linked->linkedIndividuals($source, 'SOUR')->filter(static fn (Individual $i): bool => $i->canShow());
+        $families    = $linked->linkedFamilies($source, 'SOUR')->filter(static fn (Family $f): bool => $f->canShow());
+
+        return response($this->sourceSummary($source) + [
+            'text'         => GedcomText::ersterWert($source->gedcom(), 1, 'TEXT'),
+            'notes'        => $source->facts(['NOTE'])->filter(static fn (Fact $f): bool => $f->canShow())
+                ->map(fn (Fact $f): string => $f->target() instanceof Note ? $f->target()->getNote() : $this->plainLines($f->value()))
+                ->filter(static fn (string $t): bool => trim($t) !== '')->values()->all(),
+            'media'        => $this->mediaJson($source),
+            'repositories' => $this->sourceRepositories($source),
+            'individuals'  => $individuals->take(1000)->map(fn (Individual $i): array => $this->personShort($i) + ['facts' => $wo($i)])->values()->all(),
+            'families'     => $families->take(1000)->map(fn (Family $f): array => [
+                'xref'    => $f->xref(),
+                'name'    => $this->plain($f->fullName()),
+                'husband' => $f->husband() instanceof Individual && $f->husband()->canShowName() ? $f->husband()->xref() : null,
+                'wife'    => $f->wife() instanceof Individual && $f->wife()->canShowName() ? $f->wife()->xref() : null,
+                'facts'   => $wo($f),
+            ])->values()->all(),
+            'moreIndividuals' => max(0, $individuals->count() - 1000),
+            'moreFamilies'    => max(0, $families->count() - 1000),
+        ]);
+    }
+
     public function getTagsAction(ServerRequestInterface $request): ResponseInterface
     {
         Validator::attributes($request)->tree();

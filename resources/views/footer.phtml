@@ -5,21 +5,33 @@ declare(strict_types=1);
 use Fisharebest\Webtrees\I18N;
 
 /**
- * @var string $app_url
- * @var bool   $hint
- * @var string $hint_url
- * @var string $page_url
+ * @var string                    $app_url
+ * @var bool                      $hint
+ * @var array<string,mixed>|null  $hint_app   die App, fuer die der Hinweis wirbt (passend zum Geraet)
+ * @var string                    $hint_url
+ * @var string                    $page_url
+ * @var array<string,mixed>|null  $pc_app     das PC-Programm fuer dieses Geraet (sonst das erste der Liste)
+ * @var array<string,mixed>|null  $phone_app  die Handy-App fuer dieses Geraet (sonst die erste der Liste)
  */
 
 ?>
-<?php if ($hint) : ?>
+<?php if ($hint && $hint_app !== null) : ?>
     <div class="alert alert-info d-flex flex-wrap align-items-center gap-2 wt-webtreesand-hint" role="status">
-        <span class="fs-3" aria-hidden="true">📱</span>
-        <div class="me-auto">
-            <strong><?= I18N::translate('Den Stammbaum aufs Handy') ?></strong><br>
-            <?= I18N::translate('Mit der App wtAnd hast du ihn immer dabei – Geburtstage, Suche und Eintragen unterwegs. Einrichten dauert eine Minute.') ?>
-        </div>
-        <a class="btn btn-primary" href="<?= e($app_url) ?>" rel="nofollow"><?= I18N::translate('App einrichten') ?></a>
+        <?php if ($hint_app['kind'] === 'pc') : ?>
+            <span class="fs-3" aria-hidden="true">💻</span>
+            <div class="me-auto">
+                <strong><?= I18N::translate('Den Stammbaum als Programm auf dem Computer') ?></strong><br>
+                <?= I18N::translate('Mit %s arbeitest du wie in einem klassischen Genealogie-Programm – Baum, Personenliste, Tafeln und Bücher zum Drucken. Einrichten dauert zwei Minuten.', e($hint_app['name'])) ?>
+            </div>
+            <a class="btn btn-primary" href="<?= e($app_url) ?>" rel="nofollow"><?= I18N::translate('%s einrichten', e($hint_app['name'])) ?></a>
+        <?php else : ?>
+            <span class="fs-3" aria-hidden="true">📱</span>
+            <div class="me-auto">
+                <strong><?= I18N::translate('Den Stammbaum aufs Handy') ?></strong><br>
+                <?= I18N::translate('Mit der App %s hast du ihn immer dabei – Geburtstage, Suche und Eintragen unterwegs. Einrichten dauert eine Minute.', e($hint_app['name'])) ?>
+            </div>
+            <a class="btn btn-primary" href="<?= e($app_url) ?>" rel="nofollow"><?= I18N::translate('App einrichten') ?></a>
+        <?php endif ?>
         <form method="post" action="<?= e($hint_url) ?>" class="m-0">
             <?= csrf_field() ?>
             <input type="hidden" name="url" value="<?= e($page_url) ?>">
@@ -37,6 +49,14 @@ use Fisharebest\Webtrees\I18N;
       })();
     </script>
 <?php endif ?>
-<div class="wt-footer wt-footer-webtreesand text-center my-2">
-    <a href="<?= e($app_url) ?>" rel="nofollow">📱 <?= I18N::translate('App für Android') ?></a>
-</div>
+<?php if ($pc_app !== null || $phone_app !== null) : ?>
+    <div class="wt-footer wt-footer-webtreesand text-center my-2">
+        <?php if ($pc_app !== null) : ?>
+            <a href="<?= e($app_url) ?>" rel="nofollow">💻 <?= I18N::translate('Programm für den Computer: %s', e($pc_app['name'])) ?></a>
+        <?php endif ?>
+        <?php if ($pc_app !== null && $phone_app !== null) : ?> · <?php endif ?>
+        <?php if ($phone_app !== null) : ?>
+            <a href="<?= e($app_url) ?>" rel="nofollow">📱 <?= I18N::translate('App fürs Handy: %s', e($phone_app['name'])) ?></a>
+        <?php endif ?>
+    </div>
+<?php endif ?>
