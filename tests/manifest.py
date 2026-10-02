@@ -89,6 +89,13 @@ ROUTEN = [
      "the module's binding, its GOV identifier, the leaf name if unique on both sides. `not-found` if no visible "
      "event names the place.",
      [P("name", "The place as written at the event, e.g. `Kortau, Allenstein`", pflicht=True)], None),
+    ("post", "Place", True, 22, "editor",
+     "Save a place's data in its GEDCOM-L `_LOC` record – created if there is none. Only the parts named in the body are "
+     "replaced; sources, media and unknown lines of the `_LOC` stay. If the leaf name is not unique in the tree, the events "
+     "at the place get the pointer `3 _LOC @L1@` (`linked`: how many). `mapData: true` also writes the coordinates to "
+     "webtrees' geographic data (site administrators only) – webtrees' own maps read only those and `MAP` at the events.",
+     [], "`{name, gov?, lat?, lng?, note?, mapData?}` – `lat`/`lng` together, `null` removes the coordinates. "
+     "Answer: `{ok, xref, pending, linked, mapData}`, status 201 when the `_LOC` was created."),
     ("post", "Fact", True, 1, "editor",
      "Add or change a fact or event. Unmentioned sub-lines (sources, media …) are kept when changing.",
      [XREF], "`{factId?, tag, value?, date?, place?, note?, type?}` or `{factId?, gedcom: \"1 BIRT\\n2 DATE …\"}`. "
@@ -261,6 +268,7 @@ def sammeln(u):
     quelle = admin.post("Source", "testbaum", {"title": "Manifestquelle", "author": "Manifest", "repository": archiv.json["xref"], "callNumber": "M 1"})
     merken("post", "Source", quelle)
     merken("post", "Source", admin.post("Source", "testbaum", {"publication": "Manifeststadt, 1900"}, xref=quelle.json["xref"]))
+    merken("post", "Place", admin.post("Place", "testbaum", {"name": "Bieber, Gelnhausen", "gov": "MANIFEST1", "lat": 50.2, "lng": 9.3, "note": "Manifestort"}))
     fakt = admin.post("Fact", "testbaum", {"tag": "OCCU", "value": "Manifestberuf", "date": "1850"}, xref="I4")
     merken("post", "Fact", fakt)
     occu = [f for f in admin.get("Individual", "testbaum", xref="I4").json["facts"] if f.get("tag") == "OCCU"]

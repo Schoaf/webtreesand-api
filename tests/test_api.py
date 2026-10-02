@@ -244,14 +244,14 @@ class Orte(unittest.TestCase):
 
     def test_ortsliste(self):
         orte = {o["name"]: o for o in U.sitzung("verwalter").get("Places", "testbaum", list=1).json["places"]}
-        self.assertEqual(["Bieber, Offenbach", "Markerkonfidenzort", "Markerlebendort", "Offenbach"], sorted(orte))
+        self.assertEqual(["Bieber, Gelnhausen", "Bieber, Offenbach", "Markerkonfidenzort", "Markerlebendort", "Offenbach"], sorted(orte))
         off = orte["Offenbach"]
         self.assertEqual((2, 1, 0, "L1", "OFFACHJO40BC", "location"), (off["events"], off["individuals"], off["families"], off["location"], off["gov"], off["coordSource"]))
         self.assertAlmostEqual(50.1, off["lat"])
         self.assertIsNone(orte["Bieber, Offenbach"]["location"], "Blattname Bieber hat keinen _LOC")
         self.assertEqual("L2", orte["Markerkonfidenzort"]["location"], "Blattname eindeutig: _LOC gefunden")
         gast = [o["name"] for o in U.sitzung().get("Places", "testbaum", list=1).json["places"]]
-        self.assertEqual(["Bieber, Offenbach", "Offenbach"], gast, "Orte verborgener Personen fehlen")
+        self.assertEqual(["Bieber, Offenbach", "Offenbach"], gast, "Orte verborgener Personen fehlen (F2 hat ein lebendes Kind)")
 
     def test_ein_ort(self):
         o = U.sitzung("verwalter").get("Place", "testbaum", name="offenbach").json
@@ -272,6 +272,45 @@ class Orte(unittest.TestCase):
         self.assertEqual("not-found", U.sitzung("bearbeiter").get("Place", "testbaum", name="Markerkonfidenzort").json["error"])
         self.assertEqual("not-found", U.sitzung("verwalter").get("Place", "testbaum", name="Gibtesnicht").json["error"])
         self.assertEqual("name-missing", U.sitzung("verwalter").get("Place", "testbaum").json["error"])
+
+    def test_zz_ortsdaten_schreiben(self):
+        """Stufe 22: POST Place - zuletzt, weil es den Testbaum aendert."""
+        s = U.sitzung("admin")
+        # vorhandener _LOC: nur die GOV-Kennung aendern, Notiz/Quelle/Koordinaten bleiben
+        a = s.post("Place", "testbaum", {"name": "Offenbach", "gov": "OFFACHJO40BD"})
+        self.assertEqual((True, "L1", 0), (a.json["ok"], a.json["xref"], a.json["linked"]), a)
+        loc = s.get("Place", "testbaum", name="Offenbach").json["location"]
+        self.assertEqual(("OFFACHJO40BD", ["Stadt am Main"], 1, 50.1), (loc["gov"], loc["notes"], len(loc["sources"]), loc["lat"]))
+        # Koordinaten und Notiz ersetzen, auch in die Geografischen Daten (Admin)
+        a = s.post("Place", "testbaum", {"name": "Offenbach", "lat": 50.104444, "lng": -8.766, "note": "Stadt am Main\nzweite Zeile", "mapData": True})
+        self.assertEqual((True, True), (a.json["ok"], a.json["mapData"]), a)
+        loc = s.get("Place", "testbaum", name="Offenbach").json["location"]
+        self.assertEqual((50.104444, -8.766, ["Stadt am Main\nzweite Zeile"]), (loc["lat"], loc["lng"], loc["notes"]))
+        self.assertIn("2 LONG W8.766", umgebung.sql("SELECT o_gedcom FROM wt_other WHERE o_id = 'L1'")[0][0])
+        self.assertEqual([(50.104444, -8.766)], [(float(a), float(b)) for a, b in umgebung.sql("SELECT latitude, longitude FROM wt_place_location WHERE place = 'Offenbach'")])
+        # Koordinaten entfernen
+        s.post("Place", "testbaum", {"name": "Offenbach", "lat": None, "lng": None})
+        self.assertIsNone(s.get("Place", "testbaum", name="Offenbach").json["location"]["lat"])
+        # neuer _LOC; Blattname "Bieber" gibt es zweimal -> Verweis an die Ereignisse
+        a = s.post("Place", "testbaum", {"name": "Bieber, Offenbach", "gov": "BIEBERJO40BC"})
+        self.assertEqual((True, 1), (a.json["ok"], a.json["linked"]), a)
+        neu = a.json["xref"]
+        self.assertIn("3 _LOC @" + neu + "@", umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = 'I4'")[0][0])
+        o = s.get("Place", "testbaum", name="Bieber, Offenbach").json
+        self.assertEqual((neu, "Bieber", "BIEBERJO40BC"), (o["location"]["xref"], o["location"]["name"], o["location"]["gov"]))
+        self.assertIsNone(s.get("Place", "testbaum", name="Bieber, Gelnhausen").json["location"], "der andere Bieber bekommt ihn nicht")
+        # Bearbeiter ohne Sofortfreigabe: ausstehender _LOC, zweites Speichern trifft denselben
+        b = U.sitzung("bearbeiter")
+        a = b.post("Place", "testbaum", {"name": "Bieber, Gelnhausen", "note": "Dorf im Kinzigtal"})
+        self.assertEqual((True, True), (a.json["ok"], a.json["pending"]), a)
+        a2 = b.post("Place", "testbaum", {"name": "Bieber, Gelnhausen", "gov": "BIEBERJO40AA"})
+        self.assertEqual(a.json["xref"], a2.json["xref"], "kein zweiter _LOC vor der Freigabe")
+        # Fehler und Rechte
+        self.assertEqual("not-editable", U.sitzung("mitglied").post("Place", "testbaum", {"name": "Offenbach", "gov": "X"}).json["error"])
+        self.assertEqual("invalid-coordinates", s.post("Place", "testbaum", {"name": "Offenbach", "lat": 95, "lng": 1}).json["error"])
+        self.assertEqual("invalid-coordinates", s.post("Place", "testbaum", {"name": "Offenbach", "lat": 50}).json["error"])
+        self.assertEqual("invalid-gov", s.post("Place", "testbaum", {"name": "Offenbach", "gov": "a b"}).json["error"])
+        self.assertEqual("not-found", b.post("Place", "testbaum", {"name": "Markerkonfidenzort", "gov": "X"}).json["error"])
 
 
 class Schreiben(unittest.TestCase):

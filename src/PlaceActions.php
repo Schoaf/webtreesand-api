@@ -13,6 +13,7 @@ use Fisharebest\Webtrees\I18N;
 use Fisharebest\Webtrees\Individual;
 use Fisharebest\Webtrees\Location;
 use Fisharebest\Webtrees\Note;
+use Fisharebest\Webtrees\PlaceLocation;
 use Fisharebest\Webtrees\Registry;
 use Fisharebest\Webtrees\Services\GedcomService;
 use Fisharebest\Webtrees\Source;
@@ -22,7 +23,10 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Throwable;
 
+use function abs;
 use function array_flip;
+use function array_key_exists;
+use function array_pad;
 use function array_keys;
 use function array_map;
 use function array_slice;
@@ -32,6 +36,7 @@ use function count;
 use function explode;
 use function implode;
 use function is_array;
+use function is_numeric;
 use function is_string;
 use function json_decode;
 use function max;
@@ -41,6 +46,8 @@ use function preg_match_all;
 use function preg_quote;
 use function preg_split;
 use function response;
+use function rtrim;
+use function sprintf;
 use function str_contains;
 use function str_ends_with;
 use function trim;
@@ -165,6 +172,155 @@ trait PlaceActions
             'moreFamilies'    => max(0, count($families) - $this->placeRecordLimit),
             'canEdit'         => Auth::isEditor($tree),
         ]);
+    }
+
+    /**
+     * Ortsdaten speichern (ab Stufe 22): Rumpf { name, gov?, lat?, lng?, note?, mapData? }. Geschrieben wird in den
+     * _LOC-Datensatz des Orts (GEDCOM-L); fehlt er, wird er angelegt. Nur die genannten Teile werden ersetzt, alles
+     * andere am _LOC bleibt. lat/lng null entfernt die Koordinaten. Ist der Blattname nicht eindeutig, bekommen die
+     * Ereignisse am Ort den Verweis "3 _LOC @L1@" - sonst faende sich der neue _LOC nicht wieder. mapData: true traegt
+     * die Koordinaten fuer Administratoren zusaetzlich in die Geografischen Daten von webtrees ein (die Karten von
+     * webtrees lesen nur diese und MAP am Ereignis).
+     */
+    public function postPlaceAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree = Validator::attributes($request)->tree();
+        $body = $this->body($request);
+        $name = $this->placeName($this->str($body, 'name'));
+        $key  = mb_strtolower($name);
+
+        if ($name === '') {
+            return $this->error(400, 'name-missing');
+        }
+
+        if (!Auth::isEditor($tree)) {
+            return $this->error(403, 'not-editable');
+        }
+
+        foreach (['gov', 'note'] as $feld) {
+            if (GedcomText::looksLikePointer($this->str($body, $feld))) {
+                return $this->error(400, 'invalid-value');
+            }
+        }
+
+        $gov = trim($this->str($body, 'gov'));
+        if ($gov !== '' && preg_match('/^[A-Za-z0-9_-]{1,64}$/', $gov) !== 1) {
+            return $this->error(400, 'invalid-gov');
+        }
+
+        $koordinaten = array_key_exists('lat', $body) || array_key_exists('lng', $body);
+        $lat         = $body['lat'] ?? null;
+        $lng         = $body['lng'] ?? null;
+        if ($koordinaten && (($lat === null) !== ($lng === null)
+            || ($lat !== null && (!is_numeric($lat) || !is_numeric($lng) || abs((float) $lat) > 90 || abs((float) $lng) > 180)))) {
+            return $this->error(400, 'invalid-coordinates');
+        }
+
+        $id      = $this->placeIds($tree)[$key] ?? null;
+        $records = $id === null ? [] : $this->linkedRecords($tree, $id, $name);
+        $here    = $this->placeUsage($records, true, $key)[$key] ?? null;
+
+        if ($here === null) {
+            return $this->error(404, 'not-found');
+        }
+
+        $context  = $this->placeContext($tree);
+        $location = $this->placeLocation($tree, $here, $context);
+        $status   = 200;
+        $linked   = 0;
+
+        if ($location === null) {
+            $leaf     = explode(', ', $name)[0];
+            $location = $tree->createRecord($this->locationGedcom('0 @@ _LOC' . "\n1 NAME " . GedcomText::line($leaf), $body));
+            $status   = 201;
+
+            // Nur ueber den Namen wiederzufinden, wenn er auf beiden Seiten eindeutig ist - sonst Verweise setzen.
+            $leafKey = mb_strtolower($leaf);
+            if (($context['leaves'][$leafKey] ?? 0) > 1 || ($context['byName'][$leafKey] ?? []) !== []) {
+                $linked = $this->linkEvents($here, $location->xref());
+            }
+        } else {
+            $denied = $this->denyEdit($location);
+            if ($denied !== null) {
+                return $denied;
+            }
+            $location->updateRecord($this->locationGedcom($location->gedcom(), $body), true);
+        }
+
+        $mapData = false;
+        if (($body['mapData'] ?? false) === true && Auth::isAdmin() && $koordinaten) {
+            $place = new PlaceLocation($name);
+            DB::table('place_location')->where('id', '=', $place->id())->update([
+                'latitude'  => $lat === null ? null : (float) $lat,
+                'longitude' => $lng === null ? null : (float) $lng,
+            ]);
+            $mapData = true;
+        }
+
+        return $this->written($location, ['linked' => $linked, 'mapData' => $mapData], $status);
+    }
+
+    /**
+     * Das GEDCOM eines _LOC mit den im Rumpf genannten Teilen ersetzt; alles andere bleibt.
+     *
+     * @param array<string,mixed> $body
+     */
+    private function locationGedcom(string $alt, array $body): string
+    {
+        [$kopf, $rest] = array_pad(explode("\n", $alt, 2), 2, '');
+        $rest = $rest === '' ? '' : "\n" . $rest;
+
+        if (array_key_exists('gov', $body)) {
+            $gov  = trim($this->str($body, 'gov'));
+            $rest = (string) preg_replace('/\n1 _GOV(?: [^\n]*)?(?:\n[2-9] [^\n]*)*/', '', $rest);
+            $rest .= $gov === '' ? '' : "\n1 _GOV " . $gov;
+        }
+
+        if (array_key_exists('lat', $body) || array_key_exists('lng', $body)) {
+            $rest = (string) preg_replace('/\n1 MAP(?:\n[2-9] [^\n]*)*/', '', $rest);
+            if (($body['lat'] ?? null) !== null && ($body['lng'] ?? null) !== null) {
+                $rest .= "\n1 MAP\n2 LATI " . $this->gedcomDegrees((float) $body['lat'], 'N', 'S') . "\n2 LONG " . $this->gedcomDegrees((float) $body['lng'], 'E', 'W');
+            }
+        }
+
+        if (array_key_exists('note', $body)) {
+            $note = GedcomText::multiline($this->str($body, 'note'), 2);
+            // Nur die eingebettete Notiz ersetzen; Verweise auf Notiz-Datensaetze bleiben
+            $rest = (string) preg_replace('/\n1 NOTE (?!@)[^\n]*(\n2 CON[CT][^\n]*)*/', '', $rest);
+            $rest .= $note === '' ? '' : "\n1 NOTE " . $note;
+        }
+
+        return $kopf . $rest;
+    }
+
+    /** 53.778417 -> "N53.778417" (GEDCOM: Himmelsrichtung und Dezimalgrad, ohne angehaengte Nullen) */
+    private function gedcomDegrees(float $wert, string $plus, string $minus): string
+    {
+        $zahl = rtrim(rtrim(sprintf('%.6F', abs($wert)), '0'), '.');
+
+        return ($wert < 0 ? $minus : $plus) . $zahl;
+    }
+
+    /**
+     * "3 _LOC @L1@" unter das PLAC aller Ereignisse am Ort, die es noch nicht haben und bearbeitet werden duerfen.
+     *
+     * @param array{facts:array<string,list<Fact>>} $here
+     */
+    private function linkEvents(array $here, string $xref): int
+    {
+        $n = 0;
+        foreach ($here['facts'] as $facts) {
+            foreach ($facts as $fact) {
+                if (!$fact->canEdit() || preg_match('/\n3 _LOC /', $fact->gedcom()) === 1) {
+                    continue;
+                }
+                $neu = (string) preg_replace('/(\n2 PLAC [^\n]*(?:\n[3-9] [^\n]*)*)/', '$1' . "\n3 _LOC @" . $xref . '@', $fact->gedcom(), 1);
+                $fact->record()->updateFact($fact->id(), $neu, true);
+                $n++;
+            }
+        }
+
+        return $n;
     }
 
     /**
@@ -446,8 +602,20 @@ trait PlaceActions
         $byName = [];
         $byGov  = [];
 
-        $rows = DB::table('other')->where('o_file', '=', $tree->id())->where('o_type', '=', '_LOC')->get();
-        foreach ($rows->map(Registry::locationFactory()->mapper($tree)) as $location) {
+        $rows      = DB::table('other')->where('o_file', '=', $tree->id())->where('o_type', '=', '_LOC')->get();
+        $locations = $rows->map(Registry::locationFactory()->mapper($tree))->all();
+
+        // Neu angelegte, noch nicht freigegebene _LOC sieht ein Bearbeiter schon - sonst legte das zweite Speichern
+        // vor der Freigabe einen zweiten an.
+        if (Auth::isEditor($tree)) {
+            $neu = DB::table('change')->where('gedcom_id', '=', $tree->id())->where('status', '=', 'pending')
+                ->where('old_gedcom', '=', '')->where('new_gedcom', 'LIKE', '0 @%@ _LOC%')->pluck('xref');
+            foreach ($neu as $xref) {
+                $locations[] = Registry::locationFactory()->make((string) $xref, $tree);
+            }
+        }
+
+        foreach ($locations as $location) {
             if (!$location instanceof Location || !$location->canShow()) {
                 continue;
             }

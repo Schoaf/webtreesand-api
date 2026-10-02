@@ -93,7 +93,9 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     //     1 ASSO in die Taufe verschieben); Fact.type (Art des Ereignisses, MARR in webtrees-Form CIVIL/RELIGIOUS ...)
     // 21: Orte - Places?list=1 (alle Orte mit Zahlen, Koordinaten, _LOC), Place (ein Ort: Personen und Familien mit
     //     ihren Ereignissen dort, Unterorte, _LOC mit GOV, Koordinaten, Notizen, Quellen, Medien)
-    public const int    API_VERSION = 21;
+    // 22: Orte schreiben - POST Place (GOV-Kennung, Koordinaten, Notiz in den _LOC; legt ihn an, Verweise bei
+    //     mehrdeutigem Blattnamen; mapData: auch in die Geografischen Daten, nur Administratoren)
+    public const int    API_VERSION = 22;
 
     /** Benutzereinstellung je Baum: die Merkliste als Liste von Personenkennungen. */
     private const string BOOKMARKS_PREF = 'api4webtrees_bookmarks';
