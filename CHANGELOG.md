@@ -23,6 +23,8 @@
   user (own default individual, “this is me”, the tree's default individual, else the first) – and
   `treeDefaultXref`. `POST StartPerson {xref, forTree?}` sets the user's own default individual (empty removes it) or,
   for managers, the family tree's.
+- With SQLite (nas4webtrees, the family tree on this PC) webtrees can keep one place in two spellings that differ only
+  in case (“Celle”, “celle”); places count both, renaming takes both along.
 - Tests: places (reading, writing, renaming, merging, privacy), media objects, start person; performance check with
   10,000 and 50,000 individuals (`docs/leistung.md`).
 
