@@ -700,6 +700,21 @@ class Schreiben(unittest.TestCase):
         self.assertEqual(True, s.post("UnlinkMedia", "testbaum", {"media": mx}, xref="I2").json["ok"])
         self.assertNotIn("@" + mx + "@", umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = 'I2'")[0][0])
 
+    def test_ort_in_zwei_schreibweisen(self):
+        """SQLite: "Ort" und "ort" sind zwei Eintraege der Ortstabelle - Place zaehlt beide und nennt die Schreibweise
+        der Mehrheit; PlaceRename nimmt beide mit."""
+        s = U.sitzung("admin")
+        liste = s.get("Places", "testbaum", list="1").json["places"]
+        ort = max(liste, key=lambda o: o["events"])
+        vorher = s.get("Place", "testbaum", name=ort["name"]).json
+        a = s.post("Fact", "testbaum", {"tag": "RESI", "date": "1900", "place": ort["name"].lower()}, xref="I2")
+        self.assertEqual(True, a.json["ok"], a)
+        nachher = s.get("Place", "testbaum", name=ort["name"]).json
+        self.assertEqual(vorher["events"] + 1, nachher["events"])
+        self.assertEqual(vorher["events"] + 1, s.get("Place", "testbaum", name=ort["name"].lower()).json["events"])
+        neu = [f for f in self.fakten(s, "I2") if f.get("tag") == "RESI" and (f.get("place") or {}).get("name") == ort["name"].lower()]
+        self.assertEqual(True, s.post("DeleteFact", "testbaum", {"factId": neu[0]["id"]}, xref="I2").json["ok"])
+
     def test_startperson(self):
         """Stufe 24: Info nennt die Startperson wie webtrees; StartPerson setzt die eigene Standardperson, die des
         Stammbaums nur fuer Verwalter."""

@@ -92,22 +92,24 @@ trait PlaceActions
             return $this->error(400, 'name-missing');
         }
 
-        $ids = $this->placeIds($tree);
-        $id  = $ids[$key] ?? null;
+        $ids = $this->placeIdLists($tree)[$key] ?? [];
 
         // Datensaetze an diesem Ort oder darunter (webtrees verknuepft jede Ebene einzeln) - geladen werden nur die,
         // in deren GEDCOM der Name ueberhaupt vorkommt; ob er wirklich am Ereignis steht, prueft placeUsage().
-        $records = $id === null ? [] : $this->linkedRecords($tree, $id, $name);
+        $records = $this->linkedRecords($tree, $ids, $name);
         $usage   = $this->placeUsage($records, true, $key);
         $here    = $usage[$key] ?? null;
 
         // Orte direkt darunter aus der Ortstabelle - genannt wird einer nur, wenn ein sichtbarer Datensatz dort liegt.
         $children = [];
-        if ($id !== null) {
-            $rows = DB::table('places')->where('p_file', '=', $tree->id())->where('p_parent_id', '=', $id)->get(['p_id', 'p_place']);
+        if ($ids !== []) {
+            $rows = DB::table('places')->where('p_file', '=', $tree->id())->whereIn('p_parent_id', $ids)->get(['p_id', 'p_place']);
+            $schon = [];
             foreach ($rows as $row) {
-                if ($this->placeVisible($tree, (int) $row->p_id)) {
-                    $children[] = ['name' => $row->p_place . ', ' . ($here['name'] ?? $name)];
+                $kind = mb_strtolower((string) $row->p_place);
+                if (!isset($schon[$kind]) && $this->placeVisible($tree, (int) $row->p_id)) {
+                    $schon[$kind] = true;
+                    $children[]   = ['name' => $row->p_place . ', ' . ($here['name'] ?? $name)];
                 }
             }
         }
@@ -235,8 +237,7 @@ trait PlaceActions
             return $this->error(400, 'invalid-coordinates');
         }
 
-        $id      = $this->placeIds($tree)[$key] ?? null;
-        $records = $id === null ? [] : $this->linkedRecords($tree, $id, $name);
+        $records = $this->linkedRecords($tree, $this->placeIdLists($tree)[$key] ?? [], $name);
         $here    = $this->placeUsage($records, true, $key)[$key] ?? null;
 
         if ($here === null) {
@@ -407,20 +408,20 @@ trait PlaceActions
 
         $fromKey = mb_strtolower($from);
         $toKey   = mb_strtolower($to);
-        $ids     = $this->placeIds($tree);
-        $fromId  = $ids[$fromKey] ?? null;
+        $ids     = $this->placeIdLists($tree);
+        $fromIds = $ids[$fromKey] ?? [];
 
         // Der Ort muss fuer den Benutzer sichtbar an einem Ereignis stehen - sonst gibt es ihn fuer ihn nicht.
-        $sichtbar = $fromId === null ? [] : $this->linkedRecords($tree, $fromId, $from);
+        $sichtbar = $this->linkedRecords($tree, $fromIds, $from);
         $here     = $this->placeUsage($sichtbar, true, $fromKey)[$fromKey] ?? null;
-        if ($here === null && ($fromId === null || !$this->placeVisible($tree, $fromId))) {
+        if ($here === null && array_filter($fromIds, fn (int $i): bool => $this->placeVisible($tree, $i)) === []) {
             return $this->error(404, 'not-found');
         }
 
         $here ??= ['name' => $from, 'events' => 0, 'individuals' => [], 'families' => [], 'lat' => null, 'lng' => null, 'locs' => [], 'facts' => []];
         // Zusammenfuehren nur, wenn am Ziel noch etwas haengt - webtrees laesst alte Orte in seiner Ortstabelle stehen
         $merge   = $fromKey !== $toKey && isset($ids[$toKey])
-            && DB::table('placelinks')->where('pl_file', '=', $tree->id())->where('pl_p_id', '=', $ids[$toKey])->exists();
+            && DB::table('placelinks')->where('pl_file', '=', $tree->id())->whereIn('pl_p_id', $ids[$toKey])->exists();
         $context = $this->placeContext($tree);
         $fromLoc = $this->placeLocation($tree, $here, $context);
         $toLoc   = null;
@@ -443,11 +444,12 @@ trait PlaceActions
                     $join->on('pl_gid', '=', $p . '_id')->on('pl_file', '=', $p . '_file');
                 })
                 ->where($p . '_file', '=', $tree->id())
-                ->where('pl_p_id', '=', $fromId ?? -1)
+                ->whereIn('pl_p_id', $fromIds === [] ? [-1] : $fromIds)
                 ->select([$table . '.*'])
                 ->get();
             foreach ($q as $row) {
-                $rows[] = $mapper($row);
+                $record = $mapper($row);
+                $rows[$record->xref()] = $record;
             }
         }
 
@@ -643,8 +645,11 @@ trait PlaceActions
      *
      * @return list<GedcomRecord>
      */
-    private function linkedRecords(Tree $tree, int $placeId, string $name): array
+    private function linkedRecords(Tree $tree, array $placeIds, string $name): array
     {
+        if ($placeIds === []) {
+            return [];
+        }
         // "2 PLAC Kortau, Allenstein" - genau dieser Ort, Leerzeichen um die Kommas wie bei webtrees beliebig
         $teile   = array_map(static fn (string $t): string => preg_quote($t, '/'), explode(', ', $name));
         $muster  = '/\n2 PLAC ' . implode(' *,[, ]*', $teile) . ' *(?:\n|$)/iu';
@@ -656,22 +661,27 @@ trait PlaceActions
                     $join->on('pl_gid', '=', $p . '_id')->on('pl_file', '=', $p . '_file');
                 })
                 ->where($p . '_file', '=', $tree->id())
-                ->where('pl_p_id', '=', $placeId)
+                ->whereIn('pl_p_id', $placeIds)
                 ->select([$table . '.*'])
                 ->get();
 
             foreach ($rows as $row) {
+                // Unter SQLite kann ein Ort in zwei Schreibweisen (gross/klein) in der Ortstabelle stehen - beide zaehlen,
+                // ein Datensatz an beiden kommt trotzdem nur einmal
+                if (isset($records[(string) $row->{$p . '_id'}])) {
+                    continue;
+                }
                 if (preg_match($muster, (string) $row->{$p . '_gedcom'}) !== 1) {
                     continue;
                 }
                 $record = $mapper($row);
                 if ($record->canShow()) {
-                    $records[] = $record;
+                    $records[$record->xref()] = $record;
                 }
             }
         }
 
-        return $records;
+        return array_values($records);
     }
 
     /** Liegt wenigstens ein sichtbarer Datensatz an diesem Ort (oder darunter)? Bricht beim ersten Treffer ab. */
@@ -1135,6 +1145,35 @@ trait PlaceActions
         $rows = DB::table('places')->where('p_file', '=', $tree->id())->get(['p_id', 'p_place', 'p_parent_id']);
 
         return $this->fullNames($rows->map(static fn (object $r): array => [(int) $r->p_id, (string) $r->p_place, (int) $r->p_parent_id])->all(), 0);
+    }
+
+    /**
+     * Wie placeIds, aber je vollem Namen alle Kennungen: Unter SQLite vergleicht webtrees Ortsnamen mit Gross- und
+     * Kleinschreibung, "Celle" und "celle" sind dann zwei Eintraege derselben Ortstabelle.
+     *
+     * @return array<string,list<int>>
+     */
+    private function placeIdLists(Tree $tree): array
+    {
+        $rows = DB::table('places')->where('p_file', '=', $tree->id())->get(['p_id', 'p_place', 'p_parent_id']);
+        $byId = [];
+        foreach ($rows as $r) {
+            $byId[(int) $r->p_id] = [(string) $r->p_place, (int) $r->p_parent_id];
+        }
+
+        $lists = [];
+        foreach ($byId as $id => [$place, $parent]) {
+            $parts = [$place];
+            $seen  = [$id => true];
+            while ($parent !== 0 && isset($byId[$parent]) && !isset($seen[$parent])) {
+                $seen[$parent] = true;
+                $parts[]       = $byId[$parent][0];
+                $parent        = $byId[$parent][1];
+            }
+            $lists[mb_strtolower(implode(', ', $parts))][] = $id;
+        }
+
+        return $lists;
     }
 
     /**
