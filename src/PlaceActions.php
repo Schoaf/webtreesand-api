@@ -216,7 +216,7 @@ trait PlaceActions
             return $this->error(403, 'not-editable');
         }
 
-        foreach (['gov', 'note', 'postalCode', 'region', 'country'] as $feld) {
+        foreach (['gov', 'note', 'postalCode', 'region', 'country', 'shortName'] as $feld) {
             if (GedcomText::looksLikePointer($this->str($body, $feld))) {
                 return $this->error(400, 'invalid-value');
             }
@@ -307,6 +307,16 @@ trait PlaceActions
             // Nur die eingebettete Notiz ersetzen; Verweise auf Notiz-Datensaetze bleiben
             $rest = (string) preg_replace('/\n1 NOTE (?!@)[^\n]*(\n2 CON[CT][^\n]*)*/', '', $rest);
             $rest .= $note === '' ? '' : "\n1 NOTE " . $note;
+        }
+
+        // Kurzname: "2 ABBR" unter dem ersten "1 NAME" ersetzen; NAME selbst und seine anderen Unterzeilen bleiben
+        if (array_key_exists('shortName', $body)) {
+            $kurz = GedcomText::line($this->str($body, 'shortName'));
+            $rest = (string) preg_replace_callback('/(\n1 NAME[^\n]*)((?:\n[2-9] [^\n]*)*)/', static function (array $m) use ($kurz): string {
+                $unter = (string) preg_replace('/\n2 ABBR(?: [^\n]*)?(?:\n[3-9] [^\n]*)*/', '', $m[2]);
+
+                return $m[1] . ($kurz === '' ? '' : "\n2 ABBR " . $kurz) . $unter;
+            }, $rest, 1);
         }
 
         // Postleitzahl, Region, Land - vorhandene Schreibweise (POST/_POST) bleibt, neu als _POST
@@ -618,6 +628,7 @@ trait PlaceActions
                 'coordSource' => $source,
                 'location'    => $location?->xref(),
                 'gov'         => $location === null ? null : $this->locGov($location),
+                'shortName'   => $location === null ? null : $this->locKurz($location),
             ];
         }
 
@@ -1027,6 +1038,7 @@ trait PlaceActions
             'name'    => GedcomText::ersterWert($location->gedcom(), 1, 'NAME'),
             'gov'     => $this->locGov($location),
             // Postleitzahl, Region, Land: GEDCOM-L kennt _POST; _STAE und _CTRY (und POST) schreiben andere Programme
+            'shortName'  => $this->locKurz($location),
             'postalCode' => $this->locWert($location, ['_POST', 'POST']),
             'region'     => $this->locWert($location, ['_STAE']),
             'country'    => $this->locWert($location, ['_CTRY']),
@@ -1057,6 +1069,15 @@ trait PlaceActions
         }
 
         return null;
+    }
+
+    /** Kurzname des Orts (GEDCOM-L: "2 ABBR" unter dem ersten "1 NAME" des _LOC), fuer gekuerzte Ortsangaben in Buechern. */
+    private function locKurz(Location $location): string|null
+    {
+        $name = GedcomText::unterzeilen("\n" . $location->gedcom(), 1, 'NAME')[0][1] ?? '';
+        $kurz = trim(GedcomText::unterzeilen($name, 2, 'ABBR')[0][0] ?? '');
+
+        return $kurz === '' ? null : $kurz;
     }
 
     private function locGov(Location $location): string|null

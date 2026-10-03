@@ -305,6 +305,13 @@ class Orte(unittest.TestCase):
         a = s.post("Citation", "testbaum", {"source": "S1", "page": "Ortschronik S. 3"}, xref="L1")
         self.assertEqual(True, a.json["ok"], a)
         self.assertIn(("S1", "Ortschronik S. 3"), [(q["xref"], q["page"]) for q in s.get("Place", "testbaum", name="Offenbach").json["location"]["sources"]])
+        # Kurzname als "2 ABBR" unter dem NAME, auch in der Ortsliste
+        self.assertEqual(True, s.post("Place", "testbaum", {"name": "Offenbach", "shortName": "Offb."}).json["ok"])
+        self.assertEqual("Offb.", s.get("Place", "testbaum", name="Offenbach").json["location"]["shortName"])
+        self.assertIn("1 NAME Offenbach\n2 ABBR Offb.", umgebung.sql("SELECT o_gedcom FROM wt_other WHERE o_id = 'L1'")[0][0])
+        self.assertEqual("Offb.", next(o for o in s.get("Places", "testbaum", list=1).json["places"] if o["name"] == "Offenbach")["shortName"])
+        s.post("Place", "testbaum", {"name": "Offenbach", "shortName": ""})
+        self.assertIsNone(s.get("Place", "testbaum", name="Offenbach").json["location"]["shortName"])
         # Postleitzahl (vorhandene Schreibweise POST bleibt), Region, Land
         self.assertEqual(True, s.post("Place", "testbaum", {"name": "Offenbach", "postalCode": "63067", "country": "Deutschland"}).json["ok"])
         loc = s.get("Place", "testbaum", name="Offenbach").json["location"]

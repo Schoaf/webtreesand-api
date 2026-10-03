@@ -251,7 +251,7 @@ Answer fields: `canEdit`, `children`, `coordSource`, `eventCounts`, `events`, `f
 
 Save a place's data in its GEDCOM-L `_LOC` record – created if there is none. Only the parts named in the body are replaced; sources, media and unknown lines of the `_LOC` stay. If the leaf name is not unique in the tree, the events at the place get the pointer `3 _LOC @L1@` (`linked`: how many). `mapData: true` also writes the coordinates to webtrees' geographic data (site administrators only) – webtrees' own maps read only those and `MAP` at the events.
 
-Body: `{name, gov?, lat?, lng?, note?, media?, mapData?}` – `lat`/`lng` together, `null` removes the coordinates; `media` replaces the linked media objects (upload new ones with route Media and the `_LOC` identifier). Answer: `{ok, xref, pending, linked, mapData}`, status 201 when the `_LOC` was created.
+Body: `{name, gov?, lat?, lng?, note?, media?, mapData?, postalCode?, region?, country?, shortName?}` – `lat`/`lng` together, `null` removes the coordinates; `media` replaces the linked media objects (upload new ones with route Media and the `_LOC` identifier). Answer: `{ok, xref, pending, linked, mapData}`, status 201 when the `_LOC` was created.
 
 Answer fields: `linked`, `mapData`, `ok`, `pending`, `xref` – full schema in openapi.json.
 
