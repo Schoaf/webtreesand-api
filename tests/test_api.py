@@ -679,6 +679,27 @@ class Schreiben(unittest.TestCase):
         self.assertEqual(True, s.post("Citation", "testbaum", {"factId": tod["id"], "index": 0, "media": [m]}, xref="I2").json["ok"])
         self.assertEqual(["Taufe 1833"], [x["title"] for x in next(f for f in self.fakten(s, "I2") if f.get("tag") == "DEAT")["sources"][0]["media"]])
 
+    def test_notiz_und_vorhandenes_medium_an_person(self):
+        """Stufe 23: Notizen an der Person (Route Fact, Tag NOTE), Verweis auf Notiz-Datensatz erkennbar (noteXref),
+        vorhandenes Medium verknuepfen (Route Media mit media) und wieder loesen (UnlinkMedia)."""
+        s = U.sitzung("admin")
+        a = s.post("Fact", "testbaum", {"tag": "NOTE", "value": "Erste Zeile\nzweite Zeile"}, xref="I2")
+        self.assertEqual(True, a.json["ok"], a)
+        notiz = next(f for f in self.fakten(s, "I2") if f.get("tag") == "NOTE")
+        self.assertEqual(("Erste Zeile\nzweite Zeile", None), (notiz["value"], notiz["noteXref"]))
+        # Medium an I1 hochladen, dann dasselbe Medium an I2 haengen, doppelt verknuepfen bleibt einfach
+        rumpf, art = manifest.multipart({"title": "Gemeinsames Bild"}, ("bild.png", manifest.PNG, "image/png"))
+        req = urllib.request.Request(s.url("/module/_api4webtrees_/Media/testbaum", xref="I1"), data=rumpf, method="POST")
+        req.add_header("Content-Type", art); req.add_header("X-CSRF-TOKEN", s.csrf)
+        mx = s._senden(req).json["media"]
+        self.assertEqual(True, s.post("Media", "testbaum", {"media": mx}, xref="I2").json["ok"])
+        self.assertEqual(True, s.post("Media", "testbaum", {"media": mx}, xref="I2").json["ok"])
+        ged = umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = 'I2'")[0][0]
+        self.assertEqual(1, ged.count("1 OBJE @" + mx + "@"))
+        self.assertEqual("media-not-found", s.post("Media", "testbaum", {"media": "M999"}, xref="I2").json["error"])
+        self.assertEqual(True, s.post("UnlinkMedia", "testbaum", {"media": mx}, xref="I2").json["ok"])
+        self.assertNotIn("@" + mx + "@", umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = 'I2'")[0][0])
+
     def test_name_aendern_behaelt_unterangaben(self):
         # Beim Aendern des Namens darf nichts verloren gehen: Praefix, Spitzname und Notiz bleiben,
         # GIVN/SURN/NSFX folgen dem neuen Namen.

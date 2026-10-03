@@ -1154,7 +1154,8 @@ trait WriteActions
     {
         $tree = Validator::attributes($request)->tree();
 
-        if (!Auth::canUploadMedia($tree, Auth::user())) {
+        // Hochladen braucht das Upload-Recht; ein vorhandenes Medium verknuepfen nur das Bearbeitungsrecht (wie in webtrees)
+        if (!Auth::canUploadMedia($tree, Auth::user()) && $this->str($this->body($request), 'media') === '') {
             return $this->error(403, 'upload-not-allowed');
         }
 
@@ -1166,6 +1167,22 @@ trait WriteActions
         }
 
         $body  = $this->body($request);
+
+        // Ab Stufe 23: ein vorhandenes Medienobjekt verknuepfen statt hochzuladen - Rumpf { media: "M5" }
+        $vorhanden = $this->str($body, 'media');
+        if ($vorhanden !== '') {
+            $media = Registry::mediaFactory()->make(trim($vorhanden, '@'), $tree);
+            if ($media === null || !$media->canShow()) {
+                return $this->error(404, 'media-not-found');
+            }
+            if (str_contains($record->gedcom(), "\n1 OBJE @" . $media->xref() . '@')) {
+                return $this->written($record, ['media' => $media->xref()]);
+            }
+            $record->createFact('1 OBJE @' . $media->xref() . '@', true);
+
+            return $this->written($record, ['media' => $media->xref()]);
+        }
+
         $title = Registry::elementFactory()->make('OBJE:FILE:TITL')->canonical($this->str($body, 'title'));
         $note  = Registry::elementFactory()->make('OBJE:NOTE')->canonical($this->str($body, 'note'));
 

@@ -816,6 +816,9 @@
                "type": "string"
               }
              },
+             "noteXref": {
+              "type": "null"
+             },
              "notes": {
               "type": "array",
               "items": {
@@ -944,6 +947,7 @@
              "known",
              "label",
              "noteKinds",
+             "noteXref",
              "notes",
              "place",
              "sources",
@@ -1435,6 +1439,9 @@
                   "type": "string"
                  }
                 },
+                "noteXref": {
+                 "type": "null"
+                },
                 "notes": {
                  "type": "array",
                  "items": {
@@ -1496,6 +1503,7 @@
                 "known",
                 "label",
                 "noteKinds",
+                "noteXref",
                 "notes",
                 "place",
                 "sources",
@@ -2639,6 +2647,9 @@
                   "type": "string"
                  }
                 },
+                "noteXref": {
+                 "type": "null"
+                },
                 "notes": {
                  "type": "array",
                  "items": {
@@ -2700,6 +2711,7 @@
                 "known",
                 "label",
                 "noteKinds",
+                "noteXref",
                 "notes",
                 "place",
                 "sources",
@@ -4118,6 +4130,9 @@
                "type": "string"
               }
              },
+             "noteXref": {
+              "type": "null"
+             },
              "notes": {
               "type": "array",
               "items": {
@@ -4179,6 +4194,7 @@
              "known",
              "label",
              "noteKinds",
+             "noteXref",
              "notes",
              "place",
              "sources",
@@ -6771,6 +6787,9 @@
                   "type": "string"
                  }
                 },
+                "noteXref": {
+                 "type": "null"
+                },
                 "notes": {
                  "type": "array",
                  "items": {
@@ -6832,6 +6851,7 @@
                 "known",
                 "label",
                 "noteKinds",
+                "noteXref",
                 "notes",
                 "place",
                 "sources",
@@ -7285,6 +7305,9 @@
                   "type": "string"
                  }
                 },
+                "noteXref": {
+                 "type": "null"
+                },
                 "notes": {
                  "type": "array",
                  "items": {
@@ -7413,6 +7436,7 @@
                 "known",
                 "label",
                 "noteKinds",
+                "noteXref",
                 "notes",
                 "place",
                 "sources",
@@ -10770,6 +10794,7 @@
        "link-exists",
        "link-not-found",
        "link-tag-not-allowed",
+       "media-not-found",
        "name-missing",
        "name-required",
        "not-a-baptism",

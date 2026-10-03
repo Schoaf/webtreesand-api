@@ -485,6 +485,7 @@ Answer fields: `ok`, `tree`, `user` – full schema in openapi.json.
 | 404 | `file-not-found` |
 | 404 | `individual-not-found` |
 | 404 | `link-not-found` |
+| 404 | `media-not-found` |
 | 404 | `not-found` |
 | 404 | `repository-not-found` |
 | 404 | `source-not-found` |

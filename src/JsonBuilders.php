@@ -291,6 +291,9 @@ trait JsonBuilders
                 'sources'        => $this->factSources($fact, $tree),
                 'associates'     => $this->factAssociates($fact, $tree),
                 'freeAssociates' => $free,
+                // Ab Stufe 23: eine Notiz, die auf einen Notiz-Datensatz zeigt (1 NOTE @N1@) - Clients aendern sie dann
+                // nicht als Text, sonst ginge die Verknuepfung verloren.
+                'noteXref'       => $tag === 'NOTE' && preg_match('/^@([^@]+)@$/', $fact->value(), $nx) === 1 ? $nx[1] : null,
             ];
         }
 
