@@ -101,6 +101,11 @@ ROUTEN = [
      "Change title and type of a media object (first file: `2 TITL`, `2 FORM` / `3 TYPE`); everything else stays.",
      [XREF], "`{title?, type?}` – type one of photo, document, certificate, book, newspaper, card, map, tombstone, audio, video, "
      "electronic, film, fiche, magazine, manuscript, painting, other; empty removes it."),
+    ("post", "StartPerson", True, 24, "member",
+     "Set the start person. Without `forTree` the signed-in user's own default individual (as under “My account”; an empty "
+     "`xref` removes it), with `forTree: true` the family tree's default individual (managers only). Route Info names per "
+     "tree `startXref` – the individual webtrees starts with for this user, if visible – and `treeDefaultXref`.",
+     [], "`{xref, forTree?}`. Answer: `{ok, startXref, defaultXref, treeDefaultXref}`."),
     ("post", "PlaceRename", True, 23, "editor",
      "Rename a place or merge it into another. Every event at `from` gets `to`; places below move along "
      "(`Kortau, Allenstein` → `Kortau, Olsztyn`). If `to` already exists it is a merge: the two `_LOC` records become one "
@@ -277,6 +282,7 @@ def sammeln(u):
     merken("post", "MediaFromFile", admin.post("MediaFromFile", "testbaum", {"file": "archiv/manifest.png", "title": "Manifestscan"}, xref="I1"))
     merken("post", "MediaFromFile", admin.post("MediaFromFile", "testbaum", {"file": "archiv/manifest.png"}, xref="I1"))
     merken("post", "Bookmarks", admin.post("Bookmarks", "testbaum", {"xref": "I1", "add": True}))
+    merken("post", "StartPerson", admin.post("StartPerson", "testbaum", {"xref": "I1"}))
     archiv = admin.post("Repository", "testbaum", {"name": "Manifestarchiv"})
     merken("post", "Repository", archiv)
     quelle = admin.post("Source", "testbaum", {"title": "Manifestquelle", "author": "Manifest", "repository": archiv.json["xref"], "callNumber": "M 1"})

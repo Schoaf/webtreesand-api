@@ -97,7 +97,9 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     //     mehrdeutigem Blattnamen; mapData: auch in die Geografischen Daten, nur Administratoren)
     // 23: Orte umbenennen und zusammenfuehren - POST PlaceRename (mit Vorschau; Orte darunter wandern mit, _LOC werden
     //     zusammengelegt); MediaObject (Titel und Art eines Medienobjekts); Medien mit type/format
-    public const int    API_VERSION = 23;
+    // 24: Startperson - Info je Baum mit startXref (wie webtrees sie bestimmt) und treeDefaultXref; POST StartPerson
+    //     (eigene Standardperson, fuer Verwalter auch die des Stammbaums)
+    public const int    API_VERSION = 24;
 
     /** Benutzereinstellung je Baum: die Merkliste als Liste von Personenkennungen. */
     private const string BOOKMARKS_PREF = 'api4webtrees_bookmarks';

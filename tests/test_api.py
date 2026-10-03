@@ -700,6 +700,25 @@ class Schreiben(unittest.TestCase):
         self.assertEqual(True, s.post("UnlinkMedia", "testbaum", {"media": mx}, xref="I2").json["ok"])
         self.assertNotIn("@" + mx + "@", umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = 'I2'")[0][0])
 
+    def test_startperson(self):
+        """Stufe 24: Info nennt die Startperson wie webtrees; StartPerson setzt die eigene Standardperson, die des
+        Stammbaums nur fuer Verwalter."""
+        def baum(sitzung):
+            return next(b for b in sitzung.info()["trees"] if b["name"] == "testbaum")
+        m = U.sitzung("mitglied")
+        self.assertTrue(baum(m)["startXref"])
+        r = m.post("StartPerson", "testbaum", {"xref": "I2"})
+        self.assertEqual((True, "I2", "I2"), (r.json["ok"], r.json["startXref"], r.json["defaultXref"]), r)
+        self.assertEqual("I2", baum(m)["startXref"])
+        self.assertEqual("not-manager", m.post("StartPerson", "testbaum", {"xref": "I2", "forTree": True}).json["error"])
+        self.assertEqual("not-found", m.post("StartPerson", "testbaum", {"xref": "I999"}).json["error"])
+        # Eigene Standardperson wieder entfernen: dann gilt die des Stammbaums
+        v = U.sitzung("verwalter")
+        self.assertEqual(True, v.post("StartPerson", "testbaum", {"xref": "I1", "forTree": True}).json["ok"])
+        r = m.post("StartPerson", "testbaum", {"xref": ""})
+        self.assertEqual(("", "I1"), (r.json["defaultXref"], r.json["treeDefaultXref"]))
+        self.assertEqual("not-logged-in", U.sitzung().post("StartPerson", "testbaum", {"xref": "I1"}).json["error"])
+
     def test_name_aendern_behaelt_unterangaben(self):
         # Beim Aendern des Namens darf nichts verloren gehen: Praefix, Spitzname und Notiz bleiben,
         # GIVN/SURN/NSFX folgen dem neuen Namen.

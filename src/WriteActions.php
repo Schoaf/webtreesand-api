@@ -12,6 +12,7 @@ use Fisharebest\Webtrees\Fact;
 use Fisharebest\Webtrees\Family;
 use Fisharebest\Webtrees\FlashMessages;
 use Fisharebest\Webtrees\GedcomRecord;
+use Fisharebest\Webtrees\Contracts\UserInterface;
 use Fisharebest\Webtrees\Individual;
 use Fisharebest\Webtrees\Registry;
 use Fisharebest\Webtrees\Services\MediaFileService;
@@ -1595,6 +1596,51 @@ trait WriteActions
         $tree->setUserPreference(Auth::user(), self::BOOKMARKS_PREF, implode(',', array_slice($xrefs, -500)));
 
         return $this->getBookmarksAction($request);
+    }
+
+    /**
+     * Startperson festlegen (ab Stufe 24): Rumpf { xref, forTree? }. Ohne forTree die eigene Standardperson des
+     * Benutzers (wie unter "Mein Konto"; leere xref entfernt sie), mit forTree die des Stammbaums - nur Verwalter.
+     */
+    public function postStartPersonAction(ServerRequestInterface $request): ResponseInterface
+    {
+        if (!Auth::check()) {
+            return $this->error(403, 'not-logged-in');
+        }
+
+        $tree    = Validator::attributes($request)->tree();
+        $body    = $this->body($request);
+        $xref    = $this->str($body, 'xref');
+        $forTree = (bool) ($body['forTree'] ?? false);
+
+        if ($forTree && !Auth::isManager($tree)) {
+            return $this->error(403, 'not-manager');
+        }
+
+        if ($xref !== '') {
+            $individual = Registry::individualFactory()->make($xref, $tree);
+
+            if (!$individual instanceof Individual || !$individual->canShow()) {
+                return $this->error(404, 'not-found');
+            }
+        } elseif ($forTree) {
+            return $this->error(400, 'missing-xref');
+        }
+
+        if ($forTree) {
+            $tree->setPreference('PEDIGREE_ROOT_ID', $xref);
+        } else {
+            $tree->setUserPreference(Auth::user(), UserInterface::PREF_TREE_DEFAULT_XREF, $xref);
+        }
+
+        $person = $tree->significantIndividual(Auth::user());
+
+        return response([
+            'ok'              => true,
+            'startXref'       => $person->canShow() && Registry::individualFactory()->make($person->xref(), $tree) !== null ? $person->xref() : '',
+            'defaultXref'     => $tree->getUserPreference(Auth::user(), UserInterface::PREF_TREE_DEFAULT_XREF),
+            'treeDefaultXref' => $tree->getPreference('PEDIGREE_ROOT_ID'),
+        ]);
     }
 
     private function written(GedcomRecord $record, array $extra = [], int $status = 200): ResponseInterface
