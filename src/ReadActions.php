@@ -102,6 +102,8 @@ trait ReadActions
                 'autoAccept'  => $user->getPreference(UserInterface::PREF_AUTO_ACCEPT_EDITS) === '1',
                 'userXref'    => $tree->getUserPreference($user, UserInterface::PREF_TREE_ACCOUNT_XREF),
                 'defaultXref' => $tree->getUserPreference($user, UserInterface::PREF_TREE_DEFAULT_XREF),
+                // Allgemeine Startperson des Baums (Verwaltung > Baum > "Standardperson") - fuer Benutzer ohne eigene.
+                'rootXref'    => $tree->getPreference('PEDIGREE_ROOT_ID'),
                 // Nummer der letzten Aenderung im Baum (auch ausstehende, angenommene, verworfene). Ein anderer Wert
                 // als beim letzten Mal heisst: neu laden. Nur auf Gleichheit vergleichen - ein neuer GEDCOM-Import
                 // loescht die Aenderungsliste, dann wird die Zahl kleiner.
