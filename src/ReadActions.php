@@ -102,6 +102,8 @@ trait ReadActions
                 'autoAccept'  => $user->getPreference(UserInterface::PREF_AUTO_ACCEPT_EDITS) === '1',
                 'userXref'    => $tree->getUserPreference($user, UserInterface::PREF_TREE_ACCOUNT_XREF),
                 'defaultXref' => $tree->getUserPreference($user, UserInterface::PREF_TREE_DEFAULT_XREF),
+                // Allgemeine Startperson des Baums (Verwaltung > Baum > "Standardperson") - fuer Benutzer ohne eigene.
+                'rootXref'    => $tree->getPreference('PEDIGREE_ROOT_ID'),
                 // Mit wem webtrees fuer diesen Benutzer startet: eigene Standardperson, "Das bin ich", Standardperson
                 // des Stammbaums, sonst die erste Person - nur wenn der Benutzer sie sehen darf (ab Stufe 24)
                 'startXref'   => $this->startXref($tree, $user),
