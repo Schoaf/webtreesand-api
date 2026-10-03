@@ -1209,6 +1209,54 @@ trait WriteActions
     }
 
     /**
+     * Titel und Art eines Medienobjekts aendern (ab Stufe 23): ?xref=M1, Rumpf { title?, type? }. Betrifft die erste
+     * Datei (1 FILE / 2 TITL, 2 FORM / 3 TYPE); alles andere am Medienobjekt bleibt.
+     */
+    public function postMediaObjectAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree   = Validator::attributes($request)->tree();
+        $media  = Registry::mediaFactory()->make($this->xref($request), $tree);
+        $denied = $this->denyEdit($media);
+
+        if ($denied !== null) {
+            return $denied;
+        }
+
+        $body = $this->body($request);
+        if (GedcomText::looksLikePointer($this->str($body, 'title'))) {
+            return $this->error(400, 'invalid-value');
+        }
+        $arten = ['photo', 'document', 'certificate', 'book', 'newspaper', 'card', 'map', 'tombstone', 'audio', 'video', 'electronic', 'film', 'fiche', 'magazine', 'manuscript', 'painting', 'other'];
+        if (array_key_exists('type', $body) && $this->str($body, 'type') !== '' && !in_array($this->str($body, 'type'), $arten, true)) {
+            return $this->error(400, 'invalid-type');
+        }
+
+        $gedcom = (string) preg_replace_callback('/(\n1 FILE[^\n]*)((?:\n[2-9] [^\n]*)*)/', function (array $m) use ($body): string {
+            $unter = $m[2];
+            if (array_key_exists('title', $body)) {
+                $titel = GedcomText::line($this->str($body, 'title'));
+                $unter = (string) preg_replace('/\n2 TITL(?: [^\n]*)?(?:\n[3-9] [^\n]*)*/', '', $unter);
+                $unter = ($titel === '' ? '' : "\n2 TITL " . $titel) . $unter;
+            }
+            if (array_key_exists('type', $body)) {
+                $art   = $this->str($body, 'type');
+                $unter = (string) preg_replace('/\n3 TYPE[^\n]*/', '', $unter);
+                if ($art !== '') {
+                    $unter = preg_match('/\n2 FORM[^\n]*/', $unter) === 1
+                        ? (string) preg_replace('/(\n2 FORM[^\n]*)/', '$1' . "\n3 TYPE " . $art, $unter, 1)
+                        : $unter . "\n2 FORM\n3 TYPE " . $art;
+                }
+            }
+
+            return $m[1] . $unter;
+        }, $media->gedcom(), 1);
+
+        $media->updateRecord($gedcom, true);
+
+        return $this->written($media);
+    }
+
+    /**
      * Medienobjekt aus einer Datei, die schon im Medienordner liegt (ab Stufe 18) - etwa ein Kirchenbuchscan aus dem
      * Archiv (Modul Sammlungen): ?xref=<Datensatz, nur fuer die Rechtepruefung>  Rumpf: { file, title?, type? }
      * Gibt es zu der Datei schon ein Medienobjekt, kommt dessen Kennung zurueck; sonst entsteht eines - ohne

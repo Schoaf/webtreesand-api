@@ -966,6 +966,9 @@
              "file": {
               "type": "string"
              },
+             "format": {
+              "type": "string"
+             },
              "isImage": {
               "type": "boolean"
              },
@@ -984,6 +987,9 @@
              "title": {
               "type": "string"
              },
+             "type": {
+              "type": "string"
+             },
              "url": {
               "type": "string"
              },
@@ -994,12 +1000,14 @@
             "required": [
              "factId",
              "file",
+             "format",
              "isImage",
              "mime",
              "path",
              "primary",
              "thumb",
              "title",
+             "type",
              "url",
              "xref"
             ],
@@ -7448,6 +7456,9 @@
                 "file": {
                  "type": "string"
                 },
+                "format": {
+                 "type": "string"
+                },
                 "isImage": {
                  "type": "boolean"
                 },
@@ -7466,6 +7477,9 @@
                 "title": {
                  "type": "string"
                 },
+                "type": {
+                 "type": "string"
+                },
                 "url": {
                  "type": "string"
                 },
@@ -7476,12 +7490,14 @@
                "required": [
                 "factId",
                 "file",
+                "format",
                 "isImage",
                 "mime",
                 "path",
                 "primary",
                 "thumb",
                 "title",
+                "type",
                 "url",
                 "xref"
                ],
@@ -8054,6 +8070,9 @@
              "file": {
               "type": "string"
              },
+             "format": {
+              "type": "string"
+             },
              "isImage": {
               "type": "boolean"
              },
@@ -8088,6 +8107,9 @@
              "title": {
               "type": "string"
              },
+             "type": {
+              "type": "string"
+             },
              "url": {
               "type": "string"
              },
@@ -8097,12 +8119,14 @@
             },
             "required": [
              "file",
+             "format",
              "isImage",
              "mime",
              "path",
              "people",
              "thumb",
              "title",
+             "type",
              "url",
              "xref"
             ],
@@ -9477,6 +9501,74 @@
     "x-body": "`{name, gov?, lat?, lng?, note?, media?, mapData?, postalCode?, region?, country?, shortName?}` – `lat`/`lng` together, `null` removes the coordinates; `media` replaces the linked media objects (upload new ones with route Media and the `_LOC` identifier). Answer: `{ok, xref, pending, linked, mapData}`, status 201 when the `_LOC` was created."
    }
   },
+  "/module/_api4webtrees_/MediaObject/{tree}": {
+   "post": {
+    "operationId": "postMediaObject",
+    "summary": "Change title and type of a media object (first file: `2 TITL`, `2 FORM` / `3 TYPE`); everything else stays.",
+    "description": "Change title and type of a media object (first file: `2 TITL`, `2 FORM` / `3 TYPE`); everything else stays.",
+    "x-api-level": 23,
+    "x-minimum-role": "editor",
+    "parameters": [
+     {
+      "name": "tree",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "Tree name (`Info.trees[].name`)"
+     },
+     {
+      "name": "xref",
+      "in": "query",
+      "required": true,
+      "description": "Record identifier, e.g. `I123`",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "X-CSRF-TOKEN",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "`Info.csrf`"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Result – or an error object (`ok: false`, see `Error`)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "pending": {
+           "type": "boolean"
+          },
+          "xref": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "ok",
+          "pending",
+          "xref"
+         ],
+         "additionalProperties": false
+        }
+       }
+      }
+     }
+    },
+    "x-body": "`{title?, type?}` – type one of photo, document, certificate, book, newspaper, card, map, tombstone, audio, video, electronic, film, fiche, magazine, manuscript, painting, other; empty removes it."
+   }
+  },
   "/module/_api4webtrees_/PlaceRename/{tree}": {
    "post": {
     "operationId": "postPlaceRename",
@@ -10673,6 +10765,7 @@
        "invalid-quality",
        "invalid-relation",
        "invalid-role",
+       "invalid-type",
        "invalid-value",
        "link-exists",
        "link-not-found",

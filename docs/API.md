@@ -38,6 +38,7 @@ JSON API for webtrees 2.2, used by wtAnd, wtWin/wtTux and nas4webtrees. Machine-
 | `GET Places/{tree}` | 8 | editor | Place suggestions while typing, like webtrees' own autocomplete. |
 | `GET Place/{tree}` | 21 | visitor | One place: levels, sub-places one level down, coordinates with origin, the `_LOC` record (GOV identifier, coordinates, notes, sources, media) and the individuals and families with their events at this place (at most 1000 each). |
 | `POST Place/{tree}` | 22 | editor | Save a place's data in its GEDCOM-L `_LOC` record – created if there is none. |
+| `POST MediaObject/{tree}` | 23 | editor | Change title and type of a media object (first file: `2 TITL`, `2 FORM` / `3 TYPE`); everything else stays. |
 | `POST PlaceRename/{tree}` | 23 | editor | Rename a place or merge it into another. |
 | `POST Fact/{tree}` | 1 | editor | Add or change a fact or event. |
 | `POST Association/{tree}` | 20 | editor | Write godparents, witnesses and other associates of a fact. |
@@ -255,6 +256,18 @@ Body: `{name, gov?, lat?, lng?, note?, media?, mapData?, postalCode?, region?, c
 
 Answer fields: `linked`, `mapData`, `ok`, `pending`, `xref` – full schema in openapi.json.
 
+### `POST MediaObject/{tree}`
+
+Change title and type of a media object (first file: `2 TITL`, `2 FORM` / `3 TYPE`); everything else stays.
+
+| parameter | | |
+|---|---|---|
+| `xref` | required | Record identifier, e.g. `I123` |
+
+Body: `{title?, type?}` – type one of photo, document, certificate, book, newspaper, card, map, tombstone, audio, video, electronic, film, fiche, magazine, manuscript, painting, other; empty removes it.
+
+Answer fields: `ok`, `pending`, `xref` – full schema in openapi.json.
+
 ### `POST PlaceRename/{tree}`
 
 Rename a place or merge it into another. Every event at `from` gets `to`; places below move along (`Kortau, Allenstein` → `Kortau, Olsztyn`). If `to` already exists it is a merge: the two `_LOC` records become one (gaps filled, notes, sources and media appended, differing GOV identifier or coordinates reported in `conflicts`) and the `3 _LOC` pointers point to it. Events the user may not edit (locked, confidential) stay and are counted in `skipped`. With `preview: true` nothing changes. Without automatic acceptance the changes are pending as usual.
@@ -443,6 +456,7 @@ Answer fields: `ok`, `tree`, `user` – full schema in openapi.json.
 | 400 | `invalid-quality` |
 | 400 | `invalid-relation` |
 | 400 | `invalid-role` |
+| 400 | `invalid-type` |
 | 400 | `invalid-value` |
 | 400 | `link-tag-not-allowed` |
 | 400 | `name-missing` |

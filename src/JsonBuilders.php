@@ -564,6 +564,9 @@ trait JsonBuilders
                 // Pfad der Datei im Medienordner des Baums (ab Stufe 9) - damit eine App die Datei bei anderen Modulen
                 // benennen kann, etwa um ueber Sammlungen EXIF zu schreiben. null bei Internetadressen.
                 'path'    => $media_file->isExternal() ? null : $media_file->filename(),
+                // Art (FORM:TYPE, z. B. photo, document) und Format (jpg, pdf) - ab Stufe 23
+                'type'    => $media_file->type() === '' ? null : $media_file->type(),
+                'format'  => $media_file->format() === '' ? null : $media_file->format(),
             ];
         }
 

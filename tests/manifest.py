@@ -97,6 +97,10 @@ ROUTEN = [
      [], "`{name, gov?, lat?, lng?, note?, media?, mapData?, postalCode?, region?, country?, shortName?}` – `lat`/`lng` together, `null` removes the coordinates; "
      "`media` replaces the linked media objects (upload new ones with route Media and the `_LOC` identifier). "
      "Answer: `{ok, xref, pending, linked, mapData}`, status 201 when the `_LOC` was created."),
+    ("post", "MediaObject", True, 23, "editor",
+     "Change title and type of a media object (first file: `2 TITL`, `2 FORM` / `3 TYPE`); everything else stays.",
+     [XREF], "`{title?, type?}` – type one of photo, document, certificate, book, newspaper, card, map, tombstone, audio, video, "
+     "electronic, film, fiche, magazine, manuscript, painting, other; empty removes it."),
     ("post", "PlaceRename", True, 23, "editor",
      "Rename a place or merge it into another. Every event at `from` gets `to`; places below move along "
      "(`Kortau, Allenstein` → `Kortau, Olsztyn`). If `to` already exists it is a merge: the two `_LOC` records become one "
@@ -265,6 +269,7 @@ def sammeln(u):
     req.add_header("X-CSRF-TOKEN", admin.csrf)
     medien = admin._senden(req)
     merken("post", "Media", medien)
+    merken("post", "MediaObject", admin.post("MediaObject", "testbaum", {"title": "Manifestbild"}, xref=medien.json["media"]))
     m = medien.json.get("media")
     merken("post", "PrimaryMedia", admin.post("PrimaryMedia", "testbaum", {"media": m}, xref="I1"))
     os.makedirs(os.path.join(umgebung.WT, "data", "media", "archiv"), exist_ok=True)

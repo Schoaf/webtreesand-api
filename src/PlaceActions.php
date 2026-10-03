@@ -1048,7 +1048,7 @@ trait PlaceActions
                 ->map(fn (Fact $f): string => $f->target() instanceof Note ? $f->target()->getNote() : $this->plainLines($f->value()))
                 ->filter(static fn (string $t): bool => trim($t) !== '')->values()->all(),
             'sources' => $sources,
-            'media'   => $this->mediaJson($location),
+            'media'   => $this->mediaMitInfo($location),
             'canEdit' => $location->canEdit(),
             'url'     => $location->url(),
         ];
@@ -1069,6 +1069,28 @@ trait PlaceActions
         }
 
         return null;
+    }
+
+    /**
+     * Die Medien des _LOC wie mediaJson, dazu je Datei die Angaben, die webtrees auf der Medienseite zeigt (Dateigroesse,
+     * Bildmasse) - liest dafuer die Datei, darum nur hier und nicht in Listen.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function mediaMitInfo(Location $location): array
+    {
+        return array_map(static function (array $m) use ($location): array {
+            $media = Registry::mediaFactory()->make((string) $m['xref'], $location->tree());
+            $datei = $media?->mediaFiles()->first();
+            $info  = [];
+            if ($datei !== null) {
+                foreach ($datei->attributes() as $label => $wert) {
+                    $info[] = $label . ': ' . $wert;
+                }
+            }
+
+            return $m + ['info' => $info];
+        }, $this->mediaJson($location));
     }
 
     /** Kurzname des Orts (GEDCOM-L: "2 ABBR" unter dem ersten "1 NAME" des _LOC), fuer gekuerzte Ortsangaben in Buechern. */

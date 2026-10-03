@@ -297,6 +297,15 @@ class Orte(unittest.TestCase):
         m = s._senden(req).json
         self.assertEqual(True, m["ok"], m)
         self.assertEqual(["Ortsansicht"], [x["title"] for x in s.get("Place", "testbaum", name="Offenbach").json["location"]["media"]])
+        orts_medium = s.get("Place", "testbaum", name="Offenbach").json["location"]["media"][0]
+        self.assertEqual(("photo", "png"), (orts_medium["type"], orts_medium["format"].lower()))
+        self.assertTrue(any("1" in i for i in orts_medium["info"]), orts_medium["info"])
+        # Titel und Art aendern (Route MediaObject)
+        self.assertEqual(True, s.post("MediaObject", "testbaum", {"title": "Ortsansicht 1926", "type": "card"}, xref=m["media"]).json["ok"])
+        orts_medium = s.get("Place", "testbaum", name="Offenbach").json["location"]["media"][0]
+        self.assertEqual(("Ortsansicht 1926", "card"), (orts_medium["title"], orts_medium["type"]))
+        self.assertEqual("invalid-type", s.post("MediaObject", "testbaum", {"type": "foto"}, xref=m["media"]).json["error"])
+        self.assertEqual("not-editable", U.sitzung("mitglied").post("MediaObject", "testbaum", {"title": "x"}, xref=m["media"]).json["error"])
         self.assertEqual(True, s.post("Place", "testbaum", {"name": "Offenbach", "media": []}).json["ok"])
         self.assertEqual([], s.get("Place", "testbaum", name="Offenbach").json["location"]["media"])
         self.assertEqual(True, s.post("Place", "testbaum", {"name": "Offenbach", "media": [m["media"]]}).json["ok"])
