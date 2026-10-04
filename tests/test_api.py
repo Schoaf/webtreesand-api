@@ -776,7 +776,7 @@ class Schreiben(unittest.TestCase):
         self.assertEqual(["wtand", "wtwin", "wttux", "wtmac"], kennungen[:4])
 
     def test_seite_app_je_geraet(self):
-        """Die Seite App zeigt die Apps fuer das Geraet des Besuchers zuerst; Apple ohne passende App bekommt den Browser-Hinweis."""
+        """Die Seite App zeigt die Apps fuer das Geraet des Besuchers zuerst; ein Geraet ohne passende App bekommt den Browser-Hinweis."""
         s = U.sitzung("admin")
 
         def seite(user_agent):
@@ -794,8 +794,12 @@ class Schreiben(unittest.TestCase):
         self.assertLess(windows.index("wtWin"), windows.index("wtAnd"))
         self.assertIn("wtwin://connect?", windows)
 
+        # iPhone: die App aus der Liste fuer iOS steht oben, mit Store-Badge und Koppel-Link, kein Browser-Hinweis
         iphone = seite("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)")
-        self.assertIn("noch kein eigenes Programm", iphone)
+        self.assertNotIn("noch kein eigenes Programm", iphone)
+        self.assertIn("webtreesmobile://connect?", iphone)
+        self.assertIn("app-store.svg", iphone)
+        self.assertLess(iphone.index("webtrees mobile"), iphone.index("wtAnd"))
 
         mac = seite("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)")
         self.assertNotIn("noch kein eigenes Programm", mac)

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.13.1 – 2026-10-04
+API level 24, unchanged. **iPhone and iPad get an app: webtrees mobile by Andreas Scharf** (App Store, connect scheme
+`webtreesmobile://`), the first app from another author in `src/Apps.php`. On iPhone and iPad the “App” page now
+shows it with the App Store badge and one-tap connecting instead of the browser note; managers can untick it in the
+settings like any other app.
+
 ## 1.13.0 – 2026-10-03
 **API levels 21–24: places, media objects, start person.** Everything is additive; older clients keep working.
 - **Level 21 – reading places.** `GET Places?list=1`: every place at visible events with counts (events, individuals,

@@ -70,7 +70,7 @@ eintippen). Die Seite bietet den App-Download, den Status (https, Upload-Limit) 
 **welche Stammbäume die App erreichen darf.** Nicht angekreuzte Bäume sind über dieses Modul gar nicht erreichbar,
 für keinen Benutzer und unabhängig von seinen Rechten in webtrees. Standard: alle Bäume.
 
-**Apps:** die Apps, die das Modul kennt (wtAnd, wtWin, wtTux, wtMac und per Pull Request hinzugekommene), je mit Häkchen.
+**Apps:** die Apps, die das Modul kennt (wtAnd, wtWin, wtTux, wtMac, webtrees mobile für iPhone und iPad und per Pull Request hinzugekommene), je mit Häkchen.
 Abgehakte verschwinden von der Seite „App“, aus dem Hinweis und der Fußzeile. Standard: alle an. Siehe
 [Apps auf der Seite „App“](#apps-auf-der-seite-app).
 
@@ -83,7 +83,8 @@ Angemeldete Benutzer sehen oben auf der Seite einen Hinweis mit einem Knopf zur 
 werden getrennt gemerkt: Der Hinweis verschwindet für diese Geräteart, sobald ihre App verbunden ist (oder nach *Nicht
 mehr anzeigen*); danach führen die Links in der Fußzeile dorthin. Die Seite zeigt die Apps für das Gerät des Besuchers
 zuerst (eigene vor fremden), wtWin und wtAnd immer aufgeklappt, die übrigen eingeklappt darunter. Auf iPhone und iPad
-sagt sie, dass es noch keine App gibt, und empfiehlt den Browser. Je App zwei Schritte:
+zeigt sie webtrees mobile von Andreas Scharf (App Store); ein Gerät ohne passende App bekommt einen Hinweis auf den
+Browser. Je App zwei Schritte:
 
 1. **Installieren:** ein Knopf zur neuesten Datei (`.exe`, `.deb` oder APK), fürs Handy auch als QR-Code.
 2. **Mit dem eigenen Konto verbinden – nichts eintippen, das Passwort erreicht das Gerät nie:**
