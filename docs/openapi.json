@@ -42,23 +42,23 @@
           "csrf": {
            "type": "string"
           },
-          "login": {
+          "loginForm": {
            "type": "object",
            "properties": {
-            "registration": {
+            "isSelfRegistrationAllowed": {
              "type": "boolean"
             },
-            "terms": {
+            "registrationTerms": {
              "type": "null"
             },
-            "welcome": {
+            "welcomeMessage": {
              "type": "string"
             }
            },
            "required": [
-            "registration",
-            "terms",
-            "welcome"
+            "isSelfRegistrationAllowed",
+            "registrationTerms",
+            "welcomeMessage"
            ],
            "additionalProperties": false
           },
@@ -170,7 +170,7 @@
           "api",
           "baseUrl",
           "csrf",
-          "login",
+          "loginForm",
           "maxUpload",
           "module",
           "rewriteUrls",
