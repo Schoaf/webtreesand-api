@@ -42,6 +42,26 @@
           "csrf": {
            "type": "string"
           },
+          "login": {
+           "type": "object",
+           "properties": {
+            "registration": {
+             "type": "boolean"
+            },
+            "terms": {
+             "type": "null"
+            },
+            "welcome": {
+             "type": "string"
+            }
+           },
+           "required": [
+            "registration",
+            "terms",
+            "welcome"
+           ],
+           "additionalProperties": false
+          },
           "maxUpload": {
            "type": "integer"
           },
@@ -150,6 +170,7 @@
           "api",
           "baseUrl",
           "csrf",
+          "login",
           "maxUpload",
           "module",
           "rewriteUrls",
