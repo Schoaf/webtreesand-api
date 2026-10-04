@@ -642,6 +642,22 @@
           "canEdit": {
            "type": "boolean"
           },
+          "extraChildrenByParent": {
+           "type": "object",
+           "properties": {
+            "father": {
+             "type": "integer"
+            },
+            "mother": {
+             "type": "integer"
+            }
+           },
+           "required": [
+            "father",
+            "mother"
+           ],
+           "additionalProperties": false
+          },
           "facts": {
            "type": "array",
            "items": {
@@ -1752,6 +1768,9 @@
               ],
               "additionalProperties": false
              },
+             "maritalStatus": {
+              "type": "string"
+             },
              "marriage": {
               "type": [
                "null",
@@ -1983,6 +2002,7 @@
              "children",
              "facts",
              "husband",
+             "maritalStatus",
              "marriage",
              "name",
              "spouse",
@@ -2233,6 +2253,220 @@
           },
           "relationship": {
            "type": "string"
+          },
+          "siblings": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "birth": {
+              "type": [
+               "null",
+               "object"
+              ],
+              "properties": {
+               "date": {
+                "type": "object",
+                "properties": {
+                 "jd": {
+                  "type": "integer"
+                 },
+                 "text": {
+                  "type": "string"
+                 },
+                 "year": {
+                  "type": "integer"
+                 }
+                },
+                "required": [
+                 "jd",
+                 "text",
+                 "year"
+                ],
+                "additionalProperties": false
+               },
+               "place": {
+                "type": [
+                 "null",
+                 "object"
+                ],
+                "properties": {
+                 "lat": {
+                  "type": "null"
+                 },
+                 "lng": {
+                  "type": "null"
+                 },
+                 "name": {
+                  "type": "string"
+                 },
+                 "short": {
+                  "type": "string"
+                 }
+                },
+                "required": [
+                 "lat",
+                 "lng",
+                 "name",
+                 "short"
+                ],
+                "additionalProperties": false
+               }
+              },
+              "required": [
+               "date",
+               "place"
+              ],
+              "additionalProperties": false
+             },
+             "buri": {
+              "type": "null"
+             },
+             "call": {
+              "type": "string"
+             },
+             "childrenCount": {
+              "type": "integer"
+             },
+             "chr": {
+              "type": [
+               "null",
+               "object"
+              ],
+              "properties": {
+               "date": {
+                "type": "object",
+                "properties": {
+                 "jd": {
+                  "type": "integer"
+                 },
+                 "text": {
+                  "type": "string"
+                 },
+                 "year": {
+                  "type": "integer"
+                 }
+                },
+                "required": [
+                 "jd",
+                 "text",
+                 "year"
+                ],
+                "additionalProperties": false
+               },
+               "place": {
+                "type": "null"
+               }
+              },
+              "required": [
+               "date",
+               "place"
+              ],
+              "additionalProperties": false
+             },
+             "death": {
+              "type": [
+               "null",
+               "object"
+              ],
+              "properties": {
+               "date": {
+                "type": "object",
+                "properties": {
+                 "jd": {
+                  "type": "integer"
+                 },
+                 "text": {
+                  "type": "string"
+                 },
+                 "year": {
+                  "type": "integer"
+                 }
+                },
+                "required": [
+                 "jd",
+                 "text",
+                 "year"
+                ],
+                "additionalProperties": false
+               },
+               "place": {
+                "type": "null"
+               }
+              },
+              "required": [
+               "date",
+               "place"
+              ],
+              "additionalProperties": false
+             },
+             "given": {
+              "type": "string"
+             },
+             "hasParents": {
+              "type": "boolean"
+             },
+             "isDead": {
+              "type": "boolean"
+             },
+             "lifespan": {
+              "type": "string"
+             },
+             "name": {
+              "type": "string"
+             },
+             "occupation": {
+              "type": "null"
+             },
+             "partnersCount": {
+              "type": "integer"
+             },
+             "private": {
+              "type": "boolean"
+             },
+             "sex": {
+              "type": "string"
+             },
+             "sortName": {
+              "type": "string"
+             },
+             "surname": {
+              "type": "string"
+             },
+             "thumb": {
+              "type": "null"
+             },
+             "url": {
+              "type": "string"
+             },
+             "xref": {
+              "type": "string"
+             }
+            },
+            "required": [
+             "birth",
+             "buri",
+             "call",
+             "childrenCount",
+             "chr",
+             "death",
+             "given",
+             "hasParents",
+             "isDead",
+             "lifespan",
+             "name",
+             "occupation",
+             "partnersCount",
+             "private",
+             "sex",
+             "sortName",
+             "surname",
+             "thumb",
+             "url",
+             "xref"
+            ],
+            "additionalProperties": false
+           }
           },
           "spouseFamilies": {
            "type": "array",
@@ -2960,6 +3194,9 @@
               ],
               "additionalProperties": false
              },
+             "maritalStatus": {
+              "type": "string"
+             },
              "marriage": {
               "type": [
                "null",
@@ -3423,6 +3660,7 @@
              "children",
              "facts",
              "husband",
+             "maritalStatus",
              "marriage",
              "name",
              "spouse",
@@ -3645,6 +3883,9 @@
               ],
               "additionalProperties": false
              },
+             "maritalStatus": {
+              "type": "string"
+             },
              "marriage": {
               "type": "null"
              },
@@ -3671,6 +3912,7 @@
              "children",
              "facts",
              "husband",
+             "maritalStatus",
              "marriage",
              "name",
              "parent",
@@ -3686,11 +3928,13 @@
          "required": [
           "associatedIn",
           "canEdit",
+          "extraChildrenByParent",
           "facts",
           "media",
           "parentFamilies",
           "person",
           "relationship",
+          "siblings",
           "spouseFamilies",
           "stepFamilies"
          ],
@@ -4431,6 +4675,9 @@
            ],
            "additionalProperties": false
           },
+          "maritalStatus": {
+           "type": "string"
+          },
           "marriage": {
            "type": "object",
            "properties": {
@@ -4648,6 +4895,7 @@
           "children",
           "facts",
           "husband",
+          "maritalStatus",
           "marriage",
           "media",
           "name",
@@ -10881,6 +11129,8 @@
        "pair-invalid",
        "parent-exists",
        "private",
+       "rate-limited",
+       "registration-disabled",
        "repository-not-found",
        "source-missing",
        "source-not-found",
@@ -10888,7 +11138,8 @@
        "too-many-results",
        "tree-disabled",
        "upload-failed",
-       "upload-not-allowed"
+       "upload-not-allowed",
+       "weak-password"
       ]
      },
      "status": {

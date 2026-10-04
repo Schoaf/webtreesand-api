@@ -780,7 +780,9 @@ class Schreiben(unittest.TestCase):
         self.assertIn("wtwin://connect?", windows)
 
         iphone = seite("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)")
-        self.assertIn("noch kein eigenes Programm", iphone)
+        # webtrees mobile (iOS) ist eingetragen - iPhones bekommen eine App statt des Browser-Hinweises.
+        self.assertNotIn("noch kein eigenes Programm", iphone)
+        self.assertIn("webtrees mobile", iphone)
 
         mac = seite("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)")
         self.assertNotIn("noch kein eigenes Programm", mac)

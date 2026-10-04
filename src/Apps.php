@@ -79,17 +79,6 @@ final class Apps
             'asset'    => '_amd64\\.deb$',
             'always'   => false,
         ],
-        'webtrees-mobile' => [
-            'name'     => 'webtrees mobile',
-            'author'   => 'Schoaf',
-            'kind'     => 'phone',
-            'devices'  => ['ios'],
-            'scheme'   => 'webtreesmobile',
-            'download' => ['ios' => 'https://apps.apple.com/app/id6815108154'],
-            'badge'    => [],
-            'asset'    => '',
-            'always'   => false,
-        ],
         // Testfassung: baut wie wtWin/wtTux aus demselben Code, ist aber noch nicht auf einem echten Mac geprueft.
         'wtmac' => [
             'name'     => 'wtMac',
@@ -100,6 +89,17 @@ final class Apps
             'download' => ['mac' => 'https://github.com/thobgg/app4webtrees/releases/latest'],
             'badge'    => [],
             'asset'    => '-arm64\\.dmg$',
+            'always'   => false,
+        ],
+        'webtrees-mobile' => [
+            'name'     => 'webtrees mobile',
+            'author'   => 'Schoaf',
+            'kind'     => 'phone',
+            'devices'  => ['ios'],
+            'scheme'   => 'webtreesmobile',
+            'download' => ['ios' => 'https://apps.apple.com/app/id6815108154'],
+            'badge'    => ['ios' => 'app-store.svg'],
+            'asset'    => '',
             'always'   => false,
         ],
     ];

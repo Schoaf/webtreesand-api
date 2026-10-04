@@ -87,7 +87,7 @@ One individual with facts, parent/spouse/step families, media and – with `rela
 | `xref` | required | Record identifier, e.g. `I123` |
 | `relativeTo` | optional | Relationship relative to this individual (default: own individual) |
 
-Answer fields: `associatedIn`, `canEdit`, `facts`, `media`, `parentFamilies`, `person`, `relationship`, `spouseFamilies`, `stepFamilies` – full schema in openapi.json.
+Answer fields: `associatedIn`, `canEdit`, `extraChildrenByParent`, `facts`, `media`, `parentFamilies`, `person`, `relationship`, `siblings`, `spouseFamilies`, `stepFamilies` – full schema in openapi.json.
 
 ### `GET Family/{tree}`
 
@@ -97,7 +97,7 @@ One family with spouses, children and facts.
 |---|---|---|
 | `xref` | required | Family identifier, e.g. `F12` |
 
-Answer fields: `children`, `facts`, `husband`, `marriage`, `media`, `name`, `spouse`, `url`, `wife`, `xref` – full schema in openapi.json.
+Answer fields: `children`, `facts`, `husband`, `maritalStatus`, `marriage`, `media`, `name`, `spouse`, `url`, `wife`, `xref` – full schema in openapi.json.
 
 ### `GET Pedigree/{tree}`
 
@@ -477,6 +477,7 @@ Answer fields: `ok`, `tree`, `user` – full schema in openapi.json.
 | 400 | `title-missing` |
 | 400 | `too-many-results` |
 | 400 | `upload-failed` |
+| 400 | `weak-password` |
 | 403 | `chart-disabled` |
 | 403 | `fact-locked` |
 | 403 | `family-locked` |
@@ -488,6 +489,7 @@ Answer fields: `ok`, `tree`, `user` – full schema in openapi.json.
 | 403 | `pair-expired` |
 | 403 | `pair-invalid` |
 | 403 | `private` |
+| 403 | `registration-disabled` |
 | 403 | `tree-disabled` |
 | 403 | `upload-not-allowed` |
 | 404 | `citation-not-found` |
@@ -502,6 +504,7 @@ Answer fields: `ok`, `tree`, `user` – full schema in openapi.json.
 | 404 | `source-not-found` |
 | 409 | `link-exists` |
 | 409 | `parent-exists` |
+| 429 | `rate-limited` |
 | 501 | `not-supported` |
 
 ## Performance
