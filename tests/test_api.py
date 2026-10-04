@@ -78,7 +78,10 @@ def leseaufrufe(baum="testbaum"):
         ("Tags", baum, {"type": "FAM"}),
         ("Places", baum, {"q": ""}),
         ("Places", baum, {"q": "Marker"}),
+        ("Places", baum, {"list": 1}),
     ]
+    for ort in ["Offenbach", "Bieber, Offenbach", "Markerlebendort", "Markerkonfidenzort", "Gibtesnicht"]:
+        aufrufe.append(("Place", baum, {"name": ort}))
     return aufrufe
 
 
@@ -96,10 +99,11 @@ class Lecktest(unittest.TestCase):
                     self.assertEqual([], abweichung[:5], f"Manifest veraltet? {aktion} {params} (tests/manifest.py)")
                 # Die Suche nennt das Suchwort in der Antwort - das ist kein Leck.
                 text = a.text.replace(json.dumps(params.get("q", "")), '""')
+                # Place nennt den erfragten Namen nicht, wenn es den Ort nicht zu sehen gibt (not-found).
                 for wort in verboten:
                     # Ortsnamen schuetzt webtrees nicht (Ortsliste, Ortsvorschlaege: SearchService::searchPlaces) -
                     # die Route Places nutzt dieselbe Funktion, nur fuer Bearbeiter. Kein Leck des Moduls.
-                    if aktion == "Places" and wort == KONFIDENZ:
+                    if aktion == "Places" and "q" in params and wort == KONFIDENZ:
                         continue
                     self.assertNotIn(wort, text, f"LECK fuer {benutzer or 'Gast'}: {aktion} {b} {params} zeigt {wort}")
 
@@ -235,6 +239,156 @@ class Paten(unittest.TestCase):
         self.assertEqual(["I3", "I2"], [e["record"] for e in wo])
 
 
+class Orte(unittest.TestCase):
+    """Stufe 21: Ortsliste und ein Ort (PlaceActions)."""
+
+    def test_ortsliste(self):
+        orte = {o["name"]: o for o in U.sitzung("verwalter").get("Places", "testbaum", list=1).json["places"]}
+        self.assertEqual(["Bieber, Gelnhausen", "Bieber, Offenbach", "Markerkonfidenzort", "Markerlebendort", "Offenbach"], sorted(orte))
+        off = orte["Offenbach"]
+        self.assertEqual((3, 2, 0, "L1", "OFFACHJO40BC", "location"), (off["events"], off["individuals"], off["families"], off["location"], off["gov"], off["coordSource"]))
+        self.assertAlmostEqual(50.1, off["lat"])
+        self.assertIsNone(orte["Bieber, Offenbach"]["location"], "Blattname Bieber hat keinen _LOC")
+        self.assertEqual("L2", orte["Markerkonfidenzort"]["location"], "Blattname eindeutig: _LOC gefunden")
+        gast = [o["name"] for o in U.sitzung().get("Places", "testbaum", list=1).json["places"]]
+        self.assertEqual(["Bieber, Offenbach", "Offenbach"], gast, "Orte verborgener Personen fehlen (F2 hat ein lebendes Kind)")
+
+    def test_ein_ort(self):
+        o = U.sitzung("verwalter").get("Place", "testbaum", name="offenbach").json
+        self.assertEqual(("Offenbach", ["Offenbach"], None, 3), (o["name"], o["levels"], o["parent"], o["events"]))
+        self.assertEqual([{"name": "Bieber, Offenbach"}], o["children"])
+        self.assertEqual({"birth": 1, "marriage": 0, "death": 0, "other": 2}, o["eventCounts"], "Geburt I1; Taufe I1 und Wohnort I2")
+        self.assertEqual(["I2", "I1"], [p["xref"] for p in o["individuals"]], "nach Namen: Anna vor Theodor")
+        self.assertEqual(["BIRT", "CHR"], [f["tag"] for f in o["individuals"][1]["facts"]])
+        self.assertEqual(1800, o["individuals"][1]["facts"][0]["date"]["year"])
+        loc = o["location"]
+        self.assertEqual(("L1", "Offenbach", "OFFACHJO40BC", ["Stadt am Main"]), (loc["xref"], loc["name"], loc["gov"], loc["notes"]))
+        self.assertEqual([(None, "https://de.wikipedia.org/wiki/Offenbach_am_Main"), ("S1", "Ortsbeschreibung")], [(q["xref"], q["page"] or q["title"]) for q in loc["sources"]])
+        self.assertEqual(("63065", "Hessen", None), (loc["postalCode"], loc["region"], loc["country"]))
+        self.assertAlmostEqual(8.766667, loc["lng"], places=5)
+        b = U.sitzung("verwalter").get("Place", "testbaum", name="Bieber, Offenbach").json
+        self.assertEqual(("Offenbach", ["I4"], None), (b["parent"], [p["xref"] for p in b["individuals"]], b["location"]))
+
+    def test_unbekannt_und_verborgen(self):
+        self.assertEqual("not-found", U.sitzung().get("Place", "testbaum", name="Markerlebendort").json["error"])
+        self.assertEqual("not-found", U.sitzung("bearbeiter").get("Place", "testbaum", name="Markerkonfidenzort").json["error"])
+        self.assertEqual("not-found", U.sitzung("verwalter").get("Place", "testbaum", name="Gibtesnicht").json["error"])
+        self.assertEqual("name-missing", U.sitzung("verwalter").get("Place", "testbaum").json["error"])
+
+    def test_zz_ortsdaten_schreiben(self):
+        """Stufe 22: POST Place - zuletzt, weil es den Testbaum aendert."""
+        s = U.sitzung("admin")
+        # vorhandener _LOC: nur die GOV-Kennung aendern, Notiz/Quelle/Koordinaten bleiben
+        a = s.post("Place", "testbaum", {"name": "Offenbach", "gov": "OFFACHJO40BD"})
+        self.assertEqual((True, "L1", 0), (a.json["ok"], a.json["xref"], a.json["linked"]), a)
+        loc = s.get("Place", "testbaum", name="Offenbach").json["location"]
+        self.assertEqual(("OFFACHJO40BD", ["Stadt am Main"], 2, 50.1), (loc["gov"], loc["notes"], len(loc["sources"]), loc["lat"]))
+        # Koordinaten und Notiz ersetzen, auch in die Geografischen Daten (Admin)
+        a = s.post("Place", "testbaum", {"name": "Offenbach", "lat": 50.104444, "lng": -8.766, "note": "Stadt am Main\nzweite Zeile", "mapData": True})
+        self.assertEqual((True, True), (a.json["ok"], a.json["mapData"]), a)
+        loc = s.get("Place", "testbaum", name="Offenbach").json["location"]
+        self.assertEqual((50.104444, -8.766, ["Stadt am Main\nzweite Zeile"]), (loc["lat"], loc["lng"], loc["notes"]))
+        self.assertIn("2 LONG W8.766", umgebung.sql("SELECT o_gedcom FROM wt_other WHERE o_id = 'L1'")[0][0])
+        self.assertEqual([(50.104444, -8.766)], [(float(a), float(b)) for a, b in umgebung.sql("SELECT latitude, longitude FROM wt_place_location WHERE place = 'Offenbach'")])
+        # Medien am _LOC: hochladen (Route Media mit der Kennung des _LOC), dann ueber die Liste loesen
+        rumpf, art = manifest.multipart({"title": "Ortsansicht", "link": "true"}, ("ansicht.png", manifest.PNG, "image/png"))
+        req = urllib.request.Request(s.url("/module/_api4webtrees_/Media/testbaum", xref="L1"), data=rumpf, method="POST")
+        req.add_header("Content-Type", art); req.add_header("X-CSRF-TOKEN", s.csrf)
+        m = s._senden(req).json
+        self.assertEqual(True, m["ok"], m)
+        self.assertEqual(["Ortsansicht"], [x["title"] for x in s.get("Place", "testbaum", name="Offenbach").json["location"]["media"]])
+        orts_medium = s.get("Place", "testbaum", name="Offenbach").json["location"]["media"][0]
+        self.assertEqual(("photo", "png"), (orts_medium["type"], orts_medium["format"].lower()))
+        self.assertTrue(any("1" in i for i in orts_medium["info"]), orts_medium["info"])
+        # Titel und Art aendern (Route MediaObject)
+        self.assertEqual(True, s.post("MediaObject", "testbaum", {"title": "Ortsansicht 1926", "type": "card"}, xref=m["media"]).json["ok"])
+        orts_medium = s.get("Place", "testbaum", name="Offenbach").json["location"]["media"][0]
+        self.assertEqual(("Ortsansicht 1926", "card"), (orts_medium["title"], orts_medium["type"]))
+        self.assertEqual("invalid-type", s.post("MediaObject", "testbaum", {"type": "foto"}, xref=m["media"]).json["error"])
+        self.assertEqual("not-editable", U.sitzung("mitglied").post("MediaObject", "testbaum", {"title": "x"}, xref=m["media"]).json["error"])
+        self.assertEqual(True, s.post("Place", "testbaum", {"name": "Offenbach", "media": []}).json["ok"])
+        self.assertEqual([], s.get("Place", "testbaum", name="Offenbach").json["location"]["media"])
+        self.assertEqual(True, s.post("Place", "testbaum", {"name": "Offenbach", "media": [m["media"]]}).json["ok"])
+        self.assertEqual(1, len(s.get("Place", "testbaum", name="Offenbach").json["location"]["media"]))
+        # allgemeiner Quellenverweis am _LOC (Route Citation ohne factId)
+        a = s.post("Citation", "testbaum", {"source": "S1", "page": "Ortschronik S. 3"}, xref="L1")
+        self.assertEqual(True, a.json["ok"], a)
+        self.assertIn(("S1", "Ortschronik S. 3"), [(q["xref"], q["page"]) for q in s.get("Place", "testbaum", name="Offenbach").json["location"]["sources"]])
+        # Kurzname als "2 ABBR" unter dem NAME, auch in der Ortsliste
+        self.assertEqual(True, s.post("Place", "testbaum", {"name": "Offenbach", "shortName": "Offb."}).json["ok"])
+        self.assertEqual("Offb.", s.get("Place", "testbaum", name="Offenbach").json["location"]["shortName"])
+        self.assertIn("1 NAME Offenbach\n2 ABBR Offb.", umgebung.sql("SELECT o_gedcom FROM wt_other WHERE o_id = 'L1'")[0][0])
+        self.assertEqual("Offb.", next(o for o in s.get("Places", "testbaum", list=1).json["places"] if o["name"] == "Offenbach")["shortName"])
+        s.post("Place", "testbaum", {"name": "Offenbach", "shortName": ""})
+        self.assertIsNone(s.get("Place", "testbaum", name="Offenbach").json["location"]["shortName"])
+        # Postleitzahl (vorhandene Schreibweise POST bleibt), Region, Land
+        self.assertEqual(True, s.post("Place", "testbaum", {"name": "Offenbach", "postalCode": "63067", "country": "Deutschland"}).json["ok"])
+        loc = s.get("Place", "testbaum", name="Offenbach").json["location"]
+        self.assertEqual(("63067", "Hessen", "Deutschland"), (loc["postalCode"], loc["region"], loc["country"]))
+        ged = umgebung.sql("SELECT o_gedcom FROM wt_other WHERE o_id = 'L1'")[0][0]
+        self.assertIn("1 POST 63067", ged); self.assertIn("1 _CTRY Deutschland", ged); self.assertNotIn("_POST", ged)
+        # Koordinaten entfernen
+        s.post("Place", "testbaum", {"name": "Offenbach", "lat": None, "lng": None})
+        self.assertIsNone(s.get("Place", "testbaum", name="Offenbach").json["location"]["lat"])
+        # neuer _LOC; Blattname "Bieber" gibt es zweimal -> Verweis an die Ereignisse
+        a = s.post("Place", "testbaum", {"name": "Bieber, Offenbach", "gov": "BIEBERJO40BC"})
+        self.assertEqual((True, 1), (a.json["ok"], a.json["linked"]), a)
+        neu = a.json["xref"]
+        self.assertIn("3 _LOC @" + neu + "@", umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = 'I4'")[0][0])
+        o = s.get("Place", "testbaum", name="Bieber, Offenbach").json
+        self.assertEqual((neu, "Bieber", "BIEBERJO40BC"), (o["location"]["xref"], o["location"]["name"], o["location"]["gov"]))
+        self.assertIsNone(s.get("Place", "testbaum", name="Bieber, Gelnhausen").json["location"], "der andere Bieber bekommt ihn nicht")
+        # Bearbeiter ohne Sofortfreigabe: ausstehender _LOC, zweites Speichern trifft denselben
+        b = U.sitzung("bearbeiter")
+        a = b.post("Place", "testbaum", {"name": "Bieber, Gelnhausen", "note": "Dorf im Kinzigtal"})
+        self.assertEqual((True, True), (a.json["ok"], a.json["pending"]), a)
+        a2 = b.post("Place", "testbaum", {"name": "Bieber, Gelnhausen", "gov": "BIEBERJO40AA"})
+        self.assertEqual(a.json["xref"], a2.json["xref"], "kein zweiter _LOC vor der Freigabe")
+        # Fehler und Rechte
+        self.assertEqual("not-editable", U.sitzung("mitglied").post("Place", "testbaum", {"name": "Offenbach", "gov": "X"}).json["error"])
+        self.assertEqual("invalid-coordinates", s.post("Place", "testbaum", {"name": "Offenbach", "lat": 95, "lng": 1}).json["error"])
+        self.assertEqual("invalid-coordinates", s.post("Place", "testbaum", {"name": "Offenbach", "lat": 50}).json["error"])
+        self.assertEqual("invalid-gov", s.post("Place", "testbaum", {"name": "Offenbach", "gov": "a b"}).json["error"])
+        self.assertEqual("not-found", b.post("Place", "testbaum", {"name": "Markerkonfidenzort", "gov": "X"}).json["error"])
+
+    def test_zzz_umbenennen_und_zusammenfuehren(self):
+        """Stufe 23: POST PlaceRename - nach dem Schreibtest, weil es den Testbaum aendert."""
+        s = U.sitzung("admin")
+        # Vorschau: Offenbach -> Offenbach am Main, mit dem Ort darunter; aendert nichts
+        v = s.post("PlaceRename", "testbaum", {"from": "Offenbach", "to": "Offenbach am Main", "preview": True}).json
+        self.assertEqual((True, False, 3, 4, 1, 0, "L1"), (v["preview"], v["merge"], v["records"], v["events"], v["subPlaces"], v["skipped"], v["location"]["from"]), v)
+        self.assertEqual(True, s.get("Place", "testbaum", name="Offenbach").json.get("ok", True))
+        # Ausfuehren
+        a = s.post("PlaceRename", "testbaum", {"from": "Offenbach", "to": "Offenbach am Main"}).json
+        self.assertEqual((True, False, 4), (a["ok"], a["preview"], a["events"]), a)
+        self.assertEqual("not-found", s.get("Place", "testbaum", name="Offenbach").json["error"])
+        o = s.get("Place", "testbaum", name="Offenbach am Main").json
+        self.assertEqual(("L1", "Offenbach am Main", 3), (o["location"]["xref"], o["location"]["name"], o["events"]))
+        self.assertEqual(["Bieber, Offenbach am Main"], [c["name"] for c in o["children"]])
+        ged = umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = 'I1'")[0][0]
+        self.assertEqual(2, ged.count("2 PLAC Offenbach am Main\n3 _LOC @L1@"), "Geburt und Taufe zeigen auf den _LOC")
+        # Hin und zurueck: der alte Name steht noch in der Ortstabelle von webtrees, ist aber kein Zusammenfuehren
+        self.assertEqual(False, s.post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": "Offenbach", "preview": True}).json["merge"])
+        # Bearbeiter: das gesperrte Ereignis (RESI von I2) bleibt
+        v = U.sitzung("bearbeiter").post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": "Offenbach a. M.", "preview": True}).json
+        self.assertEqual((3, 1), (v["events"], v["skipped"]), v)
+        # Zusammenfuehren: Bieber unter Offenbach am Main -> Bieber, Gelnhausen (beide mit _LOC, GOV weicht ab)
+        von = s.get("Place", "testbaum", name="Bieber, Offenbach am Main").json["location"]["xref"]
+        nach = s.get("Place", "testbaum", name="Bieber, Gelnhausen").json["location"]["xref"]
+        v = s.post("PlaceRename", "testbaum", {"from": "Bieber, Offenbach am Main", "to": "Bieber, Gelnhausen", "preview": True}).json
+        self.assertEqual((True, von, nach, ["gov"]), (v["merge"], v["location"]["from"], v["location"]["to"], v["location"]["conflicts"]), v)
+        a = s.post("PlaceRename", "testbaum", {"from": "Bieber, Offenbach am Main", "to": "Bieber, Gelnhausen"}).json
+        self.assertEqual(True, a["ok"], a)
+        b = s.get("Place", "testbaum", name="Bieber, Gelnhausen").json
+        self.assertEqual((nach, ["I4"], ["F2"]), (b["location"]["xref"], [p["xref"] for p in b["individuals"]], [f["xref"] for f in b["families"]]))
+        self.assertIn("Dorf im Kinzigtal", b["location"]["notes"], "Notiz des Ziels bleibt")
+        self.assertEqual([], umgebung.sql("SELECT o_id FROM wt_other WHERE o_id = ?", von), "der alte _LOC ist weg")
+        self.assertIn("3 _LOC @" + nach + "@", umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = 'I4'")[0][0])
+        # Fehler und Rechte
+        self.assertEqual("not-editable", U.sitzung("mitglied").post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": "X"}).json["error"])
+        self.assertEqual("not-found", U.sitzung("bearbeiter").post("PlaceRename", "testbaum", {"from": "Markerkonfidenzort", "to": "X"}).json["error"])
+        self.assertEqual("name-missing", s.post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": " , "}).json["error"])
+
 class Schreiben(unittest.TestCase):
     def fakten(self, s, xref):
         return s.get("Individual", "testbaum", xref=xref).json["facts"]
@@ -320,7 +474,7 @@ class Schreiben(unittest.TestCase):
         liste = s.get("Sources", "testbaum").json
         self.assertEqual(["S1"], [x["xref"] for x in liste["sources"]])  # S2 ist vertraulich
         s1 = liste["sources"][0]
-        self.assertEqual(("Pfarramt Offenbach", "Offenbach, 1790–1830", "Bistumsarchiv Mainz", "KB 12", 2),
+        self.assertEqual(("Pfarramt Offenbach", "Offenbach, 1790–1830", "Bistumsarchiv Mainz", "KB 12", 3),
                          (s1["author"], s1["publication"], s1["repository"], s1["callNumber"], s1["uses"]))
         einzeln = s.get("Source", "testbaum", xref="S1").json
         self.assertEqual("Taufen, Trauungen, Begräbnisse", einzeln["text"])
@@ -524,6 +678,46 @@ class Schreiben(unittest.TestCase):
         tod = next(f for f in self.fakten(s, "I2") if f.get("tag") == "DEAT")
         self.assertEqual(True, s.post("Citation", "testbaum", {"factId": tod["id"], "index": 0, "media": [m]}, xref="I2").json["ok"])
         self.assertEqual(["Taufe 1833"], [x["title"] for x in next(f for f in self.fakten(s, "I2") if f.get("tag") == "DEAT")["sources"][0]["media"]])
+
+    def test_notiz_und_vorhandenes_medium_an_person(self):
+        """Stufe 23: Notizen an der Person (Route Fact, Tag NOTE), Verweis auf Notiz-Datensatz erkennbar (noteXref),
+        vorhandenes Medium verknuepfen (Route Media mit media) und wieder loesen (UnlinkMedia)."""
+        s = U.sitzung("admin")
+        a = s.post("Fact", "testbaum", {"tag": "NOTE", "value": "Erste Zeile\nzweite Zeile"}, xref="I2")
+        self.assertEqual(True, a.json["ok"], a)
+        notiz = next(f for f in self.fakten(s, "I2") if f.get("tag") == "NOTE")
+        self.assertEqual(("Erste Zeile\nzweite Zeile", None), (notiz["value"], notiz["noteXref"]))
+        # Medium an I1 hochladen, dann dasselbe Medium an I2 haengen, doppelt verknuepfen bleibt einfach
+        rumpf, art = manifest.multipart({"title": "Gemeinsames Bild"}, ("bild.png", manifest.PNG, "image/png"))
+        req = urllib.request.Request(s.url("/module/_api4webtrees_/Media/testbaum", xref="I1"), data=rumpf, method="POST")
+        req.add_header("Content-Type", art); req.add_header("X-CSRF-TOKEN", s.csrf)
+        mx = s._senden(req).json["media"]
+        self.assertEqual(True, s.post("Media", "testbaum", {"media": mx}, xref="I2").json["ok"])
+        self.assertEqual(True, s.post("Media", "testbaum", {"media": mx}, xref="I2").json["ok"])
+        ged = umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = 'I2'")[0][0]
+        self.assertEqual(1, ged.count("1 OBJE @" + mx + "@"))
+        self.assertEqual("media-not-found", s.post("Media", "testbaum", {"media": "M999"}, xref="I2").json["error"])
+        self.assertEqual(True, s.post("UnlinkMedia", "testbaum", {"media": mx}, xref="I2").json["ok"])
+        self.assertNotIn("@" + mx + "@", umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = 'I2'")[0][0])
+
+    def test_startperson(self):
+        """Stufe 24: Info nennt die Startperson wie webtrees; StartPerson setzt die eigene Standardperson, die des
+        Stammbaums nur fuer Verwalter."""
+        def baum(sitzung):
+            return next(b for b in sitzung.info()["trees"] if b["name"] == "testbaum")
+        m = U.sitzung("mitglied")
+        self.assertTrue(baum(m)["startXref"])
+        r = m.post("StartPerson", "testbaum", {"xref": "I2"})
+        self.assertEqual((True, "I2", "I2"), (r.json["ok"], r.json["startXref"], r.json["defaultXref"]), r)
+        self.assertEqual("I2", baum(m)["startXref"])
+        self.assertEqual("not-manager", m.post("StartPerson", "testbaum", {"xref": "I2", "forTree": True}).json["error"])
+        self.assertEqual("not-found", m.post("StartPerson", "testbaum", {"xref": "I999"}).json["error"])
+        # Eigene Standardperson wieder entfernen: dann gilt die des Stammbaums
+        v = U.sitzung("verwalter")
+        self.assertEqual(True, v.post("StartPerson", "testbaum", {"xref": "I1", "forTree": True}).json["ok"])
+        r = m.post("StartPerson", "testbaum", {"xref": ""})
+        self.assertEqual(("", "I1"), (r.json["defaultXref"], r.json["treeDefaultXref"]))
+        self.assertEqual("not-logged-in", U.sitzung().post("StartPerson", "testbaum", {"xref": "I1"}).json["error"])
 
     def test_name_aendern_behaelt_unterangaben(self):
         # Beim Aendern des Namens darf nichts verloren gehen: Praefix, Spitzname und Notiz bleiben,

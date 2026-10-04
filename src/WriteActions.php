@@ -12,6 +12,7 @@ use Fisharebest\Webtrees\Fact;
 use Fisharebest\Webtrees\Family;
 use Fisharebest\Webtrees\FlashMessages;
 use Fisharebest\Webtrees\GedcomRecord;
+use Fisharebest\Webtrees\Contracts\UserInterface;
 use Fisharebest\Webtrees\Individual;
 use Fisharebest\Webtrees\Registry;
 use Fisharebest\Webtrees\Services\MediaFileService;
@@ -1154,7 +1155,8 @@ trait WriteActions
     {
         $tree = Validator::attributes($request)->tree();
 
-        if (!Auth::canUploadMedia($tree, Auth::user())) {
+        // Hochladen braucht das Upload-Recht; ein vorhandenes Medium verknuepfen nur das Bearbeitungsrecht (wie in webtrees)
+        if (!Auth::canUploadMedia($tree, Auth::user()) && $this->str($this->body($request), 'media') === '') {
             return $this->error(403, 'upload-not-allowed');
         }
 
@@ -1166,6 +1168,22 @@ trait WriteActions
         }
 
         $body  = $this->body($request);
+
+        // Ab Stufe 23: ein vorhandenes Medienobjekt verknuepfen statt hochzuladen - Rumpf { media: "M5" }
+        $vorhanden = $this->str($body, 'media');
+        if ($vorhanden !== '') {
+            $media = Registry::mediaFactory()->make(trim($vorhanden, '@'), $tree);
+            if ($media === null || !$media->canShow()) {
+                return $this->error(404, 'media-not-found');
+            }
+            if (str_contains($record->gedcom(), "\n1 OBJE @" . $media->xref() . '@')) {
+                return $this->written($record, ['media' => $media->xref()]);
+            }
+            $record->createFact('1 OBJE @' . $media->xref() . '@', true);
+
+            return $this->written($record, ['media' => $media->xref()]);
+        }
+
         $title = Registry::elementFactory()->make('OBJE:FILE:TITL')->canonical($this->str($body, 'title'));
         $note  = Registry::elementFactory()->make('OBJE:NOTE')->canonical($this->str($body, 'note'));
 
@@ -1206,6 +1224,54 @@ trait WriteActions
         }
 
         return $this->written($record, ['media' => $media->xref()], 201);
+    }
+
+    /**
+     * Titel und Art eines Medienobjekts aendern (ab Stufe 23): ?xref=M1, Rumpf { title?, type? }. Betrifft die erste
+     * Datei (1 FILE / 2 TITL, 2 FORM / 3 TYPE); alles andere am Medienobjekt bleibt.
+     */
+    public function postMediaObjectAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $tree   = Validator::attributes($request)->tree();
+        $media  = Registry::mediaFactory()->make($this->xref($request), $tree);
+        $denied = $this->denyEdit($media);
+
+        if ($denied !== null) {
+            return $denied;
+        }
+
+        $body = $this->body($request);
+        if (GedcomText::looksLikePointer($this->str($body, 'title'))) {
+            return $this->error(400, 'invalid-value');
+        }
+        $arten = ['photo', 'document', 'certificate', 'book', 'newspaper', 'card', 'map', 'tombstone', 'audio', 'video', 'electronic', 'film', 'fiche', 'magazine', 'manuscript', 'painting', 'other'];
+        if (array_key_exists('type', $body) && $this->str($body, 'type') !== '' && !in_array($this->str($body, 'type'), $arten, true)) {
+            return $this->error(400, 'invalid-type');
+        }
+
+        $gedcom = (string) preg_replace_callback('/(\n1 FILE[^\n]*)((?:\n[2-9] [^\n]*)*)/', function (array $m) use ($body): string {
+            $unter = $m[2];
+            if (array_key_exists('title', $body)) {
+                $titel = GedcomText::line($this->str($body, 'title'));
+                $unter = (string) preg_replace('/\n2 TITL(?: [^\n]*)?(?:\n[3-9] [^\n]*)*/', '', $unter);
+                $unter = ($titel === '' ? '' : "\n2 TITL " . $titel) . $unter;
+            }
+            if (array_key_exists('type', $body)) {
+                $art   = $this->str($body, 'type');
+                $unter = (string) preg_replace('/\n3 TYPE[^\n]*/', '', $unter);
+                if ($art !== '') {
+                    $unter = preg_match('/\n2 FORM[^\n]*/', $unter) === 1
+                        ? (string) preg_replace('/(\n2 FORM[^\n]*)/', '$1' . "\n3 TYPE " . $art, $unter, 1)
+                        : $unter . "\n2 FORM\n3 TYPE " . $art;
+                }
+            }
+
+            return $m[1] . $unter;
+        }, $media->gedcom(), 1);
+
+        $media->updateRecord($gedcom, true);
+
+        return $this->written($media);
     }
 
     /**
@@ -1530,6 +1596,51 @@ trait WriteActions
         $tree->setUserPreference(Auth::user(), self::BOOKMARKS_PREF, implode(',', array_slice($xrefs, -500)));
 
         return $this->getBookmarksAction($request);
+    }
+
+    /**
+     * Startperson festlegen (ab Stufe 24): Rumpf { xref, forTree? }. Ohne forTree die eigene Standardperson des
+     * Benutzers (wie unter "Mein Konto"; leere xref entfernt sie), mit forTree die des Stammbaums - nur Verwalter.
+     */
+    public function postStartPersonAction(ServerRequestInterface $request): ResponseInterface
+    {
+        if (!Auth::check()) {
+            return $this->error(403, 'not-logged-in');
+        }
+
+        $tree    = Validator::attributes($request)->tree();
+        $body    = $this->body($request);
+        $xref    = $this->str($body, 'xref');
+        $forTree = (bool) ($body['forTree'] ?? false);
+
+        if ($forTree && !Auth::isManager($tree)) {
+            return $this->error(403, 'not-manager');
+        }
+
+        if ($xref !== '') {
+            $individual = Registry::individualFactory()->make($xref, $tree);
+
+            if (!$individual instanceof Individual || !$individual->canShow()) {
+                return $this->error(404, 'not-found');
+            }
+        } elseif ($forTree) {
+            return $this->error(400, 'missing-xref');
+        }
+
+        if ($forTree) {
+            $tree->setPreference('PEDIGREE_ROOT_ID', $xref);
+        } else {
+            $tree->setUserPreference(Auth::user(), UserInterface::PREF_TREE_DEFAULT_XREF, $xref);
+        }
+
+        $person = $tree->significantIndividual(Auth::user());
+
+        return response([
+            'ok'              => true,
+            'startXref'       => $person->canShow() && Registry::individualFactory()->make($person->xref(), $tree) !== null ? $person->xref() : '',
+            'defaultXref'     => $tree->getUserPreference(Auth::user(), UserInterface::PREF_TREE_DEFAULT_XREF),
+            'treeDefaultXref' => $tree->getPreference('PEDIGREE_ROOT_ID'),
+        ]);
     }
 
     private function written(GedcomRecord $record, array $extra = [], int $status = 200): ResponseInterface

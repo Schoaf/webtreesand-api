@@ -63,6 +63,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     use ReadActions;
     use WriteActions;
     use JsonBuilders;
+    use PlaceActions;
 
 
     // webtrees benennt ein eigenes Modul nach seinem Ordner ("_api4webtrees_") - was setName() im Modul sagt,
@@ -90,7 +91,15 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     //     noteKinds, typeLabel (MARR:TYPE uebersetzt); Individual.associatedIn (Gegenrichtung); NOTE/TEXT mit CONC
     // 20: Paten und Trauzeugen schreiben - POST Association (verknuepfte als 2 _ASSO + RELA, freie als 2 _GODP/_WITN,
     //     1 ASSO in die Taufe verschieben); Fact.type (Art des Ereignisses, MARR in webtrees-Form CIVIL/RELIGIOUS ...)
-    public const int    API_VERSION = 20;
+    // 21: Orte - Places?list=1 (alle Orte mit Zahlen, Koordinaten, _LOC), Place (ein Ort: Personen und Familien mit
+    //     ihren Ereignissen dort, Unterorte, _LOC mit GOV, Koordinaten, Notizen, Quellen, Medien)
+    // 22: Orte schreiben - POST Place (GOV-Kennung, Koordinaten, Notiz in den _LOC; legt ihn an, Verweise bei
+    //     mehrdeutigem Blattnamen; mapData: auch in die Geografischen Daten, nur Administratoren)
+    // 23: Orte umbenennen und zusammenfuehren - POST PlaceRename (mit Vorschau; Orte darunter wandern mit, _LOC werden
+    //     zusammengelegt); MediaObject (Titel und Art eines Medienobjekts); Medien mit type/format
+    // 24: Startperson - Info je Baum mit startXref (wie webtrees sie bestimmt) und treeDefaultXref; POST StartPerson
+    //     (eigene Standardperson, fuer Verwalter auch die des Stammbaums)
+    public const int    API_VERSION = 24;
 
     /** Benutzereinstellung je Baum: die Merkliste als Liste von Personenkennungen. */
     private const string BOOKMARKS_PREF = 'api4webtrees_bookmarks';
@@ -229,7 +238,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
     public function customModuleVersion(): string
     {
-        return '1.12.0';
+        return '1.13.0';
     }
 
     public function customModuleLatestVersionUrl(): string

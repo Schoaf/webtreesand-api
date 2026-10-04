@@ -102,6 +102,10 @@ trait ReadActions
                 'autoAccept'  => $user->getPreference(UserInterface::PREF_AUTO_ACCEPT_EDITS) === '1',
                 'userXref'    => $tree->getUserPreference($user, UserInterface::PREF_TREE_ACCOUNT_XREF),
                 'defaultXref' => $tree->getUserPreference($user, UserInterface::PREF_TREE_DEFAULT_XREF),
+                // Mit wem webtrees fuer diesen Benutzer startet: eigene Standardperson, "Das bin ich", Standardperson
+                // des Stammbaums, sonst die erste Person - nur wenn der Benutzer sie sehen darf (ab Stufe 24)
+                'startXref'   => $this->startXref($tree, $user),
+                'treeDefaultXref' => $tree->getPreference('PEDIGREE_ROOT_ID'),
                 // Nummer der letzten Aenderung im Baum (auch ausstehende, angenommene, verworfene). Ein anderer Wert
                 // als beim letzten Mal heisst: neu laden. Nur auf Gleichheit vergleichen - ein neuer GEDCOM-Import
                 // loescht die Aenderungsliste, dann wird die Zahl kleiner.
@@ -1184,6 +1188,11 @@ trait ReadActions
     {
         $tree = Validator::attributes($request)->tree();
 
+        // Ab Stufe 21: ?list=1 - die Ortsliste fuer jeden, der den Baum sieht (PlaceActions).
+        if (Validator::queryParams($request)->string('list', '') === '1') {
+            return $this->placeList($tree);
+        }
+
         if (!Auth::isEditor($tree)) {
             return $this->error(403, 'not-editor');
         }
@@ -1199,6 +1208,14 @@ trait ReadActions
             ->all();
 
         return response(['query' => $query, 'data' => $data]);
+    }
+
+    private function startXref(Tree $tree, UserInterface $user): string
+    {
+        $person = $tree->significantIndividual($user);
+
+        // Leerer Stammbaum: webtrees liefert dann einen Platzhalter ohne Datensatz
+        return $person->canShow() && Registry::individualFactory()->make($person->xref(), $tree) !== null ? $person->xref() : '';
     }
 
     private function role(Tree $tree, UserInterface $user): string

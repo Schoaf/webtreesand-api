@@ -77,8 +77,43 @@ ROUTEN = [
     ("get", "Tags", True, 1, "visitor", "Facts and events the client may offer for adding, with labels.",
      [P("type", "`INDI` or `FAM`", pflicht=True)], None),
     ("get", "Places", True, 8, "editor",
-     "Place suggestions while typing, like webtrees' own autocomplete. `Berlin, Deu` searches per level.",
-     [P("q", "Beginning or part of the place name")], None),
+     "Place suggestions while typing, like webtrees' own autocomplete. `Berlin, Deu` searches per level. "
+     "With `list=1` (level 21, visitor): every place at a visible fact – as written there – with the number of "
+     "events, individuals and families, coordinates and their origin (`location`: the GEDCOM-L `_LOC` record, "
+     "`mapData`: webtrees' geographic data, `event`: `MAP` at a fact), the `_LOC` record and its GOV identifier.",
+     [P("q", "Beginning or part of the place name"), P("list", "`1`: list of all places (level 21)", "integer")], None),
+    ("get", "Place", True, 21, "visitor",
+     "One place: levels, sub-places one level down, coordinates with origin, the `_LOC` record (GOV identifier, "
+     "coordinates, notes, sources, media) and the individuals and families with their events at this place "
+     "(at most 1000 each). The `_LOC` record is found like the Ortsregister module does: `3 _LOC` at the events, "
+     "the module's binding, its GOV identifier, the leaf name if unique on both sides. `not-found` if no visible "
+     "event names the place.",
+     [P("name", "The place as written at the event, e.g. `Kortau, Allenstein`", pflicht=True)], None),
+    ("post", "Place", True, 22, "editor",
+     "Save a place's data in its GEDCOM-L `_LOC` record – created if there is none. Only the parts named in the body are "
+     "replaced; sources, media and unknown lines of the `_LOC` stay. If the leaf name is not unique in the tree, the events "
+     "at the place get the pointer `3 _LOC @L1@` (`linked`: how many). `mapData: true` also writes the coordinates to "
+     "webtrees' geographic data (site administrators only) – webtrees' own maps read only those and `MAP` at the events.",
+     [], "`{name, gov?, lat?, lng?, note?, media?, mapData?, postalCode?, region?, country?, shortName?}` – `lat`/`lng` together, `null` removes the coordinates; "
+     "`media` replaces the linked media objects (upload new ones with route Media and the `_LOC` identifier). "
+     "Answer: `{ok, xref, pending, linked, mapData}`, status 201 when the `_LOC` was created."),
+    ("post", "MediaObject", True, 23, "editor",
+     "Change title and type of a media object (first file: `2 TITL`, `2 FORM` / `3 TYPE`); everything else stays.",
+     [XREF], "`{title?, type?}` – type one of photo, document, certificate, book, newspaper, card, map, tombstone, audio, video, "
+     "electronic, film, fiche, magazine, manuscript, painting, other; empty removes it."),
+    ("post", "StartPerson", True, 24, "member",
+     "Set the start person. Without `forTree` the signed-in user's own default individual (as under “My account”; an empty "
+     "`xref` removes it), with `forTree: true` the family tree's default individual (managers only). Route Info names per "
+     "tree `startXref` – the individual webtrees starts with for this user, if visible – and `treeDefaultXref`.",
+     [], "`{xref, forTree?}`. Answer: `{ok, startXref, defaultXref, treeDefaultXref}`."),
+    ("post", "PlaceRename", True, 23, "editor",
+     "Rename a place or merge it into another. Every event at `from` gets `to`; places below move along "
+     "(`Kortau, Allenstein` → `Kortau, Olsztyn`). If `to` already exists it is a merge: the two `_LOC` records become one "
+     "(gaps filled, notes, sources and media appended, differing GOV identifier or coordinates reported in `conflicts`) "
+     "and the `3 _LOC` pointers point to it. Events the user may not edit (locked, confidential) stay and are counted in "
+     "`skipped`. With `preview: true` nothing changes. Without automatic acceptance the changes are pending as usual.",
+     [], "`{from, to, preview?}`. Answer: `{ok, preview, from, to, merge, records, events, subPlaces, skipped, "
+     "location: {from, to, conflicts}, pending?}`."),
     ("post", "Fact", True, 1, "editor",
      "Add or change a fact or event. Unmentioned sub-lines (sources, media …) are kept when changing.",
      [XREF], "`{factId?, tag, value?, date?, place?, note?, type?}` or `{factId?, gedcom: \"1 BIRT\\n2 DATE …\"}`. "
@@ -239,6 +274,7 @@ def sammeln(u):
     req.add_header("X-CSRF-TOKEN", admin.csrf)
     medien = admin._senden(req)
     merken("post", "Media", medien)
+    merken("post", "MediaObject", admin.post("MediaObject", "testbaum", {"title": "Manifestbild"}, xref=medien.json["media"]))
     m = medien.json.get("media")
     merken("post", "PrimaryMedia", admin.post("PrimaryMedia", "testbaum", {"media": m}, xref="I1"))
     os.makedirs(os.path.join(umgebung.WT, "data", "media", "archiv"), exist_ok=True)
@@ -246,11 +282,14 @@ def sammeln(u):
     merken("post", "MediaFromFile", admin.post("MediaFromFile", "testbaum", {"file": "archiv/manifest.png", "title": "Manifestscan"}, xref="I1"))
     merken("post", "MediaFromFile", admin.post("MediaFromFile", "testbaum", {"file": "archiv/manifest.png"}, xref="I1"))
     merken("post", "Bookmarks", admin.post("Bookmarks", "testbaum", {"xref": "I1", "add": True}))
+    merken("post", "StartPerson", admin.post("StartPerson", "testbaum", {"xref": "I1"}))
     archiv = admin.post("Repository", "testbaum", {"name": "Manifestarchiv"})
     merken("post", "Repository", archiv)
     quelle = admin.post("Source", "testbaum", {"title": "Manifestquelle", "author": "Manifest", "repository": archiv.json["xref"], "callNumber": "M 1"})
     merken("post", "Source", quelle)
     merken("post", "Source", admin.post("Source", "testbaum", {"publication": "Manifeststadt, 1900"}, xref=quelle.json["xref"]))
+    merken("post", "Place", admin.post("Place", "testbaum", {"name": "Bieber, Gelnhausen", "gov": "MANIFEST1", "lat": 50.2, "lng": 9.3, "note": "Manifestort"}))
+    merken("post", "PlaceRename", admin.post("PlaceRename", "testbaum", {"from": "Bieber, Gelnhausen", "to": "Bieber, Main-Kinzig", "preview": True}))
     fakt = admin.post("Fact", "testbaum", {"tag": "OCCU", "value": "Manifestberuf", "date": "1850"}, xref="I4")
     merken("post", "Fact", fakt)
     occu = [f for f in admin.get("Individual", "testbaum", xref="I4").json["facts"] if f.get("tag") == "OCCU"]

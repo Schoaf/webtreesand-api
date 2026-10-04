@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.13.0 – 2026-10-03
+**API levels 21–24: places, media objects, start person.** Everything is additive; older clients keep working.
+- **Level 21 – reading places.** `GET Places?list=1`: every place at visible events with counts (events, individuals,
+  families), coordinates (from the GEDCOM-L `_LOC` record, else webtrees' geographic data, else `MAP` at an event, with
+  `coordSource`), the `_LOC` identifier, GOV identifier and short name. `GET Place?name=`: the individuals and families
+  with their events there, places below, `eventCounts` (births, marriages, deaths, other) and the `_LOC` with GOV
+  identifier, coordinates, postal code, region, country, short name, notes, sources and media. A place finds its `_LOC`
+  by the pointer at the event, the binding of the place-register module, the GOV identifier or a unique leaf name.
+  Privacy as everywhere: only visible events count; restricted records take the exact (slower) path.
+- **Level 22 – writing places.** `POST Place {name, gov?, lat?, lng?, note?, media?, postalCode?, region?, country?,
+  shortName?, mapData?}` writes into the `_LOC` and creates it if missing (`_POST`/`POST`, `_STAE`, `_CTRY`,
+  `2 ABBR` under the name – existing spellings stay). With an ambiguous leaf name the events get `3 _LOC @L…@`.
+  `mapData: true` also writes webtrees' geographic data (site administrators only).
+- **Level 23 – renaming and merging places.** `POST PlaceRename {from, to, preview?}`: every event at `from` gets `to`,
+  places below move along. If `to` already has records it is a merge: the two `_LOC` become one (gaps filled, notes,
+  sources and media appended, differing GOV identifier or coordinates reported). Locked or confidential events stay and
+  are counted. `POST MediaObject {title?, type?}` changes title and type of a media object; media now carry
+  `type`/`format`, at a `_LOC` also file size and image dimensions. `POST Media {media}` links an existing media
+  object (edit rights suffice). NOTE facts name `noteXref` when they point to a shared note.
+- **Level 24 – start person.** Route Info names per tree `startXref` – the individual webtrees starts with for this
+  user (own default individual, “this is me”, the tree's default individual, else the first) – and
+  `treeDefaultXref`. `POST StartPerson {xref, forTree?}` sets the user's own default individual (empty removes it) or,
+  for managers, the family tree's.
+- Tests: places (reading, writing, renaming, merging, privacy), media objects, start person; performance check with
+  10,000 and 50,000 individuals (`docs/leistung.md`).
+
 ## 1.12.0 – 2026-10-01
 **API level 20: godparents and witnesses – writing.** New route `POST Association` and `type` for `POST Fact`.
 - `POST Association` (`?xref=` individual or family): `{factId, linked?, free?, convertLevel1?}`. `linked` replaces the

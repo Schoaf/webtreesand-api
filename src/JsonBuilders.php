@@ -328,6 +328,9 @@ trait JsonBuilders
                 'sources'        => $this->factSources($fact, $tree),
                 'associates'     => $this->factAssociates($fact, $tree),
                 'freeAssociates' => $free,
+                // Ab Stufe 23: eine Notiz, die auf einen Notiz-Datensatz zeigt (1 NOTE @N1@) - Clients aendern sie dann
+                // nicht als Text, sonst ginge die Verknuepfung verloren.
+                'noteXref'       => $tag === 'NOTE' && preg_match('/^@([^@]+)@$/', $fact->value(), $nx) === 1 ? $nx[1] : null,
             ];
         }
 
@@ -601,6 +604,9 @@ trait JsonBuilders
                 // Pfad der Datei im Medienordner des Baums (ab Stufe 9) - damit eine App die Datei bei anderen Modulen
                 // benennen kann, etwa um ueber Sammlungen EXIF zu schreiben. null bei Internetadressen.
                 'path'    => $media_file->isExternal() ? null : $media_file->filename(),
+                // Art (FORM:TYPE, z. B. photo, document) und Format (jpg, pdf) - ab Stufe 23
+                'type'    => $media_file->type() === '' ? null : $media_file->type(),
+                'format'  => $media_file->format() === '' ? null : $media_file->format(),
             ];
         }
 

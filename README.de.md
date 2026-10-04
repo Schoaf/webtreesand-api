@@ -139,9 +139,9 @@ Vollständige Beschreibung aller Routen, Antwortschemas und Leistungszahlen (eng
 
 Die vollständige Beschreibung der Schnittstelle (Adressen, Anmeldung, alle Aktionen, Fehlercodes)
 steht in der [englischen README](README.md#for-developers). Was je Fassung dazukam, steht im [CHANGELOG](CHANGELOG.md);
-zuletzt (1.11.0, Stufe 19): Paten und Trauzeugen lesen – je Ereignis `associates` (verknüpfte Personen aus `_ASSO`
-und `1 ASSO`), `freeAssociates` (aus den GEDCOM-L-Tags `_GODP`/`_WITN` und Notizen „Paten: …“), `noteKinds`, `typeLabel` (Heiratsart übersetzt) und an der
-Person `associatedIn` (wo sie Pate oder Zeuge ist). Entwurf dazu: [docs/spec-paten-quellen.md](docs/spec-paten-quellen.md).
+zuletzt (1.13.0, Stufen 21–24): Orte lesen, schreiben, umbenennen und zusammenführen (Ortsdatensatz `_LOC` nach
+GEDCOM-L mit GOV-Kennung, Koordinaten, Postleitzahl, Region, Land, Kurzname, Notizen, Quellen, Medien), Titel und Art
+von Medienobjekten, Startperson festlegen.
 
 **Kompatibilität:** Die Schnittstelle wächst nur. Jedes Release mit neuen Routen oder Feldern erhöht die **API-Stufe**
 (`apiVersion` in `Info`, heute 19); bestehende Routen, Parameter und Felder behalten Name, Typ und Bedeutung. Ein Client
