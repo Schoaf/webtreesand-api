@@ -91,6 +91,17 @@ final class Apps
             'asset'    => '-arm64\\.dmg$',
             'always'   => false,
         ],
+        'webtrees-mobile' => [
+            'name'     => 'webtrees mobile',
+            'author'   => 'Schoaf',
+            'kind'     => 'phone',
+            'devices'  => ['ios'],
+            'scheme'   => 'webtreesmobile',
+            'download' => ['ios' => 'https://apps.apple.com/app/id6815108154'],
+            'badge'    => ['ios' => 'app-store.svg'],
+            'asset'    => '',
+            'always'   => false,
+        ],
     ];
 
     /**
