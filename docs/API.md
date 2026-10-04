@@ -64,7 +64,7 @@ JSON API for webtrees 2.2, used by wtAnd, wtWin/wtTux and nas4webtrees. Machine-
 
 Entry point: versions, API level, signed-in user, the trees this user can see (with role and rights), CSRF token for POST requests and the largest accepted upload.
 
-Answer fields: `api`, `baseUrl`, `csrf`, `login`, `maxUpload`, `module`, `rewriteUrls`, `trees`, `user`, `webtrees` – full schema in openapi.json.
+Answer fields: `api`, `baseUrl`, `csrf`, `loginForm`, `maxUpload`, `module`, `rewriteUrls`, `trees`, `user`, `webtrees` – full schema in openapi.json.
 
 ### `GET Individuals/{tree}`
 

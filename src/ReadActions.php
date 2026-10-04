@@ -132,7 +132,7 @@ trait ReadActions
             ],
             'trees'       => $trees,
             // Einstellungen der Seite "Anmelden"/"Neues Benutzerkonto anfordern" (Verwaltung > Website > Anmelden und Registrierung)
-            'login'       => $this->loginSettings(),
+            'loginForm'   => $this->loginFormSettings(),
         ]);
     }
 
@@ -298,9 +298,9 @@ trait ReadActions
      * anfordern duerfen, und die Nutzungsbedingungen der Seite "Neues Benutzerkonto anfordern" (null = nicht zeigen).
      * Texte in der Sprache der Anfrage (?lang=), HTML wie in webtrees.
      *
-     * @return array{welcome:string,registration:bool,terms:string|null}
+     * @return array{welcomeMessage:string,isSelfRegistrationAllowed:bool,registrationTerms:string|null}
      */
-    private function loginSettings(): array
+    private function loginFormSettings(): array
     {
         $welcome = match (Site::getPreference('WELCOME_TEXT_AUTH_MODE')) {
             '2'     => I18N::translate('You need to be an authorized user to access this website.'),
@@ -311,9 +311,9 @@ trait ReadActions
         };
 
         return [
-            'welcome'      => $welcome,
-            'registration' => Site::getPreference('USE_REGISTRATION_MODULE') === '1',
-            'terms'        => Site::getPreference('SHOW_REGISTER_CAUTION') === '1'
+            'welcomeMessage'            => $welcome,
+            'isSelfRegistrationAllowed' => Site::getPreference('USE_REGISTRATION_MODULE') === '1',
+            'registrationTerms'         => Site::getPreference('SHOW_REGISTER_CAUTION') === '1'
                 ? I18N::translate('<p>Notice: By completing and submitting this form, you agree:</p><ul><li>to protect the privacy of living individuals listed on our site;</li><li>and in the text box below, to explain to whom you are related, or to provide us with information on someone who should be listed on our website.</li></ul>')
                 : null,
         ];
