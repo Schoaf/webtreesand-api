@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.15.0 – 2026-10-05
+**API levels 27 and 28: houses and farms as places, pending facts.** Everything is additive; older clients keep working.
+- **Level 27 – the whole GEDCOM-L `_LOC` record.** Houses and farms are location records of their own with a type and a
+  superior place (`1 TYPE Hof`, `1 _LOC @L1@`), as GEDCOM-L and local heritage books with farm lists use them.
+  `GET Place` now gives the `_LOC` record's `type`, its `parents` (the hierarchy pointers with their type and date) and
+  its `events` (`1 EVEN` at the place – fire, rebuilding, sale … with type, date, notes and sources). `children` are
+  merged from webtrees' place table and the `_LOC` hierarchy, each with `location` and `type`. A place that exists only
+  as a `_LOC` in the hierarchy (a farm without recorded residents) is listed by `Places?list=1` and answered by `Place`
+  with 0 events instead of `not-found`. `POST Place` takes `type` and `parent`; with `parent` a place without events can
+  be created. Renaming a place takes its farms along.
+- **Level 28 – pending facts.** Facts carry `pending: true` while a change waits for approval (only users who see
+  pending changes get `true`). `sex` is everywhere what the facts show the user, also while a change of sex is pending.
+- Tests: `test_hof`, the test tree has two farms; the documentation is generated again.
+
 ## 1.14.0 – 2026-10-05
 **API levels 25 and 26, both from Andreas Scharf for his app webtrees mobile.** Everything is additive; older clients keep working.
 - **Level 25 – `POST MyAccount`.** The signed-in user changes their own display name, as under “My account” in the
