@@ -78,7 +78,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     // unter diesem Namen liegen bei Bestandsinstallationen noch die Einstellungen (siehe boot()).
     public const string OLD_MODULE_NAME = '_webtreesand-api_';
     // Was welche Stufe gebracht hat, steht in docs/API.md (Spalte "since") und in CHANGELOG.md.
-    public const int    API_VERSION = 30;
+    public const int    API_VERSION = 31;
 
     /** Benutzereinstellung je Baum: die Merkliste als Liste von Personenkennungen. */
     private const string BOOKMARKS_PREF = 'api4webtrees_bookmarks';
