@@ -100,8 +100,9 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     // 24: Startperson - Info je Baum mit startXref (wie webtrees sie bestimmt) und treeDefaultXref; POST StartPerson
     //     (eigene Standardperson, fuer Verwalter auch die des Stammbaums)
     // 25: POST MyAccount - eigenen angezeigten Namen aendern
+    // 27: Info.trees[].availableModules - Module, die der Benutzer im Baum nutzen kann
     // 26: Info.loginForm - Begruessungstext, Selbstregistrierung erlaubt, Bedingungen (Einstellungen der Anmeldeseite)
-    public const int    API_VERSION = 26;
+    public const int    API_VERSION = 27;
 
     /** Benutzereinstellung je Baum: die Merkliste als Liste von Personenkennungen. */
     private const string BOOKMARKS_PREF = 'api4webtrees_bookmarks';
