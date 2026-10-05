@@ -698,14 +698,16 @@ trait PlaceActions
             }
         }
 
-        $context = $this->placeContext($tree);
-        $places  = [];
-        $schon   = [];
+        $context  = $this->placeContext($tree);
+        $places   = [];
+        $schonLoc = [];   // _LOC-Kennung -> Ortsname, wie er an den Ereignissen steht
 
         foreach ($this->placeUsageFast($tree, $records) as $u) {
             $location = $this->placeLocation($tree, $u, $context);
             [$lat, $lng, $source] = $this->placeCoordinates($u, $location, $context);
-            $schon[mb_strtolower($u['name'])] = true;
+            if ($location !== null) {
+                $schonLoc[$location->xref()] ??= $u['name'];
+            }
             $places[] = [
                 'name'        => $u['name'],
                 'events'      => $u['events'],
@@ -722,15 +724,19 @@ trait PlaceActions
         }
 
         // Orte, die nur als _LOC in der Hierarchie bestehen (Hoefe ohne erfasste Bewohner, ab Stufe 27) - mit Elternzeiger,
-        // denn ein _LOC ohne Zeiger und ohne Ereignis ist meist ein Rest, kein Ort des Baums.
-        foreach ($context['byFull'] as $key => $xref) {
+        // denn ein _LOC ohne Zeiger und ohne Ereignis ist meist ein Rest, kein Ort des Baums. Der Name haengt am Namen
+        // des Oberorts, wie er an den Ereignissen steht ("Hof Nr. 2, Offenbach, Hessen"), sonst an der _LOC-Kette.
+        foreach ($context['byFull'] as $xref) {
             $location = $context['locs'][$xref];
-            if (isset($schon[$key]) || $this->locParentXrefs($location) === []) {
+            $eltern   = $this->locParentXrefs($location);
+            if (isset($schonLoc[$xref]) || $eltern === []) {
                 continue;
             }
+            $leaf   = trim(GedcomText::ersterWert($location->gedcom(), 1, 'NAME'));
+            $oben   = $schonLoc[$eltern[0]] ?? (isset($context['locs'][$eltern[0]]) ? $this->locFullName($context['locs'][$eltern[0]], $context['locs']) : '');
             [$lat, $lng] = $this->locCoordinates($location);
             $places[] = [
-                'name'        => $this->locFullName($location, $context['locs']),
+                'name'        => $oben === '' ? $leaf : $leaf . ', ' . $oben,
                 'events'      => 0,
                 'individuals' => 0,
                 'families'    => 0,
