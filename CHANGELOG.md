@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.14.0 – 2026-10-05
+**API levels 25 and 26, both from Andreas Scharf for his app webtrees mobile.** Everything is additive; older clients keep working.
+- **Level 25 – `POST MyAccount`.** The signed-in user changes their own display name, as under “My account” in the
+  browser: body `{realName}`, answer `{ok, realName}`. User name, email and password stay with the browser. Names
+  longer than 64 characters (the column's limit) are refused with `real-name-too-long`; line breaks and control
+  characters become spaces.
+- **Level 26 – `Info.loginForm`.** The settings of webtrees' sign-in page: `welcomeMessage`,
+  `isSelfRegistrationAllowed` and `registrationTerms` (`null` when the site shows no terms), in the language of the
+  request, so apps can show the same welcome text and offer registration only when the site allows it. The two texts are
+  HTML written by the site administrator – show them as HTML only after sanitising.
+- Tests: `test_mein_konto`, `test_anmeldeseite_in_info`; the documentation is generated again, with a sample that has
+  the terms switched on, so `registrationTerms` is described as text or `null`.
+
 ## 1.13.1 – 2026-10-04
 API level 24, unchanged. **iPhone and iPad get an app: webtrees mobile by Andreas Scharf** (App Store, connect scheme
 `webtreesmobile://`), the first app from another author in `src/Apps.php`. On iPhone and iPad the “App” page now

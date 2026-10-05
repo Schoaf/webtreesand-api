@@ -297,6 +297,32 @@ trait ReadActions
     }
 
     /**
+     * Wie die Seite "Anmelden" von webtrees (LoginPage): Begruessungstext je nach Einstellung, ob Besucher ein Konto
+     * anfordern duerfen, und die Nutzungsbedingungen der Seite "Neues Benutzerkonto anfordern" (null = nicht zeigen).
+     * Texte in der Sprache der Anfrage (?lang=), HTML wie in webtrees.
+     *
+     * @return array{welcomeMessage:string,isSelfRegistrationAllowed:bool,registrationTerms:string|null}
+     */
+    private function loginFormSettings(): array
+    {
+        $welcome = match (Site::getPreference('WELCOME_TEXT_AUTH_MODE')) {
+            '2'     => I18N::translate('You need to be an authorized user to access this website.'),
+            '3'     => I18N::translate('You need to be a family member to access this website.'),
+            '4'     => Site::getPreference('WELCOME_TEXT_AUTH_MODE_' . I18N::languageTag())
+                ?: Site::getPreference('WELCOME_TEXT_AUTH_MODE_' . Site::getPreference('LANGUAGE')),
+            default => I18N::translate('Anyone with a user account can access this website.'),
+        };
+
+        return [
+            'welcomeMessage'            => $welcome,
+            'isSelfRegistrationAllowed' => Site::getPreference('USE_REGISTRATION_MODULE') === '1',
+            'registrationTerms'         => Site::getPreference('SHOW_REGISTER_CAUTION') === '1'
+                ? I18N::translate('<p>Notice: By completing and submitting this form, you agree:</p><ul><li>to protect the privacy of living individuals listed on our site;</li><li>and in the text box below, to explain to whom you are related, or to provide us with information on someone who should be listed on our website.</li></ul>')
+                : null,
+        ];
+    }
+
+    /**
      * Eigene Erweiterung dieses Forks, nicht in api4webtrees: nur fuer webtrees-mobile 1.0.0. Ab 1.0.1 nimmt
      * die App die Kinder von parentFamilies ohne die Person selbst - entfernen, sobald 1.0.0 nicht mehr im
      * Umlauf ist.
@@ -350,32 +376,6 @@ trait ReadActions
         }
 
         return $result;
-    }
-
-    /**
-     * Wie die Seite "Anmelden" von webtrees (LoginPage): Begruessungstext je nach Einstellung, ob Besucher ein Konto
-     * anfordern duerfen, und die Nutzungsbedingungen der Seite "Neues Benutzerkonto anfordern" (null = nicht zeigen).
-     * Texte in der Sprache der Anfrage (?lang=), HTML wie in webtrees.
-     *
-     * @return array{welcomeMessage:string,isSelfRegistrationAllowed:bool,registrationTerms:string|null}
-     */
-    private function loginFormSettings(): array
-    {
-        $welcome = match (Site::getPreference('WELCOME_TEXT_AUTH_MODE')) {
-            '2'     => I18N::translate('You need to be an authorized user to access this website.'),
-            '3'     => I18N::translate('You need to be a family member to access this website.'),
-            '4'     => Site::getPreference('WELCOME_TEXT_AUTH_MODE_' . I18N::languageTag())
-                ?: Site::getPreference('WELCOME_TEXT_AUTH_MODE_' . Site::getPreference('LANGUAGE')),
-            default => I18N::translate('Anyone with a user account can access this website.'),
-        };
-
-        return [
-            'welcomeMessage'            => $welcome,
-            'isSelfRegistrationAllowed' => Site::getPreference('USE_REGISTRATION_MODULE') === '1',
-            'registrationTerms'         => Site::getPreference('SHOW_REGISTER_CAUTION') === '1'
-                ? I18N::translate('<p>Notice: By completing and submitting this form, you agree:</p><ul><li>to protect the privacy of living individuals listed on our site;</li><li>and in the text box below, to explain to whom you are related, or to provide us with information on someone who should be listed on our website.</li></ul>')
-                : null,
-        ];
     }
 
     /**
