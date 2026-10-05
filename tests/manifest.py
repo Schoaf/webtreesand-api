@@ -101,6 +101,9 @@ ROUTEN = [
      "Change title and type of a media object (first file: `2 TITL`, `2 FORM` / `3 TYPE`); everything else stays.",
      [XREF], "`{title?, type?}` – type one of photo, document, certificate, book, newspaper, card, map, tombstone, audio, video, "
      "electronic, film, fiche, magazine, manuscript, painting, other; empty removes it."),
+    ("post", "MyAccount", False, 25, "member",
+     "Change the signed-in user's own display name, as under “My account” in the browser. Username, email and password "
+     "stay with the browser.", [], "`{realName}`. Answer: `{ok, realName}`."),
     ("post", "StartPerson", True, 24, "member",
      "Set the start person. Without `forTree` the signed-in user's own default individual (as under “My account”; an empty "
      "`xref` removes it), with `forTree: true` the family tree's default individual (managers only). Route Info names per "
@@ -283,6 +286,7 @@ def sammeln(u):
     merken("post", "MediaFromFile", admin.post("MediaFromFile", "testbaum", {"file": "archiv/manifest.png"}, xref="I1"))
     merken("post", "Bookmarks", admin.post("Bookmarks", "testbaum", {"xref": "I1", "add": True}))
     merken("post", "StartPerson", admin.post("StartPerson", "testbaum", {"xref": "I1"}))
+    merken("post", "MyAccount", admin.post("MyAccount", None, {"realName": admin.info()["user"]["realName"]}))
     archiv = admin.post("Repository", "testbaum", {"name": "Manifestarchiv"})
     merken("post", "Repository", archiv)
     quelle = admin.post("Source", "testbaum", {"title": "Manifestquelle", "author": "Manifest", "repository": archiv.json["xref"], "callNumber": "M 1"})

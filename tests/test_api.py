@@ -734,6 +734,17 @@ class Schreiben(unittest.TestCase):
         self.assertEqual(("", "I1"), (r.json["defaultXref"], r.json["treeDefaultXref"]))
         self.assertEqual("not-logged-in", U.sitzung().post("StartPerson", "testbaum", {"xref": "I1"}).json["error"])
 
+    def test_mein_konto(self):
+        """Stufe 25: MyAccount aendert den eigenen angezeigten Namen."""
+        m = U.sitzung("mitglied")
+        alt = m.info()["user"]["realName"]
+        r = m.post("MyAccount", None, {"realName": "  Neuer Name  "})
+        self.assertEqual((True, "Neuer Name"), (r.json["ok"], r.json["realName"]), r)
+        self.assertEqual("Neuer Name", m.info()["user"]["realName"])
+        self.assertEqual("missing-real-name", m.post("MyAccount", None, {"realName": " "}).json["error"])
+        self.assertEqual("not-logged-in", U.sitzung().post("MyAccount", None, {"realName": "X"}).json["error"])
+        m.post("MyAccount", None, {"realName": alt})
+
     def test_name_aendern_behaelt_unterangaben(self):
         # Beim Aendern des Namens darf nichts verloren gehen: Praefix, Spitzname und Notiz bleiben,
         # GIVN/SURN/NSFX folgen dem neuen Namen.
@@ -776,7 +787,7 @@ class Schreiben(unittest.TestCase):
         self.assertEqual(["wtand", "wtwin", "wttux", "wtmac"], kennungen[:4])
 
     def test_seite_app_je_geraet(self):
-        """Die Seite App zeigt die Apps fuer das Geraet des Besuchers zuerst; Apple ohne passende App bekommt den Browser-Hinweis."""
+        """Die Seite App zeigt die Apps fuer das Geraet des Besuchers zuerst; ein Geraet ohne passende App bekommt den Browser-Hinweis."""
         s = U.sitzung("admin")
 
         def seite(user_agent):
@@ -794,10 +805,12 @@ class Schreiben(unittest.TestCase):
         self.assertLess(windows.index("wtWin"), windows.index("wtAnd"))
         self.assertIn("wtwin://connect?", windows)
 
+        # iPhone: die App aus der Liste fuer iOS steht oben, mit Store-Badge und Koppel-Link, kein Browser-Hinweis
         iphone = seite("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)")
-        # webtrees mobile (iOS) ist eingetragen - iPhones bekommen eine App statt des Browser-Hinweises.
         self.assertNotIn("noch kein eigenes Programm", iphone)
-        self.assertIn("webtrees mobile", iphone)
+        self.assertIn("webtreesmobile://connect?", iphone)
+        self.assertIn("app-store.svg", iphone)
+        self.assertLess(iphone.index("webtrees mobile"), iphone.index("wtAnd"))
 
         mac = seite("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)")
         self.assertNotIn("noch kein eigenes Programm", mac)
