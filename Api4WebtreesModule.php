@@ -52,6 +52,7 @@ use function strtolower;
  *   src/ReadActions.php   lesende JSON-Endpunkte (GET)
  *   src/WriteActions.php  schreibende JSON-Endpunkte (POST)
  *   src/JsonBuilders.php  Bausteine der JSON-Antworten
+ *   src/MergeActions.php  Personen zusammenfuehren mit Vorschau, Protokoll und Rueckgaengig
  *   src/GedcomText.php    reine GEDCOM-Textfunktionen (bauen, pruefen, entschaerfen)
  */
 class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface, ModuleConfigInterface, ModuleFooterInterface, MiddlewareInterface
@@ -64,6 +65,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     use WriteActions;
     use JsonBuilders;
     use PlaceActions;
+    use MergeActions;
 
 
     // webtrees benennt ein eigenes Modul nach seinem Ordner ("_api4webtrees_") - was setName() im Modul sagt,
@@ -103,7 +105,10 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     // 26: Info.loginForm - Begruessungstext, Selbstregistrierung erlaubt, Bedingungen (Einstellungen der Anmeldeseite)
     // 28: Fakten mit pending (wartet auf Freigabe); sex ueberall so, wie die Fakten es dem Benutzer zeigen (auch bei
     //     ausstehender Aenderung des Geschlechts)
-    public const int    API_VERSION = 28;
+    // 29: Personen zusammenfuehren - POST Merge (Vorschau mit Fakten beider, Verweisen und weiteren Paaren; Fakten
+    //     waehlen), POST MergeUndo (Rueckgaengig ueber die Aenderungstabelle, nur wenn seitdem nichts geaendert wurde),
+    //     Merges (Protokoll je Baum); nur Verwalter des Stammbaums
+    public const int    API_VERSION = 29;
 
     /** Benutzereinstellung je Baum: die Merkliste als Liste von Personenkennungen. */
     private const string BOOKMARKS_PREF = 'api4webtrees_bookmarks';
@@ -242,7 +247,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
     public function customModuleVersion(): string
     {
-        return '1.15.0';
+        return '1.16.0';
     }
 
     public function customModuleLatestVersionUrl(): string

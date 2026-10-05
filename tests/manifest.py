@@ -24,7 +24,8 @@ OPENAPI = os.path.join(DOCS, "openapi.json")
 ROUTE = "/module/_api4webtrees_/{action}"
 
 ROLLEN = {"visitor": "anyone (visitors see only what webtrees shows them)", "member": "signed in, member of the tree",
-          "editor": "editor of the tree", "moderator": "moderator of the tree", "admin": "site administrator"}
+          "editor": "editor of the tree", "moderator": "moderator of the tree", "manager": "manager of the tree",
+          "admin": "site administrator"}
 
 P = lambda name, beschreibung, typ="string", pflicht=False: {  # noqa: E731
     "name": name, "in": "query", "required": pflicht, "description": beschreibung, "schema": {"type": typ}}
@@ -129,6 +130,28 @@ ROUTEN = [
      "`skipped`. With `preview: true` nothing changes. Without automatic acceptance the changes are pending as usual.",
      [], "`{from, to, preview?}`. Answer: `{ok, preview, from, to, merge, records, events, subPlaces, skipped, "
      "location: {from, to, conflicts}, pending?}`."),
+    ("post", "Merge", True, 29, "manager",
+     "Merge two individuals: `xref2` is absorbed into `xref1`. Everything that pointed to `xref2` (families, sources, notes, "
+     "media, associations) points to `xref1` afterwards, duplicate links are dropped, `xref2` is deleted – as webtrees' own "
+     "merge does. Which facts stay is up to the client (`keep1`, `keep2`, fact ids); links (FAMC, FAMS, OBJE) always stay "
+     "from both. With `preview: true` nothing changes: the answer lists both persons, their facts with a suggestion "
+     "(`keep`: all of the first, from the second only what the first does not have word for word; `same` marks identical "
+     "facts, `link` the ones that always stay), the records that link to `xref2` and `suggestions` – further pairs that are "
+     "probably the same person too (father, mother, spouses and children with the same name). Without `preview` the merge "
+     "is done and remembered: `mergeId` is the handle for `MergeUndo`. Only managers of the tree, like in webtrees. Without "
+     "automatic acceptance the changes are pending as usual.",
+     [], "`{xref1, xref2, keep1?, keep2?, preview?}`. Answer (preview): `{ok, preview, person1, person2, facts1, facts2, links, "
+     "suggestions}`; (merge): `{ok, preview, xref, removed, mergeId, records, pending}`."),
+    ("post", "MergeUndo", True, 29, "manager",
+     "Take a merge back. webtrees keeps every change with the old and the new text; the module remembered which changes "
+     "belong to the merge and replays the old texts in reverse order – the deleted individual comes back under its old "
+     "identifier, links point to it again. Only if none of the records was changed since: otherwise `changed-since` with "
+     "the records in `changed`, and nothing is changed. Pending changes of the merge are rejected instead. With "
+     "`preview: true` only the check is done. Without automatic acceptance the undo is pending as usual.",
+     [], "`{id, preview?}`. Answer: `{ok, preview, xref, removed, records, pending?}`."),
+    ("get", "Merges", True, 29, "manager",
+     "The merges of this tree, newest first: who merged whom into whom and when, how many records were changed, and "
+     "whether the merge was undone (`undone`: time or `null`).", [], None),
     ("post", "Fact", True, 1, "editor",
      "Add or change a fact or event. Unmentioned sub-lines (sources, media …) are kept when changing.",
      [XREF], "`{factId?, tag, value?, date?, place?, note?, type?}` or `{factId?, gedcom: \"1 BIRT\\n2 DATE …\"}`. "
@@ -179,7 +202,8 @@ ROUTEN = [
 
 FEHLER = sorted(set(re.findall(r"error\((\d+), '([a-z-]+)'\)", "".join(
     open(os.path.join(umgebung.MODUL, f)).read() for f in
-    ["Api4WebtreesModule.php", "src/ReadActions.php", "src/WriteActions.php", "src/AppPages.php"]))), key=lambda e: (e[0], e[1]))
+    ["Api4WebtreesModule.php", "src/ReadActions.php", "src/WriteActions.php", "src/AppPages.php", "src/MergeActions.php"]))),
+    key=lambda e: (e[0], e[1]))
 
 
 # ── Schema aus Beispielen ────────────────────────────────────────────────────────────────────────────────────────
@@ -323,6 +347,15 @@ def sammeln(u):
     link = admin.post("Link", "testbaum", {"individual": ehe.json["xref"], "relation": "spouse", "relativeTo": "I4"})
     merken("post", "Link", link)
     merken("post", "Unlink", admin.post("Unlink", "testbaum", {"family": link.json["family"], "individual": ehe.json["xref"]}))
+    # Zusammenfuehren: zwei Wegwerfpersonen, Vorschau, Zusammenfuehren, Protokoll, Rueckgaengig
+    d1 = admin.post("AddIndividual", "testbaum", {"relation": "none", "given": "Manifest", "surname": "Doppel", "sex": "M", "dead": True, "birthDate": "1850"}).json["xref"]
+    d2 = admin.post("AddIndividual", "testbaum", {"relation": "none", "given": "Manifest", "surname": "Doppel", "sex": "M", "dead": True, "deathDate": "1900"}).json["xref"]
+    merken("post", "Merge", admin.post("Merge", "testbaum", {"xref1": d1, "xref2": d2, "preview": True}))
+    zusammen = admin.post("Merge", "testbaum", {"xref1": d1, "xref2": d2})
+    merken("post", "Merge", zusammen)
+    merken("post", "MergeUndo", admin.post("MergeUndo", "testbaum", {"id": zusammen.json["mergeId"], "preview": True}))
+    merken("post", "MergeUndo", admin.post("MergeUndo", "testbaum", {"id": zusammen.json["mergeId"]}))
+    merken("post", "MergeUndo", admin.post("MergeUndo", "testbaum", {"id": zusammen.json["mergeId"]}))
     # Koppeln: die Seite "App" legt den Einmal-Code an, eine frische Sitzung loest ihn ein.
     seite = admin._senden(urllib.request.Request(admin.url("/module/_api4webtrees_/App")))
     code = re.findall(r"[0-9a-f]{48}", seite.text)[0]

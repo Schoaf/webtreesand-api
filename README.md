@@ -176,7 +176,7 @@ file's path inside the tree's media folder, for naming the same file to another 
 ### Compatibility
 
 The interface only grows. Every release that adds routes or fields raises the **API level** (`apiVersion` in `Info`,
-19 today); existing routes, parameters and fields keep their names, types and meaning. A client built for level N works
+29 today); existing routes, parameters and fields keep their names, types and meaning. A client built for level N works
 with every module from level N on, and an older client keeps working with a newer module – it simply does not see
 the new fields. New fields are optional, so clients should ignore what they do not know. The tests check every answer
 against the documented schema, so a field cannot disappear unnoticed. Where a limit is raised (generations, page

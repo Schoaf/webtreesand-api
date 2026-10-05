@@ -79,6 +79,7 @@ def leseaufrufe(baum="testbaum"):
         ("Places", baum, {"q": ""}),
         ("Places", baum, {"q": "Marker"}),
         ("Places", baum, {"list": 1}),
+        ("Merges", baum, {}),
     ]
     for ort in ["Offenbach", "Bieber, Offenbach", "Markerlebendort", "Markerkonfidenzort", "Gibtesnicht"]:
         aufrufe.append(("Place", baum, {"name": ort}))
@@ -422,6 +423,96 @@ class Orte(unittest.TestCase):
         self.assertEqual("not-editable", U.sitzung("mitglied").post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": "X"}).json["error"])
         self.assertEqual("not-found", U.sitzung("bearbeiter").post("PlaceRename", "testbaum", {"from": "Markerkonfidenzort", "to": "X"}).json["error"])
         self.assertEqual("name-missing", s.post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": " , "}).json["error"])
+
+class Zusammenfuehren(unittest.TestCase):
+    """Stufe 29: POST Merge mit Vorschau, GET Merges, POST MergeUndo - nur Verwalter."""
+
+    def person(self, s, **felder):
+        a = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Doppel", "surname": "Testfall", "sex": "M", "dead": True} | felder)
+        self.assertEqual(True, a.json["ok"], a)
+        return a.json["xref"]
+
+    def test_zzz_zusammenfuehren_und_rueckgaengig(self):
+        s = U.sitzung("admin")
+        p1 = self.person(s, birthDate="1850")
+        p2 = self.person(s, birthDate="1850", deathDate="1900")
+        s.post("Fact", "testbaum", {"tag": "OCCU", "value": "Schmied"}, xref=p1)
+        s.post("Fact", "testbaum", {"tag": "OCCU", "value": "Schmied"}, xref=p2)
+        s.post("Fact", "testbaum", {"tag": "RESI", "place": "Offenbach am Main"}, xref=p2)
+        # p2 ist Partner von I4 (neue Familie) und wird an einer Quelle zitiert
+        fam = s.post("Link", "testbaum", {"individual": p2, "relation": "spouse", "relativeTo": "I4"}).json["family"]
+        # Vorschau: alle Fakten von p1, von p2 nur Tod und Wohnort (Name, Geschlecht, Geburt, Beruf sind wortgleich)
+        v = s.post("Merge", "testbaum", {"xref1": p1, "xref2": p2, "preview": True}).json
+        self.assertEqual((True, True, p1, p2), (v["ok"], v["preview"], v["person1"]["xref"], v["person2"]["xref"]), v)
+        # p1 hat "1 DEAT Y" (verstorben ohne Datum) - der Tod mit Datum von p2 ersetzt ihn
+        self.assertEqual({"NAME": True, "SEX": True, "BIRT": True, "OCCU": True, "DEAT": False}, {f["tag"]: f["keep"] for f in v["facts1"]}, v["facts1"])
+        behalten2 = {f["tag"]: f["keep"] for f in v["facts2"] if not f["link"]}
+        self.assertEqual({"NAME": False, "SEX": False, "BIRT": False, "OCCU": False, "DEAT": True, "RESI": True}, behalten2, v["facts2"])
+        self.assertEqual([("FAMS", True)], [(f["tag"], f["keep"]) for f in v["facts2"] if f["link"]], "die Familie bleibt immer")
+        self.assertEqual([fam], [l["xref"] for l in v["links"]], v["links"])
+        self.assertEqual([], v["suggestions"])
+        self.assertEqual(p2, s.get("Individual", "testbaum", xref=p2).json["person"]["xref"], "die Vorschau aendert nichts")
+        # Zusammenfuehren mit dem Vorschlag
+        a = s.post("Merge", "testbaum", {"xref1": p1, "xref2": p2}).json
+        self.assertEqual((True, False, p1, p2, False), (a["ok"], a["preview"], a["xref"], a["removed"], a["pending"]), a)
+        self.assertTrue(a["mergeId"])
+        self.assertEqual("not-found", s.get("Individual", "testbaum", xref=p2).json["error"], "p2 ist weg")
+        rest = s.get("Individual", "testbaum", xref=p1).json
+        tags = sorted(f["tag"] for f in rest["facts"])
+        self.assertEqual(["BIRT", "DEAT", "NAME", "OCCU", "RESI", "SEX"], tags, "Tod und Wohnort kamen dazu, nichts doppelt")
+        self.assertEqual([fam], [f["xref"] for f in rest["spouseFamilies"]], "p1 steht jetzt in der Familie")
+        paar = s.get("Family", "testbaum", xref=fam).json
+        self.assertEqual({"I4", p1}, {paar["husband"]["xref"], paar["wife"]["xref"]}, "die Familie zeigt auf p1")
+        # Protokoll
+        m = s.get("Merges", "testbaum").json["merges"]
+        self.assertEqual((a["mergeId"], p1, p2, None), (m[0]["id"], m[0]["xref"], m[0]["removed"], m[0]["undone"]), m[0])
+        self.assertEqual("not-manager", U.sitzung("bearbeiter").get("Merges", "testbaum").json["error"])
+        # Rueckgaengig: Vorschau, dann wirklich
+        u = s.post("MergeUndo", "testbaum", {"id": a["mergeId"], "preview": True}).json
+        self.assertEqual((True, True, p2), (u["ok"], u["preview"], u["removed"]), u)
+        u = s.post("MergeUndo", "testbaum", {"id": a["mergeId"]}).json
+        self.assertEqual((True, False), (u["ok"], u["preview"]), u)
+        zurueck = s.get("Individual", "testbaum", xref=p2).json
+        self.assertEqual(["BIRT", "DEAT", "NAME", "OCCU", "RESI", "SEX"], sorted(f["tag"] for f in zurueck["facts"]), "p2 ist wieder da, mit allem")
+        self.assertEqual([fam], [f["xref"] for f in zurueck["spouseFamilies"]])
+        self.assertEqual(["BIRT", "DEAT", "NAME", "OCCU", "SEX"], sorted(f["tag"] for f in s.get("Individual", "testbaum", xref=p1).json["facts"]), "p1 wie vorher (mit DEAT Y)")
+        paar = s.get("Family", "testbaum", xref=fam).json
+        self.assertEqual({"I4", p2}, {paar["husband"]["xref"], paar["wife"]["xref"]}, "die Familie zeigt wieder auf p2")
+        self.assertIsNotNone(s.get("Merges", "testbaum").json["merges"][0]["undone"])
+        self.assertEqual("already-undone", s.post("MergeUndo", "testbaum", {"id": a["mergeId"]}).json["error"])
+        # Noch einmal zusammenfuehren, dann p1 aendern: Rueckgaengig lehnt ab und aendert nichts
+        b = s.post("Merge", "testbaum", {"xref1": p1, "xref2": p2}).json
+        self.assertEqual(True, b["ok"], b)
+        s.post("Fact", "testbaum", {"tag": "OCCU", "value": "Baecker"}, xref=p1)
+        u = s.post("MergeUndo", "testbaum", {"id": b["mergeId"]}).json
+        self.assertEqual(("changed-since", [p1]), (u["error"], [c["xref"] for c in u["changed"]]), u)
+        self.assertEqual("not-found", s.get("Individual", "testbaum", xref=p2).json["error"], "nichts zurueckgedreht")
+        # Fehler und Rechte
+        self.assertEqual("same-record", s.post("Merge", "testbaum", {"xref1": p1, "xref2": p1}).json["error"])
+        self.assertEqual("not-found", s.post("Merge", "testbaum", {"xref1": p1, "xref2": "I999"}).json["error"])
+        self.assertEqual("xref-missing", s.post("Merge", "testbaum", {"xref1": p1}).json["error"])
+        self.assertEqual("not-manager", U.sitzung("bearbeiter").post("Merge", "testbaum", {"xref1": "I1", "xref2": "I2", "preview": True}).json["error"])
+        self.assertEqual("not-manager", U.sitzung("mitglied").post("MergeUndo", "testbaum", {"id": b["mergeId"]}).json["error"])
+        self.assertEqual("not-found", s.post("MergeUndo", "testbaum", {"id": "gibtesnicht"}).json["error"])
+
+    def test_zzz_verwalter_ohne_sofortfreigabe(self):
+        """Ein Verwalter ohne auto_accept: Zusammenfuehren und Rueckgaengig sind ausstehende Aenderungen."""
+        adm = U.sitzung("admin")
+        p1 = self.person(adm, given="Ausstehend")
+        p2 = self.person(adm, given="Ausstehend", deathDate="1901")
+        v = U.sitzung("verwalter")
+        try:
+            a = v.post("Merge", "testbaum", {"xref1": p1, "xref2": p2}).json
+            self.assertEqual((True, True), (a["ok"], a["pending"]), a)
+            self.assertEqual(True, adm.get("Individual", "testbaum", xref=p2).json.get("ok", True), "p2 noch da (Loeschung wartet)")
+            u = v.post("MergeUndo", "testbaum", {"id": a["mergeId"]}).json
+            self.assertEqual(True, u["ok"], u)
+            self.assertEqual([], umgebung.sql("SELECT change_id FROM wt_change WHERE status = 'pending' AND xref IN (?, ?)", p1, p2), "alles verworfen")
+            self.assertEqual(True, adm.get("Individual", "testbaum", xref=p2).json.get("ok", True), "p2 bleibt")
+            self.assertEqual("already-undone", v.post("MergeUndo", "testbaum", {"id": a["mergeId"]}).json["error"])
+        finally:
+            adm.post("Reject", "testbaum", {})
+
 
 class Schreiben(unittest.TestCase):
     def fakten(self, s, xref):

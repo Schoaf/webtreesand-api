@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.16.0 – 2026-10-05
+**API level 29: merging individuals, with undo.** Everything is additive; older clients keep working.
+- **`POST Merge`** merges two individuals the way webtrees' own merge does: `xref2` is absorbed into `xref1`, everything
+  that pointed to it (families, source citations, notes, media, associations) points to `xref1` afterwards, duplicate
+  links are dropped, `xref2` is deleted. Which facts stay is up to the client (`keep1`, `keep2`); links (FAMC, FAMS,
+  OBJE) always stay from both. `preview: true` changes nothing and answers with both persons, their facts with a
+  suggestion (`keep`: all of the first, from the second only what the first does not have word for word; a bare
+  `1 DEAT Y` gives way to a dated death), the records linking to `xref2` and `suggestions` – further pairs that are
+  probably duplicates too (father, mother, spouses and children with the same name). Only managers of the tree, as in
+  webtrees. Without automatic acceptance the changes are pending as usual.
+- **`POST MergeUndo`** takes a merge back. webtrees keeps every change with the old and the new text; the module
+  remembers which changes belong to a merge (module setting per tree, last 200) and replays the old texts in reverse
+  order – the deleted individual comes back under its old identifier. Only if none of the records was edited since,
+  otherwise `changed-since` with the records and nothing changes. Pending changes of the merge are rejected instead.
+- **`GET Merges`**: the log of the tree's merges, newest first, with `undone`.
+- Tests: `Zusammenfuehren` (merge, undo, changed-since, rights, manager without automatic acceptance); the
+  documentation is generated again.
+
 ## 1.15.0 – 2026-10-05
 **API levels 27 and 28: houses and farms as places, pending facts.** Everything is additive; older clients keep working.
 - **Level 27 – the whole GEDCOM-L `_LOC` record.** Houses and farms are location records of their own with a type and a
