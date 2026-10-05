@@ -145,7 +145,7 @@ GEDCOM-L mit GOV-Kennung, Koordinaten, Postleitzahl, Region, Land, Kurzname, Not
 von Medienobjekten, Startperson festlegen.
 
 **Kompatibilität:** Die Schnittstelle wächst nur. Jedes Release mit neuen Routen oder Feldern erhöht die **API-Stufe**
-(`apiVersion` in `Info`, heute 19); bestehende Routen, Parameter und Felder behalten Name, Typ und Bedeutung. Ein Client
+(`apiVersion` in `Info`, heute 29); bestehende Routen, Parameter und Felder behalten Name, Typ und Bedeutung. Ein Client
 für Stufe N läuft mit jedem Modul ab Stufe N, und ein älterer Client läuft mit einem neueren Modul weiter, er sieht die
 neuen Felder nur nicht. Die Tests prüfen jede Antwort gegen das dokumentierte Schema, ein Feld kann also nicht unbemerkt
 verschwinden. Müsste sich je etwas unverträglich ändern, wäre es eine neue Route, nie eine geänderte.
