@@ -18,6 +18,7 @@ use Fisharebest\Webtrees\Media;
 use Fisharebest\Webtrees\Module\ModuleChartInterface;
 use Fisharebest\Webtrees\Module\RelationshipsChartModule;
 use Fisharebest\Webtrees\Place;
+use Fisharebest\Webtrees\Module\ModuleInterface;
 use Fisharebest\Webtrees\Registry;
 use Fisharebest\Webtrees\Repository;
 use Fisharebest\Webtrees\GedcomRecord;
@@ -107,6 +108,8 @@ trait ReadActions
                 // des Stammbaums, sonst die erste Person - nur wenn der Benutzer sie sehen darf (ab Stufe 24)
                 'startXref'   => $this->startXref($tree, $user),
                 'treeDefaultXref' => $tree->getPreference('PEDIGREE_ROOT_ID'),
+                // ab Stufe 27: Module, die dieser Benutzer in diesem Baum nutzen kann (z. B. privacy-policy)
+                'availableModules' => $this->availableModules($tree, $user),
                 // Nummer der letzten Aenderung im Baum (auch ausstehende, angenommene, verworfene). Ein anderer Wert
                 // als beim letzten Mal heisst: neu laden. Nur auf Gleichheit vergleichen - ein neuer GEDCOM-Import
                 // loescht die Aenderungsliste, dann wird die Zahl kleiner.
@@ -317,6 +320,28 @@ trait ReadActions
                 ? I18N::translate('<p>Notice: By completing and submitting this form, you agree:</p><ul><li>to protect the privacy of living individuals listed on our site;</li><li>and in the text box below, to explain to whom you are related, or to provide us with information on someone who should be listed on our website.</li></ul>')
                 : null,
         ];
+    }
+
+    /**
+     * Namen der eingeschalteten Module, die dieser Benutzer in diesem Baum nutzen kann - damit eine App z. B. den Link
+     * zur Datenschutzerklaerung nur zeigt, wenn es das Modul gibt. Module mit Zugriffsstufe (Menues, Reiter, Fusszeilen
+     * ...) zaehlen nur, wenn die Stufe fuer den Benutzer reicht - dieselbe Pruefung wie ModuleService::findByComponent().
+     *
+     * @return list<string>
+     */
+    private function availableModules(Tree $tree, UserInterface $user): array
+    {
+        $module_service = Registry::container()->get(ModuleService::class);
+        $user_level     = Auth::accessLevel($tree, $user);
+
+        return $module_service->all()
+            ->filter(static fn (ModuleInterface $module): bool => $module_service->componentsWithAccess()
+                ->filter(static fn (string $interface): bool => $module instanceof $interface)
+                ->every(static fn (string $interface): bool => $module->accessLevel($tree, $interface) >= $user_level))
+            ->map(static fn (ModuleInterface $module): string => $module->name())
+            ->sort()
+            ->values()
+            ->all();
     }
 
     /**
