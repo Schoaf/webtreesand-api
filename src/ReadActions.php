@@ -30,6 +30,7 @@ use Fisharebest\Webtrees\Services\RelationshipService;
 use Fisharebest\Webtrees\Services\SearchService;
 use Fisharebest\Webtrees\Services\TreeService;
 use Fisharebest\Webtrees\Session;
+use Fisharebest\Webtrees\Site;
 use Fisharebest\Webtrees\Tree;
 use Fisharebest\Webtrees\Validator;
 use Fisharebest\Webtrees\Webtrees;
@@ -130,6 +131,8 @@ trait ReadActions
                 'isAdmin'  => Auth::isAdmin($user),
             ],
             'trees'       => $trees,
+            // Einstellungen der Seite "Anmelden"/"Neues Benutzerkonto anfordern" (Verwaltung > Website > Anmelden und Registrierung)
+            'loginForm'   => $this->loginFormSettings(),
         ]);
     }
 
@@ -288,6 +291,32 @@ trait ReadActions
             // ab Stufe 19: wo diese Person Pate, Trauzeuge ... ist (Gegenrichtung zu associates an den Fakten)
             'associatedIn'   => $this->associatedIn($individual),
         ]);
+    }
+
+    /**
+     * Wie die Seite "Anmelden" von webtrees (LoginPage): Begruessungstext je nach Einstellung, ob Besucher ein Konto
+     * anfordern duerfen, und die Nutzungsbedingungen der Seite "Neues Benutzerkonto anfordern" (null = nicht zeigen).
+     * Texte in der Sprache der Anfrage (?lang=), HTML wie in webtrees.
+     *
+     * @return array{welcomeMessage:string,isSelfRegistrationAllowed:bool,registrationTerms:string|null}
+     */
+    private function loginFormSettings(): array
+    {
+        $welcome = match (Site::getPreference('WELCOME_TEXT_AUTH_MODE')) {
+            '2'     => I18N::translate('You need to be an authorized user to access this website.'),
+            '3'     => I18N::translate('You need to be a family member to access this website.'),
+            '4'     => Site::getPreference('WELCOME_TEXT_AUTH_MODE_' . I18N::languageTag())
+                ?: Site::getPreference('WELCOME_TEXT_AUTH_MODE_' . Site::getPreference('LANGUAGE')),
+            default => I18N::translate('Anyone with a user account can access this website.'),
+        };
+
+        return [
+            'welcomeMessage'            => $welcome,
+            'isSelfRegistrationAllowed' => Site::getPreference('USE_REGISTRATION_MODULE') === '1',
+            'registrationTerms'         => Site::getPreference('SHOW_REGISTER_CAUTION') === '1'
+                ? I18N::translate('<p>Notice: By completing and submitting this form, you agree:</p><ul><li>to protect the privacy of living individuals listed on our site;</li><li>and in the text box below, to explain to whom you are related, or to provide us with information on someone who should be listed on our website.</li></ul>')
+                : null,
+        ];
     }
 
     /**
