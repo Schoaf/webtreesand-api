@@ -1643,6 +1643,27 @@ trait WriteActions
         ]);
     }
 
+    /**
+     * Eigenes Konto aendern (ab Stufe 25): Rumpf { realName } - der angezeigte Name, wie unter "Mein Konto" im
+     * Browser. Benutzername, E-Mail und Passwort bleiben dem Browser vorbehalten.
+     */
+    public function postMyAccountAction(ServerRequestInterface $request): ResponseInterface
+    {
+        if (!Auth::check()) {
+            return $this->error(403, 'not-logged-in');
+        }
+
+        $real_name = trim($this->str($this->body($request), 'realName'));
+
+        if ($real_name === '') {
+            return $this->error(400, 'missing-real-name');
+        }
+
+        Auth::user()->setRealName($real_name);
+
+        return response(['ok' => true, 'realName' => Auth::user()->realName()]);
+    }
+
     private function written(GedcomRecord $record, array $extra = [], int $status = 200): ResponseInterface
     {
         $pending = DB::table('change')
