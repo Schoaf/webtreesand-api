@@ -83,22 +83,29 @@ ROUTEN = [
      "Place suggestions while typing, like webtrees' own autocomplete. `Berlin, Deu` searches per level. "
      "With `list=1` (level 21, visitor): every place at a visible fact – as written there – with the number of "
      "events, individuals and families, coordinates and their origin (`location`: the GEDCOM-L `_LOC` record, "
-     "`mapData`: webtrees' geographic data, `event`: `MAP` at a fact), the `_LOC` record and its GOV identifier.",
+     "`mapData`: webtrees' geographic data, `event`: `MAP` at a fact), the `_LOC` record and its GOV identifier. From level 27 "
+     "also `type` (the `_LOC` record's TYPE: farm, house, parish …) and places that exist only as a `_LOC` in the GEDCOM-L "
+     "hierarchy (`1 _LOC @parent@`, e.g. a farm without recorded residents) with 0 events.",
      [P("q", "Beginning or part of the place name"), P("list", "`1`: list of all places (level 21)", "integer")], None),
     ("get", "Place", True, 21, "visitor",
      "One place: levels, sub-places one level down, coordinates with origin, the `_LOC` record (GOV identifier, "
      "coordinates, notes, sources, media) and the individuals and families with their events at this place "
      "(at most 1000 each). The `_LOC` record is found like the Ortsregister module does: `3 _LOC` at the events, "
-     "the module's binding, its GOV identifier, the leaf name if unique on both sides. `not-found` if no visible "
-     "event names the place.",
+     "the module's binding, its GOV identifier, the leaf name if unique on both sides. From level 27 the `_LOC` record also "
+     "carries `type` (TYPE), `parents` (the GEDCOM-L hierarchy `1 _LOC @parent@` with pointer type and date) and `events` "
+     "(`1 EVEN` at the place: fire, rebuilding, change of ownership … with type, date, notes, sources); `children` are "
+     "merged from webtrees' place table and the `_LOC` hierarchy, each with `location` and `type`. A place that exists only "
+     "as a `_LOC` in the hierarchy is answered with 0 events. `not-found` if neither a visible event nor a `_LOC` names the place.",
      [P("name", "The place as written at the event, e.g. `Kortau, Allenstein`", pflicht=True)], None),
     ("post", "Place", True, 22, "editor",
      "Save a place's data in its GEDCOM-L `_LOC` record – created if there is none. Only the parts named in the body are "
      "replaced; sources, media and unknown lines of the `_LOC` stay. If the leaf name is not unique in the tree, the events "
      "at the place get the pointer `3 _LOC @L1@` (`linked`: how many). `mapData: true` also writes the coordinates to "
      "webtrees' geographic data (site administrators only) – webtrees' own maps read only those and `MAP` at the events.",
-     [], "`{name, gov?, lat?, lng?, note?, media?, mapData?, postalCode?, region?, country?, shortName?}` – `lat`/`lng` together, `null` removes the coordinates; "
-     "`media` replaces the linked media objects (upload new ones with route Media and the `_LOC` identifier). "
+     [], "`{name, gov?, lat?, lng?, note?, media?, mapData?, postalCode?, region?, country?, shortName?, type?, parent?}` – `lat`/`lng` together, `null` removes the coordinates; "
+     "`media` replaces the linked media objects (upload new ones with route Media and the `_LOC` identifier). `type` (level 27) sets the "
+     "`_LOC` record's TYPE, `parent` the identifier of the superior `_LOC` (`1 _LOC @parent@`, replaces all hierarchy pointers; `null` detaches); "
+     "with `parent` a place without events may be created (a farm without recorded residents). "
      "Answer: `{ok, xref, pending, linked, mapData}`, status 201 when the `_LOC` was created."),
     ("post", "MediaObject", True, 23, "editor",
      "Change title and type of a media object (first file: `2 TITL`, `2 FORM` / `3 TYPE`); everything else stays.",

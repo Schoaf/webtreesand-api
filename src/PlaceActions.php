@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Api4Webtrees;
 
 use Fisharebest\Webtrees\Auth;
+use Fisharebest\Webtrees\Date;
 use Fisharebest\Webtrees\DB;
 use Fisharebest\Webtrees\Fact;
 use Fisharebest\Webtrees\Family;
@@ -100,28 +101,75 @@ trait PlaceActions
         $usage   = $this->placeUsage($records, true, $key);
         $here    = $usage[$key] ?? null;
 
+        $context = $this->placeContext($tree);
+
         // Orte direkt darunter aus der Ortstabelle - genannt wird einer nur, wenn ein sichtbarer Datensatz dort liegt.
         $children = [];
+        $schon    = [];
         if ($ids !== []) {
             $rows = DB::table('places')->where('p_file', '=', $tree->id())->whereIn('p_parent_id', $ids)->get(['p_id', 'p_place']);
-            $schon = [];
             foreach ($rows as $row) {
                 $kind = mb_strtolower((string) $row->p_place);
                 if (!isset($schon[$kind]) && $this->placeVisible($tree, (int) $row->p_id)) {
                     $schon[$kind] = true;
-                    $children[]   = ['name' => $row->p_place . ', ' . ($here['name'] ?? $name)];
+                    $children[]   = ['name' => $row->p_place . ', ' . ($here['name'] ?? $name), 'location' => null, 'type' => null];
                 }
             }
         }
 
-        if ($here === null && $children === []) {
-            return $this->error(404, 'not-found');
+        // Ein Ort, der nur als _LOC besteht (Hof ohne erfasste Bewohner, ab Stufe 27): ueber den vollen Namen entlang
+        // der _LOC-Hierarchie gefunden, Ereignisse 0.
+        $location = null;
+        if ($here === null) {
+            $xref = $context['byFull'][$key] ?? null;
+            if ($xref !== null) {
+                $location = $context['locs'][$xref];
+                $name     = $this->locFullName($location, $context['locs']);
+            } elseif ($children === []) {
+                return $this->error(404, 'not-found');
+            }
         }
 
         $here ??= ['name' => $name, 'events' => 0, 'individuals' => [], 'families' => [], 'lat' => null, 'lng' => null, 'locs' => [], 'facts' => []];
-        $context  = $this->placeContext($tree);
-        $location = $this->placeLocation($tree, $here, $context);
+        $location ??= $this->placeLocation($tree, $here, $context);
         [$lat, $lng, $source] = $this->placeCoordinates($here, $location, $context);
+
+        // Unterorte aus der _LOC-Hierarchie ("1 _LOC @hier@" in anderen _LOC): Art und Kennung an die Unterorte der
+        // Ortstabelle, dazu die, die an keinem Ereignis stehen.
+        if ($location !== null) {
+            foreach ($context['byParent'][$location->xref()] ?? [] as $kindXref) {
+                $kindLoc  = $context['locs'][$kindXref];
+                $kindName = trim(GedcomText::ersterWert($kindLoc->gedcom(), 1, 'NAME'));
+                if ($kindName === '') {
+                    continue;
+                }
+                $kind = mb_strtolower($kindName);
+                $typ  = $this->locWert($kindLoc, ['TYPE']);
+                if (isset($schon[$kind])) {
+                    foreach ($children as &$c) {
+                        if (mb_strtolower(explode(', ', $c['name'])[0]) === $kind && $c['location'] === null) {
+                            $c['location'] = $kindXref;
+                            $c['type']     = $typ;
+                        }
+                    }
+                    unset($c);
+                } else {
+                    $schon[$kind] = true;
+                    $children[]   = ['name' => $kindName . ', ' . $here['name'], 'location' => $kindXref, 'type' => $typ];
+                }
+            }
+        }
+        // Unterorte der Ortstabelle ohne Hierarchiezeiger: der _LOC ueber den eindeutigen Blattnamen
+        foreach ($children as &$c) {
+            if ($c['location'] === null) {
+                $leaf = mb_strtolower(explode(', ', $c['name'])[0]);
+                if (count($context['byName'][$leaf] ?? []) === 1 && ($context['leaves'][$leaf] ?? 0) <= 1) {
+                    $c['location'] = $context['byName'][$leaf][0];
+                    $c['type']     = $this->locWert($context['locs'][$c['location']], ['TYPE']);
+                }
+            }
+        }
+        unset($c);
 
         // Erst nur Namen, sortieren und auf die gezeigte Zahl kuerzen - Lebensdaten und Ereignistexte kosten je
         // Person Zeit und werden nur fuer die gelieferten gebraucht.
@@ -186,7 +234,7 @@ trait PlaceActions
             'lat'             => $lat,
             'lng'             => $lng,
             'coordSource'     => $source,
-            'location'        => $location === null ? null : $this->locationJson($location),
+            'location'        => $location === null ? null : $this->locationJson($location, $context['locs']),
             'individuals'     => $individualsJson,
             'families'        => $familiesJson,
             'moreIndividuals' => max(0, count($individuals) - $this->placeRecordLimit),
@@ -218,9 +266,20 @@ trait PlaceActions
             return $this->error(403, 'not-editable');
         }
 
-        foreach (['gov', 'note', 'postalCode', 'region', 'country', 'shortName'] as $feld) {
+        foreach (['gov', 'note', 'postalCode', 'region', 'country', 'shortName', 'type'] as $feld) {
             if (GedcomText::looksLikePointer($this->str($body, $feld))) {
                 return $this->error(400, 'invalid-value');
+            }
+        }
+
+        // Uebergeordneter Ort in der _LOC-Hierarchie (ab Stufe 27): Kennung eines sichtbaren _LOC, null/leer loest
+        $context   = $this->placeContext($tree);
+        $parentLoc = null;
+        if (array_key_exists('parent', $body) && $body['parent'] !== null && $body['parent'] !== '') {
+            $parentXref = trim((string) $body['parent'], '@ ');
+            $parentLoc  = $context['locs'][$parentXref] ?? null;
+            if ($parentLoc === null) {
+                return $this->error(400, 'invalid-parent');
             }
         }
 
@@ -240,14 +299,25 @@ trait PlaceActions
         $records = $this->linkedRecords($tree, $this->placeIdLists($tree)[$key] ?? [], $name);
         $here    = $this->placeUsage($records, true, $key)[$key] ?? null;
 
+        // Ohne Ereignis am Ort: ein _LOC, der nur in der Hierarchie besteht (Hof ohne Bewohner) - vorhanden ueber den
+        // vollen Namen, oder neu, wenn der uebergeordnete Ort genannt ist.
+        $location = null;
         if ($here === null) {
-            return $this->error(404, 'not-found');
+            $xref = $context['byFull'][$key] ?? null;
+            if ($xref !== null) {
+                $location = $context['locs'][$xref];
+            } elseif ($parentLoc === null) {
+                return $this->error(404, 'not-found');
+            }
+            $here = ['name' => $name, 'events' => 0, 'individuals' => [], 'families' => [], 'lat' => null, 'lng' => null, 'locs' => [], 'facts' => []];
         }
 
-        $context  = $this->placeContext($tree);
-        $location = $this->placeLocation($tree, $here, $context);
-        $status   = 200;
-        $linked   = 0;
+        $location ??= $this->placeLocation($tree, $here, $context);
+        if ($location !== null && $parentLoc !== null && $parentLoc->xref() === $location->xref()) {
+            return $this->error(400, 'invalid-parent');
+        }
+        $status = 200;
+        $linked = 0;
 
         if ($location === null) {
             $leaf     = explode(', ', $name)[0];
@@ -333,6 +403,20 @@ trait PlaceActions
                 }
                 $rest .= $wert === '' ? '' : "\n1 " . $tag . ' ' . $wert;
             }
+        }
+
+        // Art des Orts (1 TYPE: Hof, Haus, Gemeinde ...) - ab Stufe 27
+        if (array_key_exists('type', $body)) {
+            $typ  = GedcomText::line($this->str($body, 'type'));
+            $rest = (string) preg_replace('/\n1 TYPE(?: [^\n]*)?(?:\n[2-9] [^\n]*)*/', '', $rest);
+            $rest .= $typ === '' ? '' : "\n1 TYPE " . $typ;
+        }
+
+        // Uebergeordneter Ort ("1 _LOC @L1@"): ersetzt alle Hierarchiezeiger; null oder leer loest den Ort heraus
+        if (array_key_exists('parent', $body)) {
+            $rest = (string) preg_replace('/\n1 _LOC(?: [^\n]*)?(?:\n[2-9] [^\n]*)*/', '', $rest);
+            $parent = trim((string) ($body['parent'] ?? ''), '@ ');
+            $rest .= $parent === '' ? '' : "\n1 _LOC @" . $parent . '@';
         }
 
         // Die verknuepften Medienobjekte (wie bei Source): die Liste ersetzt alle "1 OBJE @M@"
@@ -616,10 +700,12 @@ trait PlaceActions
 
         $context = $this->placeContext($tree);
         $places  = [];
+        $schon   = [];
 
         foreach ($this->placeUsageFast($tree, $records) as $u) {
             $location = $this->placeLocation($tree, $u, $context);
             [$lat, $lng, $source] = $this->placeCoordinates($u, $location, $context);
+            $schon[mb_strtolower($u['name'])] = true;
             $places[] = [
                 'name'        => $u['name'],
                 'events'      => $u['events'],
@@ -631,6 +717,30 @@ trait PlaceActions
                 'location'    => $location?->xref(),
                 'gov'         => $location === null ? null : $this->locGov($location),
                 'shortName'   => $location === null ? null : $this->locKurz($location),
+                'type'        => $location === null ? null : $this->locWert($location, ['TYPE']),
+            ];
+        }
+
+        // Orte, die nur als _LOC in der Hierarchie bestehen (Hoefe ohne erfasste Bewohner, ab Stufe 27) - mit Elternzeiger,
+        // denn ein _LOC ohne Zeiger und ohne Ereignis ist meist ein Rest, kein Ort des Baums.
+        foreach ($context['byFull'] as $key => $xref) {
+            $location = $context['locs'][$xref];
+            if (isset($schon[$key]) || $this->locParentXrefs($location) === []) {
+                continue;
+            }
+            [$lat, $lng] = $this->locCoordinates($location);
+            $places[] = [
+                'name'        => $this->locFullName($location, $context['locs']),
+                'events'      => 0,
+                'individuals' => 0,
+                'families'    => 0,
+                'lat'         => $lat,
+                'lng'         => $lng,
+                'coordSource' => $lat === null ? null : 'location',
+                'location'    => $xref,
+                'gov'         => $this->locGov($location),
+                'shortName'   => $this->locKurz($location),
+                'type'        => $this->locWert($location, ['TYPE']),
             ];
         }
 
@@ -912,6 +1022,25 @@ trait PlaceActions
             }
         }
 
+        // GEDCOM-L-Hierarchie der _LOC selbst ("1 _LOC @L1@" = uebergeordneter Ort, ab Stufe 27): Kinder je Eltern-_LOC
+        // und der volle Name jedes _LOC entlang des ersten Elternzeigers ("Hof Nr. 1, Offenbach, Hessen") - so finden
+        // sich Orte, die nur als _LOC bestehen und an keinem Ereignis stehen (Hoefe ohne erfasste Bewohner).
+        $byParent = [];
+        foreach ($locs as $xref => $location) {
+            foreach ($this->locParentXrefs($location) as $parent) {
+                if (isset($locs[$parent])) {
+                    $byParent[$parent][] = $xref;
+                }
+            }
+        }
+        $byFull = [];
+        foreach ($locs as $xref => $location) {
+            $full = $this->locFullName($location, $locs);
+            if ($full !== '') {
+                $byFull[mb_strtolower($full)] ??= $xref;
+            }
+        }
+
         // Ortstabelle des Baums: voller Name je Kennung - fuer die Bindungen des Ortsregisters und die Blattnamen.
         $ids    = $this->placeIds($tree);
         $leaves = [];
@@ -948,11 +1077,135 @@ trait PlaceActions
             'locs'     => $locs,
             'byName'   => $byName,
             'byGov'    => $byGov,
+            'byParent' => $byParent,
+            'byFull'   => $byFull,
             'leaves'   => $leaves,
             'bound'    => $bound,
             'boundGov' => $boundGov,
             'mapData'  => $this->mapData(),
         ];
+    }
+
+    /**
+     * Kennungen der uebergeordneten _LOC ("1 _LOC @L1@", GEDCOM-L), in Reihenfolge des Datensatzes.
+     *
+     * @return list<string>
+     */
+    private function locParentXrefs(Location $location): array
+    {
+        $xrefs = [];
+        foreach (GedcomText::unterzeilen("\n" . $location->gedcom(), 1, '_LOC') as [$wert]) {
+            if (preg_match('/^@([^@]+)@$/', trim($wert), $m) === 1) {
+                $xrefs[] = $m[1];
+            }
+        }
+
+        return $xrefs;
+    }
+
+    /**
+     * Voller Ortsname eines _LOC entlang des ersten Elternzeigers, wie er als PLAC stuende ("Hof Nr. 1, Offenbach").
+     *
+     * @param array<string,Location> $locs
+     */
+    private function locFullName(Location $location, array $locs): string
+    {
+        $teile = [];
+        $seen  = [];
+        $loc   = $location;
+        while ($loc !== null && !isset($seen[$loc->xref()]) && count($teile) < 10) {
+            $seen[$loc->xref()] = true;
+            $name = trim(GedcomText::ersterWert($loc->gedcom(), 1, 'NAME'));
+            if ($name === '') {
+                break;
+            }
+            $teile[] = $name;
+            $parent  = $this->locParentXrefs($loc)[0] ?? null;
+            $loc     = $parent === null ? null : ($locs[$parent] ?? null);
+        }
+
+        return implode(', ', $teile);
+    }
+
+    /**
+     * Die uebergeordneten Orte eines _LOC fuer die Antwort: Kennung, Name, Art des Zeigers (2 TYPE: POLI, RELI, GEOG,
+     * CULT) und Zeitraum (2 DATE) - ein Hof kann im Lauf der Zeit zu verschiedenen Gemeinden gehoert haben.
+     *
+     * @param array<string,Location> $locs
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function locParentsJson(Location $location, array $locs): array
+    {
+        $parents = [];
+        foreach (GedcomText::unterzeilen("\n" . $location->gedcom(), 1, '_LOC') as [$wert, $unter]) {
+            if (preg_match('/^@([^@]+)@$/', trim($wert), $m) !== 1 || !isset($locs[$m[1]])) {
+                continue;
+            }
+            $parent    = $locs[$m[1]];
+            $datum     = trim(GedcomText::ersterWert($unter, 2, 'DATE'));
+            $parents[] = [
+                'xref' => $parent->xref(),
+                'name' => trim(GedcomText::ersterWert($parent->gedcom(), 1, 'NAME')),
+                'fullName' => $this->locFullName($parent, $locs),
+                'type' => trim(GedcomText::ersterWert($unter, 2, 'TYPE')) ?: null,
+                'date' => $datum === '' ? null : $this->dateJson(new Date($datum), $datum),
+            ];
+        }
+
+        return $parents;
+    }
+
+    /**
+     * Ereignisse am Ort selbst ("1 EVEN" am _LOC, GEDCOM-L): Brand, Umbau, Besitzwechsel ... mit Art (2 TYPE), Datum,
+     * Ort, Notizen und Quellen.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function locEventsJson(Location $location): array
+    {
+        $events = [];
+        foreach ($location->facts(['EVEN']) as $fact) {
+            if (!$fact->canShow()) {
+                continue;
+            }
+            $sources = [];
+            foreach (GedcomText::unterzeilen($fact->gedcom(), 2, 'SOUR') as [$wert, $unter]) {
+                $wert   = trim($wert);
+                $target = preg_match('/^@([^@]+)@$/', $wert, $m) === 1 ? Registry::sourceFactory()->make($m[1], $location->tree()) : null;
+                $page   = trim(GedcomText::ersterWert($unter, 3, 'PAGE'));
+                $sources[] = [
+                    'xref'  => $target instanceof Source && $target->canShow() ? $target->xref() : null,
+                    'title' => $target instanceof Source ? ($target->canShow() ? $this->plain($target->fullName()) : null) : $wert,
+                    'page'  => $page === '' ? null : $page,
+                ];
+            }
+            $notes = [];
+            foreach (GedcomText::unterzeilen($fact->gedcom(), 2, 'NOTE') as [$wert, $unter]) {
+                $wert = trim($wert);
+                if (preg_match('/^@([^@]+)@$/', $wert, $m) === 1) {
+                    $note = Registry::noteFactory()->make($m[1], $location->tree());
+                    $text = $note instanceof Note && $note->canShow() ? $note->getNote() : '';
+                } else {
+                    $text = GedcomText::mitFortsetzung($wert, $unter, 2);
+                }
+                if (trim($text) !== '') {
+                    $notes[] = $text;
+                }
+            }
+            $events[] = [
+                'factId'  => $fact->id(),
+                'type'    => $fact->attribute('TYPE') === '' ? null : $fact->attribute('TYPE'),
+                'label'   => $this->factLabel($fact),
+                'value'   => $fact->value() === '' ? null : $fact->value(),
+                'date'    => $this->dateJson($fact->date()),
+                'place'   => $fact->place()->gedcomName() === '' ? null : $fact->place()->gedcomName(),
+                'notes'   => $notes,
+                'sources' => $sources,
+            ];
+        }
+
+        return $events;
     }
 
     /**
@@ -1026,9 +1279,12 @@ trait PlaceActions
     /**
      * @return array<string,mixed>
      */
-    private function locationJson(Location $location): array
+    private function locationJson(Location $location, array $locs = []): array
     {
         [$lat, $lng] = $this->locCoordinates($location);
+        if ($locs === []) {
+            $locs = $this->placeContext($location->tree())['locs'];
+        }
 
         $sources = [];
         foreach ($location->facts(['SOUR']) as $fact) {
@@ -1046,6 +1302,10 @@ trait PlaceActions
         return [
             'xref'    => $location->xref(),
             'name'    => GedcomText::ersterWert($location->gedcom(), 1, 'NAME'),
+            // Art des Orts (1 TYPE: Hof, Haus, Gemeinde ...), uebergeordnete Orte und Ereignisse am Ort - ab Stufe 27
+            'type'    => $this->locWert($location, ['TYPE']),
+            'parents' => $this->locParentsJson($location, $locs),
+            'events'  => $this->locEventsJson($location),
             'gov'     => $this->locGov($location),
             // Postleitzahl, Region, Land: GEDCOM-L kennt _POST; _STAE und _CTRY (und POST) schreiben andere Programme
             'shortName'  => $this->locKurz($location),

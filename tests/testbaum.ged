@@ -74,6 +74,10 @@
 2 DATE 1830
 2 _GODP Hans Meier, Bauer; Grete Meier, Witwe
 2 _GODP Peter Schulz und Paul Schulz
+1 RESI
+2 DATE FROM 1860
+2 PLAC Hof Nr. 1, Offenbach
+3 _LOC @L3@
 1 DEAT
 2 DATE 1900
 1 FAMC @F1@
@@ -157,6 +161,25 @@
 1 MAP
 2 LATI N51.0
 2 LONG E9.0
+0 @L3@ _LOC
+1 NAME Hof Nr. 1
+1 TYPE Hof
+1 _LOC @L1@
+2 TYPE POLI
+2 DATE FROM 1800
+1 EVEN
+2 TYPE Brand
+2 DATE 12 MAY 1734
+2 NOTE Scheune abgebrannt
+2 SOUR @S1@
+3 PAGE Ortschronik S. 12
+1 MAP
+2 LATI N50.11
+2 LONG E8.77
+0 @L4@ _LOC
+1 NAME Hof Nr. 2
+1 TYPE Hof
+1 _LOC @L1@
 0 @R1@ REPO
 1 NAME Bistumsarchiv Mainz
 0 TRLR
