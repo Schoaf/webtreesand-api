@@ -34,7 +34,10 @@ XREF = P("xref", "Record identifier, e.g. `I123`", pflicht=True)
 ROUTEN = [
     ("get", "Info", False, 1, "visitor",
      "Entry point: versions, API level, signed-in user, the trees this user can see (with role and rights), "
-     "CSRF token for POST requests and the largest accepted upload.", [], None),
+     "CSRF token for POST requests and the largest accepted upload. From level 26 also `loginForm`, the settings of the "
+     "sign-in page: `welcomeMessage`, `isSelfRegistrationAllowed` and `registrationTerms` (`null` when the site shows no "
+     "terms). `welcomeMessage` and `registrationTerms` are HTML written by the site administrator, in the language of the "
+     "request – show them as HTML only after sanitising.", [], None),
     ("get", "Individuals", True, 1, "visitor",
      "List of individuals, sorted by name, 50 per page. `q` filters by name; with `scope=all` the words may appear "
      "anywhere in the visible data (place, year, occupation …).",
@@ -287,6 +290,10 @@ def sammeln(u):
     merken("post", "Bookmarks", admin.post("Bookmarks", "testbaum", {"xref": "I1", "add": True}))
     merken("post", "StartPerson", admin.post("StartPerson", "testbaum", {"xref": "I1"}))
     merken("post", "MyAccount", admin.post("MyAccount", None, {"realName": admin.info()["user"]["realName"]}))
+    # Info.loginForm mit Bedingungen: ohne SHOW_REGISTER_CAUTION waere registrationTerms immer null und das Schema falsch.
+    umgebung.sql("INSERT OR REPLACE INTO wt_site_setting (setting_name, setting_value) VALUES ('SHOW_REGISTER_CAUTION', '1')")
+    merken("get", "Info", u.sitzung().get("Info"))
+    umgebung.sql("DELETE FROM wt_site_setting WHERE setting_name = 'SHOW_REGISTER_CAUTION'")
     archiv = admin.post("Repository", "testbaum", {"name": "Manifestarchiv"})
     merken("post", "Repository", archiv)
     quelle = admin.post("Source", "testbaum", {"title": "Manifestquelle", "author": "Manifest", "repository": archiv.json["xref"], "callNumber": "M 1"})

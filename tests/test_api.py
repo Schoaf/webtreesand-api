@@ -743,7 +743,32 @@ class Schreiben(unittest.TestCase):
         self.assertEqual("Neuer Name", m.info()["user"]["realName"])
         self.assertEqual("missing-real-name", m.post("MyAccount", None, {"realName": " "}).json["error"])
         self.assertEqual("not-logged-in", U.sitzung().post("MyAccount", None, {"realName": "X"}).json["error"])
+        # Spalte real_name: 64 Zeichen; Zeilenumbrueche werden zu Leerzeichen
+        self.assertEqual("real-name-too-long", m.post("MyAccount", None, {"realName": "X" * 65}).json["error"])
+        self.assertTrue(m.post("MyAccount", None, {"realName": "Ä" * 64}).json["ok"])
+        self.assertEqual("Anna Bauer", m.post("MyAccount", None, {"realName": "Anna\nBauer"}).json["realName"])
+        self.assertEqual("Anna Bauer", m.info()["user"]["realName"])
         m.post("MyAccount", None, {"realName": alt})
+
+    def test_anmeldeseite_in_info(self):
+        """Stufe 26: Info.loginForm nennt Begruessungstext, Selbstregistrierung und Bedingungen - auch Gaesten."""
+        def form():
+            return U.sitzung().info()["loginForm"]
+        f = form()
+        self.assertEqual({"welcomeMessage", "isSelfRegistrationAllowed", "registrationTerms"}, set(f))
+        self.assertTrue(f["welcomeMessage"])
+        self.assertIsNone(f["registrationTerms"])
+        self.assertGreaterEqual(U.sitzung().info()["api"], 26)
+        try:
+            umgebung.sql("INSERT OR REPLACE INTO wt_site_setting (setting_name, setting_value) VALUES ('SHOW_REGISTER_CAUTION', '1')")
+            umgebung.sql("INSERT OR REPLACE INTO wt_site_setting (setting_name, setting_value) VALUES ('USE_REGISTRATION_MODULE', '0')")
+            f = form()
+            self.assertIn("<p>", f["registrationTerms"])
+            self.assertFalse(f["isSelfRegistrationAllowed"])
+        finally:
+            umgebung.sql("DELETE FROM wt_site_setting WHERE setting_name = 'SHOW_REGISTER_CAUTION'")
+            umgebung.sql("INSERT OR REPLACE INTO wt_site_setting (setting_name, setting_value) VALUES ('USE_REGISTRATION_MODULE', '1')")
+        self.assertTrue(form()["isSelfRegistrationAllowed"])
 
     def test_name_aendern_behaelt_unterangaben(self):
         # Beim Aendern des Namens darf nichts verloren gehen: Praefix, Spitzname und Notiz bleiben,

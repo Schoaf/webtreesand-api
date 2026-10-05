@@ -1644,8 +1644,8 @@ trait WriteActions
     }
 
     /**
-     * Eigenes Konto aendern (ab Stufe 25): Rumpf { realName } - der angezeigte Name, wie unter "Mein Konto" im
-     * Browser. Benutzername, E-Mail und Passwort bleiben dem Browser vorbehalten.
+     * Eigenes Konto aendern (ab Stufe 25): Rumpf { realName } - der angezeigte Name (hoechstens 64 Zeichen), wie unter
+     * "Mein Konto" im Browser. Benutzername, E-Mail und Passwort bleiben dem Browser vorbehalten.
      */
     public function postMyAccountAction(ServerRequestInterface $request): ResponseInterface
     {
@@ -1653,10 +1653,16 @@ trait WriteActions
             return $this->error(403, 'not-logged-in');
         }
 
-        $real_name = trim($this->str($this->body($request), 'realName'));
+        // Zeilenumbrueche und andere Steuerzeichen werden zu Leerzeichen (das Browserfeld laesst sie auch nicht zu).
+        $real_name = trim((string) preg_replace('/[\p{Cc}\p{Cf}]+/u', ' ', $this->str($this->body($request), 'realName')));
 
         if ($real_name === '') {
             return $this->error(400, 'missing-real-name');
+        }
+
+        // Die Spalte real_name hat 64 Zeichen; laenger gaebe unter MySQL einen Serverfehler.
+        if (mb_strlen($real_name) > 64) {
+            return $this->error(400, 'real-name-too-long');
         }
 
         Auth::user()->setRealName($real_name);
