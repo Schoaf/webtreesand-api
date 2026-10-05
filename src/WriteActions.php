@@ -1038,7 +1038,7 @@ trait WriteActions
                 if ($family instanceof Family) {
                     $family->createFact('1 CHIL @' . $person->xref() . '@', true);
                 } else {
-                    $link   = $relative->sex() === 'F' ? 'WIFE' : 'HUSB';
+                    $link   = $this->sexCode($relative) === 'F' ? 'WIFE' : 'HUSB';
                     $family = $tree->createFamily("0 @@ FAM\n1 " . $link . ' @' . $relative->xref() . "@\n1 CHIL @" . $person->xref() . '@');
                     $relative->createFact('1 FAMS @' . $family->xref() . '@', true);
                 }
@@ -1046,7 +1046,7 @@ trait WriteActions
                 break;
 
             case 'spouse':
-                $relative_link = $relative->sex() === 'F' ? 'WIFE' : 'HUSB';
+                $relative_link = $this->sexCode($relative) === 'F' ? 'WIFE' : 'HUSB';
                 $person_link   = $relative_link === 'HUSB' ? 'WIFE' : 'HUSB';
                 $family        = $tree->createFamily("0 @@ FAM\n1 " . $relative_link . ' @' . $relative->xref() . "@\n1 " . $person_link . ' @' . $person->xref() . '@' . $marriage);
                 $relative->createFact('1 FAMS @' . $family->xref() . '@', true);

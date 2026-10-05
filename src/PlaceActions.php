@@ -198,7 +198,7 @@ trait PlaceActions
         $individualsJson = array_map(fn (array $e): array => [
             'xref'     => $e['record']->xref(),
             'name'     => $e['name'],
-            'sex'      => $e['record']->sex(),
+            'sex'      => $this->sexCode($e['record']),
             'private'  => false,
             'lifespan' => $this->plain($e['record']->lifespan()),
             'url'      => $e['record']->url(),

@@ -44,7 +44,9 @@ ROUTEN = [
      [P("q", "Search words"), P("page", "Page, from 1", "integer"), P("scope", "`all`: search all visible data")], None),
     ("get", "Individual", True, 1, "visitor",
      "One individual with facts, parent/spouse/step families, media and – with `relativeTo` – the relationship "
-     "to another individual.", [XREF, P("relativeTo", "Relationship relative to this individual (default: own individual)")], None),
+     "to another individual. From level 28 each fact has `pending` (`true`: a change waiting for approval, visible only "
+     "to users whom webtrees shows pending changes, i.e. editors and moderators) and `sex` is the value the user sees in "
+     "the facts, also while a change of sex is pending.", [XREF, P("relativeTo", "Relationship relative to this individual (default: own individual)")], None),
     ("get", "Family", True, 1, "visitor", "One family with spouses, children and facts.",
      [P("xref", "Family identifier, e.g. `F12`", pflicht=True)], None),
     ("get", "Pedigree", True, 1, "visitor",

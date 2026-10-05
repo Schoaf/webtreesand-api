@@ -784,6 +784,31 @@ class Schreiben(unittest.TestCase):
         self.assertEqual("Anna Bauer", m.info()["user"]["realName"])
         m.post("MyAccount", None, {"realName": alt})
 
+    def test_ausstehendes_geschlecht(self):
+        """Stufe 28: Eine ausstehende Aenderung des Geschlechts zeigt der Bearbeiter in person.sex wie im SEX-Fakt und
+        mit pending; Mitglieder sehen weiter den freigegebenen Wert, ohne pending."""
+        ed, mi, adm = U.sitzung("bearbeiter"), U.sitzung("mitglied"), U.sitzung("admin")
+
+        def ansicht(s):
+            p = s.get("Individual", "testbaum", xref="I1").json
+            return p["person"]["sex"], [(f["value"], f["pending"]) for f in p["facts"] if f["tag"] == "SEX"]
+
+        self.assertEqual(("M", [("männlich", False)]), ansicht(ed))
+        fid = next(f["id"] for f in ed.get("Individual", "testbaum", xref="I1").json["facts"] if f["tag"] == "SEX")
+        try:
+            r = ed.post("Fact", "testbaum", {"factId": fid, "tag": "SEX", "value": "F"}, xref="I1")
+            self.assertEqual((True, True), (r.json["ok"], r.json["pending"]), r)
+            self.assertEqual(("F", [("weiblich", True)]), ansicht(ed))
+            self.assertEqual(("M", [("männlich", False)]), ansicht(mi))
+            liste = ed.get("Individuals", "testbaum", q="Theodor").json["data"]
+            self.assertEqual({"F"}, {e["sex"] for e in liste if e["xref"] == "I1"})
+            alle = ed.get("Individual", "testbaum", xref="I1").json["facts"]
+            self.assertEqual(1, sum(1 for f in alle if f["pending"]))
+            self.assertFalse(any(f["pending"] for f in mi.get("Individual", "testbaum", xref="I1").json["facts"]))
+        finally:
+            adm.post("Reject", "testbaum", {}, xref="I1")
+        self.assertEqual(("M", [("männlich", False)]), ansicht(ed))
+
     def test_anmeldeseite_in_info(self):
         """Stufe 26: Info.loginForm nennt Begruessungstext, Selbstregistrierung und Bedingungen - auch Gaesten."""
         def form():

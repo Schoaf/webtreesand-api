@@ -68,6 +68,22 @@ trait JsonBuilders
      * @return array<string,mixed>
      */
     /**
+     * Das Geschlecht (M, F, X oder U), wie der Benutzer es in den Fakten sieht (ab Stufe 28). webtrees' sex() nimmt den
+     * ersten "1 SEX" - bei einer ausstehenden Aenderung ist das noch der freigegebene Wert, waehrend facts() dem
+     * Bearbeiter schon den neuen zeigt. Ohne ausstehende Aenderung, und fuer alle, die keine sehen, bleibt es sex().
+     */
+    private function sexCode(Individual $individual): string
+    {
+        foreach ($individual->facts(['SEX']) as $fact) {
+            if ($fact->isPendingAddition() && in_array($fact->value(), ['M', 'F', 'X', 'U'], true)) {
+                return $fact->value();
+            }
+        }
+
+        return $individual->sex();
+    }
+
+    /**
      * Kurzform fuer lange Listen (Jahrestage): nur, was eine Zeile mit Bild braucht. Die Felder sind dieselben wie in
      * personSummary(), Clients lesen sie mit demselben Modell (fehlende Felder bleiben leer).
      *
@@ -80,7 +96,7 @@ trait JsonBuilders
         return [
             'xref'     => $individual->xref(),
             'name'     => $this->plain($individual->fullName()),
-            'sex'      => $individual->sex(),
+            'sex'      => $this->sexCode($individual),
             'isDead'   => $individual->isDead(),
             'private'  => !$individual->canShow(),
             'lifespan' => $this->plain($individual->lifespan()),
@@ -106,7 +122,7 @@ trait JsonBuilders
             'sortName'   => $individual->sortName(),
             'given'      => $individual->canShowName() ? $given : '',
             'surname'    => $individual->canShowName() ? $surname : '',
-            'sex'        => $individual->sex(),
+            'sex'        => $this->sexCode($individual),
             'isDead'     => $individual->isDead(),
             'private'    => !$individual->canShow(),
             'lifespan'   => $this->plain($individual->lifespan()),
@@ -274,6 +290,9 @@ trait JsonBuilders
 
             $data[] = [
                 'id'             => $fact->id(),
+                // Ab Stufe 28: true = eine Aenderung, die auf Freigabe wartet. Sehen nur Benutzer, denen webtrees ausstehende
+                // Aenderungen zeigt (Bearbeiter, Moderatoren); fuer alle anderen immer false.
+                'pending'        => $fact->isPendingAddition(),
                 'tag'            => $tag,
                 'label'          => $this->factLabel($fact),
                 // false: ein Tag, das webtrees nicht kennt (Hersteller-Tag ohne Definition, z. B. _INET).
@@ -394,10 +413,10 @@ trait JsonBuilders
         return [
             'xref'    => $match[1],
             'name'    => $private ? null : $this->plain($individual->fullName()),
-            'sex'     => $private ? null : $individual->sex(),
+            'sex'     => $private ? null : $this->sexCode($individual),
             'rela'    => $rela,
             'role'    => $role,
-            'label'   => $this->associateLabel($rela, $role, $private ? 'U' : $individual->sex()),
+            'label'   => $this->associateLabel($rela, $role, $private ? 'U' : $this->sexCode($individual)),
             'private' => $private,
             'level1'  => $level1,
             'notes'   => $this->notesFromBlock($unter, $u, $tree),
@@ -499,7 +518,7 @@ trait JsonBuilders
                         'place'      => $this->placeJson($shown->place(), null, null),
                         'rela'       => $rela,
                         'role'       => $role,
-                        'label2'     => $this->associateLabel($rela, $role, $individual->sex()),
+                        'label2'     => $this->associateLabel($rela, $role, $this->sexCode($individual)),
                         'level1'     => $level1,
                         'url'        => $record->url(),
                         // Bei Familien die Partner, damit ein Client den Eintrag oeffnen kann - nur sichtbare

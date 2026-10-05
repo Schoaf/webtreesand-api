@@ -769,7 +769,7 @@ trait ReadActions
                 return null;
             }
 
-            $relation = $set[match ($next->sex()) { 'M' => 0, 'F' => 1, default => 2 }];
+            $relation = $set[match ($this->sexCode($next)) { 'M' => 0, 'F' => 1, default => 2 }];
 
             if ($set[0] === 'father') {
                 $upward = true;
