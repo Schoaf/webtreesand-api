@@ -121,10 +121,15 @@ sie wie jede andere Bearbeitung auf die Freigabe durch einen Moderator.
 ## Hinter SSO oder Passwortschutz
 
 Sitzt vor webtrees eine eigene Anmeldung (Authelia, Authentik, oauth2-proxy, Cloudflare Access, Basic-Auth), kommt die
-App nicht durch; wtAnd und wtWin melden das ab der nächsten Version so. Abhilfe: im Anmeldedienst nur die Anfragen
-freigeben, deren `route` `_api4webtrees_`, `media-thumbnail` oder `media-download` enthält, nicht die ganze Seite.
-Dahinter schützt weiter der webtrees-Login. Die App dann über die Seite „App“ verbinden: Die Anmeldung läuft im Browser
-über das SSO, die App braucht kein Passwort.
+App nicht durch und meldet das. Zwei Wege, ohne dass an diesem Modul etwas zu ändern wäre – es läuft vor dieser
+Anmeldung gar nicht erst:
+
+- **Passwortschutz des Webservers** (Basic-Auth, `.htaccess`/`.htpasswd`, der Browser zeigt ein kleines Anmeldefenster):
+  wtAnd, wtWin und wtTux ab 1.38 nehmen Benutzername und Passwort auf dem Adressbildschirm unter „Verzeichnisschutz“
+  entgegen und schicken sie mit jeder Anfrage an diesen Server mit.
+- **SSO-Dienste:** im Anmeldedienst nur die Anfragen freigeben, deren `route` `_api4webtrees_`, `media-thumbnail` oder
+  `media-download` enthält, nicht die ganze Seite. Dahinter schützt weiter der webtrees-Login. Die App dann über die
+  Seite „App“ verbinden: Die Anmeldung läuft im Browser über das SSO, die App braucht kein Passwort.
 
 ## Ein Medienordner je Stammbaum
 

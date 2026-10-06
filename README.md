@@ -116,10 +116,14 @@ The module deliberately has no login and no permission system of its own:
 ## Behind SSO or password protection
 
 If a sign-in sits in front of webtrees (Authelia, Authentik, oauth2-proxy, Cloudflare Access, basic auth), the app
-cannot get through; wtAnd and wtWin say so from their next version. Fix: in the sign-in service, let through only
-requests whose `route` contains `_api4webtrees_`, `media-thumbnail` or `media-download`, not the whole site. The webtrees
-login still protects everything behind it. Then connect the app via the “App” page: you sign in through SSO in the
-browser, and the app needs no password.
+cannot get through and says so. Two ways out, nothing to change in this module, which never runs before that sign-in:
+
+- **Password protection of the web server** (basic auth, `.htaccess`/`.htpasswd`, the browser shows a small sign-in box):
+  wtAnd, wtWin and wtTux from 1.38 take the user name and password under “directory protection” on their address
+  screen and send them with every request to that server.
+- **SSO services:** in the sign-in service, let through only requests whose `route` contains `_api4webtrees_`,
+  `media-thumbnail` or `media-download`, not the whole site. The webtrees login still protects everything behind it.
+  Then connect the app via the “App” page: you sign in through SSO in the browser, and the app needs no password.
 
 ## One media folder per tree
 
