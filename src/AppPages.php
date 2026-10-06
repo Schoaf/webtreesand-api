@@ -91,6 +91,7 @@ trait AppPages
             'download_url' => $download,
             'download_qr'  => $this->qrSvg($download),
             'apps'         => $apps,
+            'icons'        => $this->iconUrls($apps),
             'device_names' => self::deviceNames(),
             'version'      => $this->customModuleVersion(),
             'api'          => self::API_VERSION,
