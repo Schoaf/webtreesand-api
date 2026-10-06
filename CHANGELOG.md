@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.17.0 – 2026-10-06
+**Logos on the “App” page, readable code.** No API change; API level stays 29.
+- The “App” and “Connect” pages show an app's logo before its name (new optional field `icon` in `src/Apps.php`, file
+  under `resources/img`; the tests check that the file exists). The four apps of the module author share one logo; a
+  third-party app adds its own with its pull request. Under the author's apps a short note says why they come first:
+  app and interface are developed together. The order of the apps is unchanged.
+- The code was reworked for readability, with no change in behaviour: named constants instead of bare numbers,
+  helpers instead of repeated blocks (visibility check, fact lookup with rights, pending changes, GEDCOM sub-record
+  replacement), English identifiers throughout, the longest actions split into named steps, misplaced comments fixed.
+  The API level history now lives in `docs/API.md` and this file only.
+
 ## 1.16.0 – 2026-10-05
 **API level 29: merging individuals, with undo.** Everything is additive; older clients keep working.
 - **`POST Merge`** merges two individuals the way webtrees' own merge does: `xref2` is absorbed into `xref1`, everything

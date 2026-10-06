@@ -972,6 +972,9 @@ class Schreiben(unittest.TestCase):
 
         android = seite("Mozilla/5.0 (Linux; Android 14) Mobile")
         self.assertLess(android.index("wtAnd"), android.index("wtWin"))
+        # Logo und Satz des Modulautors bei den eigenen Apps (Apps.php: icon, forDevice: own)
+        self.assertIn("wt-apps.png", android)
+        self.assertIn("App und Schnittstelle werden gemeinsam entwickelt", android)
         self.assertLess(android.index("wtWin"), android.index("wtTux"))
         self.assertIn("webtreesand://connect?", android)
         self.assertNotIn("noch kein eigenes Programm", android)
@@ -986,6 +989,8 @@ class Schreiben(unittest.TestCase):
         self.assertIn("webtreesmobile://connect?", iphone)
         self.assertIn("app-store.svg", iphone)
         self.assertLess(iphone.index("webtrees mobile"), iphone.index("wtAnd"))
+        # Die fremde App hat kein Logo und nicht den Satz des Modulautors - der steht erst bei wtAnd darunter
+        self.assertLess(iphone.index("webtrees mobile"), iphone.index("gemeinsam entwickelt"))
 
         mac = seite("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)")
         self.assertNotIn("noch kein eigenes Programm", mac)
@@ -995,6 +1000,7 @@ class Schreiben(unittest.TestCase):
         # Verbinden-Seite (Ziel des QR-Codes): ein Knopf je Handy-App mit Schema, Download je App.
         verbinden = s._senden(urllib.request.Request(s.url("/module/_api4webtrees_/Connect"))).text
         self.assertIn('data-scheme="webtreesand"', verbinden)
+        self.assertIn("wt-apps.png", verbinden)
         self.assertIn("wtAnd herunterladen", verbinden)
         self.assertNotIn("wtWin", verbinden)
 

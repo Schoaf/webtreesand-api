@@ -188,7 +188,8 @@ be a new route, never a changed one.
 Any client can use the interface with the normal sign-in above – nothing in the JSON endpoints, rights or privacy is
 specific to one app. The “App” page, the “Connect” page, the note and the footer show the apps listed in
 `src/Apps.php`. To add an app, send a pull request with one entry: name, author, kind (phone or PC), devices, download
-addresses (https), the URL scheme for one-tap connecting and, for a store link, the store badge under `resources/img`.
+addresses (https), the URL scheme for one-tap connecting, for a store link the store badge under `resources/img` and,
+optionally, the app's logo under `resources/img` (`icon`, square PNG or SVG, shown before the name on the “App” and “Connect” pages).
 Conditions: the app is publicly installable (store or release), and it accepts the connect link below. The tests reject
 entries with missing fields, non-https links or a scheme already taken. Managers can untick any app in the settings.
 

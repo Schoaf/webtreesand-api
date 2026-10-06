@@ -191,6 +191,7 @@ trait AppPages
             'apps'         => $apps,
             'device_names' => self::deviceNames(),
             'badges'       => $this->badgeUrls($apps),
+            'icons'        => $this->iconUrls($apps),
             'download_qr'  => $qr,
             'connect_url'  => $connect_url,
             'connect_qr'   => $connect_url === '' ? '' : $this->qrSvg($connect_url),
@@ -228,6 +229,7 @@ trait AppPages
             'device'   => $device,
             'apps'     => $apps,
             'badges'   => $this->badgeUrls($apps),
+            'icons'    => $this->iconUrls($apps),
         ]);
     }
 
@@ -405,6 +407,26 @@ trait AppPages
         foreach ($apps as $app) {
             foreach ($app['badge'] as $device => $file) {
                 $urls[$app['id']][$device] = $this->assetUrl('img/' . $file);
+            }
+        }
+
+        return $urls;
+    }
+
+    /**
+     * Adressen der App-Logos (Dateien unter resources/img), nur fuer Apps, die eines haben.
+     *
+     * @param list<array<string,mixed>> $apps
+     *
+     * @return array<string,string> App-Kennung => Adresse
+     */
+    private function iconUrls(array $apps): array
+    {
+        $urls = [];
+
+        foreach ($apps as $app) {
+            if ($app['icon'] !== '') {
+                $urls[$app['id']] = $this->assetUrl('img/' . $app['icon']);
             }
         }
 

@@ -13,6 +13,7 @@ use Fisharebest\Webtrees\I18N;
  * @var list<array<string,mixed>>         $apps          aus src/Apps.php, fuer dieses Geraet sortiert (matches, open)
  * @var array<string,string>              $device_names  android => "Android-Handy und -Tablet" ...
  * @var array<string,array<string,string>> $badges       App-Kennung => Geraet => Bild des Store-Badges
+ * @var array<string,string>              $icons         App-Kennung => Logo der App (nur Apps mit Logo)
  * @var array<string,string>              $download_qr   App-Kennung => QR-Code des Downloads (Handy-Apps)
  * @var string                            $connect_url
  * @var string                            $connect_qr
@@ -43,6 +44,20 @@ $downloads = static function (array $app) use ($badges): void {
 };
 
 $phone_first = in_array($device, ['android', 'ios', 'other'], true);
+
+// Logo vor dem Namen, wenn die App eines hat.
+$icon = static function (array $app) use ($icons): void {
+    if (isset($icons[$app['id']])) {
+        ?><img src="<?= e($icons[$app['id']]) ?>" alt="" class="me-2" style="height: 2rem; vertical-align: text-bottom; border-radius: 0.4rem;"><?php
+    }
+};
+
+// Die Apps des Modulautors: ein Satz, warum sie oben stehen - App und Schnittstelle entstehen zusammen.
+$own_note = static function (array $app): void {
+    if ($app['own']) {
+        ?><p class="text-muted small mb-3"><?= I18N::translate('Vom Autor dieses Moduls – App und Schnittstelle werden gemeinsam entwickelt.') ?></p><?php
+    }
+};
 
 // Handy-App: installieren (Download + QR), dann per Tipp verbinden.
 $phone = static function (array $app) use ($downloads, $download_qr, $logged_in, $secure, $home, $phone_first, $deep, $connect_qr, $minutes, $base_url): void {
@@ -197,12 +212,13 @@ $apple = in_array($device, ['mac', 'ios'], true) && array_filter($apps, static f
 
 <?php foreach ($apps as $app) : ?>
     <?php if ($app['open']) : ?>
-        <h3 class="h4 mt-4 mb-3"><?= e($devices($app)) ?>: <?= e($app['name']) ?></h3>
+        <h3 class="h4 mt-4 mb-2"><?php $icon($app) ?><?= e($devices($app)) ?>: <?= e($app['name']) ?></h3>
+        <?php $own_note($app) ?>
         <?php $app['kind'] === 'pc' ? $pc($app) : $phone($app) ?>
     <?php else : ?>
         <details class="mt-4">
-            <summary class="h4"><?= I18N::translate('Auch für %1$s: %2$s', e($devices($app)), e($app['name'])) ?></summary>
-            <div class="mt-3"><?php $app['kind'] === 'pc' ? $pc($app) : $phone($app) ?></div>
+            <summary class="h4"><?php $icon($app) ?><?= I18N::translate('Auch für %1$s: %2$s', e($devices($app)), e($app['name'])) ?></summary>
+            <div class="mt-3"><?php $own_note($app) ?><?php $app['kind'] === 'pc' ? $pc($app) : $phone($app) ?></div>
         </details>
     <?php endif ?>
 <?php endforeach ?>

@@ -90,5 +90,6 @@ return [
     'Für dieses Gerät gibt es noch kein eigenes Programm.' => 'There is no program for this device yet.',
     'Nutze webtrees einfach hier im Browser – er funktioniert auf jedem Gerät. Hast du zusätzlich einen Computer oder ein Android-Handy, findest du die Programme darunter.' => 'Simply use webtrees here in the browser – it works on every device. If you also have a computer or an Android phone, you will find the programs below.',
     'Die .dmg-Datei öffnen und %s in „Programme“ ziehen (arm64 für Macs mit Apple-Chip, x64 für Intel-Macs – beide auf der Release-Seite). Die Datei ist nicht signiert: beim ersten Start unter Systemeinstellungen › Datenschutz & Sicherheit „Trotzdem öffnen“. Testfassung – Rückmeldungen willkommen.' => 'Open the .dmg file and drag %s into “Applications” (arm64 for Macs with Apple chip, x64 for Intel Macs – both on the release page). The file is not signed: on first start choose “Open anyway” under System Settings › Privacy & Security. Test build – feedback welcome.',
+    'Vom Autor dieses Moduls – App und Schnittstelle werden gemeinsam entwickelt.' => 'By the author of this module – app and interface are developed together.',
     self::DESCRIPTION => 'JSON interface for the apps wtAnd, wtWin and wtTux – and any other client. Reads and writes with the rights of the signed-in user.',
 ];

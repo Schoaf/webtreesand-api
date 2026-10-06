@@ -31,6 +31,8 @@ use function str_starts_with;
  *   scheme    Teil vor "://" des Koppel-Links; leer = kein Verbinden per Tipp, nur der Download
  *   download  Download-Adresse je Geraet (https)
  *   badge     Store-Badge je Geraet, Dateiname unter resources/img (leer = Textknopf)
+ *   icon      Logo der App, Dateiname unter resources/img (PNG oder SVG, quadratisch; leer = kein Logo) - steht auf den
+ *             Seiten "App" und "Verbinden" vor dem Namen
  *   asset     nur pc: Muster des Dateinamens im GitHub-Release (die Seite "App" sucht die neueste Datei per API)
  *   always    auf jedem Geraet aufgeklappt zeigen (sonst nur auf den passenden, anderswo eingeklappt)
  *
@@ -45,7 +47,7 @@ final class Apps
     public const array DEVICES = ['android', 'ios', 'windows', 'linux', 'mac'];
 
     /** Die Felder jedes Eintrags, in dieser Reihenfolge (siehe oben). */
-    private const array FIELDS = ['name', 'author', 'kind', 'devices', 'scheme', 'download', 'badge', 'asset', 'always'];
+    private const array FIELDS = ['name', 'author', 'kind', 'devices', 'scheme', 'download', 'badge', 'icon', 'asset', 'always'];
 
     /** @var array<string,array<string,mixed>> */
     public const array ALL = [
@@ -57,6 +59,7 @@ final class Apps
             'scheme'   => 'webtreesand',
             'download' => ['android' => 'https://github.com/thobgg/app4webtrees/releases/latest'],
             'badge'    => [],
+            'icon'     => 'wt-apps.png',
             'asset'    => '',
             'always'   => true,
         ],
@@ -68,6 +71,7 @@ final class Apps
             'scheme'   => 'wtwin',
             'download' => ['windows' => 'https://github.com/thobgg/app4webtrees/releases/latest'],
             'badge'    => [],
+            'icon'     => 'wt-apps.png',
             'asset'    => '\\.exe$',
             'always'   => true,
         ],
@@ -79,6 +83,7 @@ final class Apps
             'scheme'   => 'wttux',
             'download' => ['linux' => 'https://github.com/thobgg/app4webtrees/releases/latest'],
             'badge'    => [],
+            'icon'     => 'wt-apps.png',
             'asset'    => '_amd64\\.deb$',
             'always'   => false,
         ],
@@ -91,6 +96,7 @@ final class Apps
             'scheme'   => 'wtmac',
             'download' => ['mac' => 'https://github.com/thobgg/app4webtrees/releases/latest'],
             'badge'    => [],
+            'icon'     => 'wt-apps.png',
             'asset'    => '-arm64\\.dmg$',
             'always'   => false,
         ],
@@ -102,6 +108,7 @@ final class Apps
             'scheme'   => 'webtreesmobile',
             'download' => ['ios' => 'https://apps.apple.com/app/id6815108154'],
             'badge'    => ['ios' => 'app-store.svg'],
+            'icon'     => '',
             'asset'    => '',
             'always'   => false,
         ],
@@ -129,7 +136,7 @@ final class Apps
 
     /**
      * Fuer ein Geraet sortiert: passende Apps zuerst (eigene vor fremden), dann die uebrigen. 'matches' sagt je App,
-     * ob sie zum Geraet passt, 'open', ob sie aufgeklappt gezeigt wird.
+     * ob sie zum Geraet passt, 'own', ob sie vom Modulautor ist, 'open', ob sie aufgeklappt gezeigt wird.
      *
      * @param list<array<string,mixed>> $apps
      *
@@ -142,7 +149,7 @@ final class Apps
         foreach ($apps as $app) {
             $matches = in_array($device, $app['devices'], true);
             $own     = $app['author'] === self::OWNER;
-            $app    += ['matches' => $matches, 'open' => $matches || $app['always']];
+            $app    += ['matches' => $matches, 'own' => $own, 'open' => $matches || $app['always']];
 
             $groups[($matches ? 0 : 2) + ($own ? 0 : 1)][] = $app;
         }
@@ -256,6 +263,10 @@ final class Apps
                 if (preg_match('/^[a-z0-9-]+\.(svg|png)$/', $file) !== 1 || !is_file(__DIR__ . '/../resources/img/' . $file)) {
                     $errors[] = "$id: Badge $file fehlt unter resources/img";
                 }
+            }
+
+            if ($app['icon'] !== '' && (preg_match('/^[a-z0-9-]+\.(svg|png)$/', $app['icon']) !== 1 || !is_file(__DIR__ . '/../resources/img/' . $app['icon']))) {
+                $errors[] = "$id: Logo {$app['icon']} fehlt unter resources/img";
             }
         }
 
