@@ -286,6 +286,9 @@ trait ReadActions
             'media'          => $this->mediaJson($individual),
             // ab Stufe 19: wo diese Person Pate, Trauzeuge ... ist (Gegenrichtung zu associates an den Fakten)
             'associatedIn'   => $this->associatedIn($individual),
+            // Ab Stufe 30: Forschungsaufgaben (_TODO) und letzte Aenderung (CHAN) der Person
+            'tasks'          => $this->tasksJson($individual),
+            'lastChange'     => $this->lastChangeJson($individual),
         ]);
     }
 
@@ -399,25 +402,62 @@ trait ReadActions
         }
 
         $tree = Validator::attributes($request)->tree();
+        $this->bookmarksMigrate($tree);
+
+        // Ab Stufe 30 liegt die Merkliste in webtrees' Favoriten (Tabelle favorite, Block "Meine Favoriten" auf
+        // "Meine Seite"); dazu die Favoriten des Stammbaums, die Verwalter fuer alle setzen.
+        return response([
+            'data'          => $this->favoritesJson($tree, Auth::id()),
+            'treeFavorites' => $this->favoritesJson($tree, null),
+        ]);
+    }
+
+    /**
+     * Die Personen-Favoriten eines Benutzers (null = die des Stammbaums) als Personen mit Notiz.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function favoritesJson(Tree $tree, int|null $user_id): array
+    {
+        $query = DB::table('favorite')
+            ->where('gedcom_id', '=', $tree->id())
+            ->where('favorite_type', '=', 'INDI')
+            ->orderBy('favorite_id');
+        $user_id === null ? $query->whereNull('user_id') : $query->where('user_id', '=', $user_id);
         $data = [];
 
-        foreach ($this->bookmarkXrefs($tree) as $xref) {
-            $individual = Registry::individualFactory()->make($xref, $tree);
+        foreach ($query->get() as $row) {
+            $individual = Registry::individualFactory()->make((string) $row->xref, $tree);
 
             if ($individual instanceof Individual && $individual->canShow()) {
-                $data[] = $this->personSummary($individual);
+                $data[] = $this->personSummary($individual) + ['note' => (string) ($row->note ?? '')];
             }
         }
 
-        return response(['data' => $data]);
+        return $data;
     }
 
-    /** @return list<string> */
-    private function bookmarkXrefs(Tree $tree): array
+    /**
+     * Einmalig: die Merkliste aus der alten Benutzereinstellung (bis Stufe 29) in die Favoriten uebernehmen und die
+     * Einstellung leeren. Vorhandene Favoriten bleiben, Doppelte entstehen nicht.
+     */
+    private function bookmarksMigrate(Tree $tree): void
     {
         $raw = $tree->getUserPreference(Auth::user(), self::BOOKMARKS_PREF);
 
-        return $raw === '' ? [] : array_values(array_filter(explode(',', $raw)));
+        if ($raw === '') {
+            return;
+        }
+
+        foreach (array_values(array_filter(explode(',', $raw))) as $xref) {
+            if (Registry::individualFactory()->make($xref, $tree) instanceof Individual) {
+                DB::table('favorite')->updateOrInsert(
+                    ['gedcom_id' => $tree->id(), 'user_id' => Auth::id(), 'xref' => $xref],
+                    ['favorite_type' => 'INDI', 'note' => ''],
+                );
+            }
+        }
+        $tree->setUserPreference(Auth::user(), self::BOOKMARKS_PREF, '');
     }
 
     /**
@@ -504,7 +544,7 @@ trait ReadActions
             return $denied;
         }
 
-        return response($this->familyJson($family, null) + ['media' => $this->mediaJson($family)]);
+        return response($this->familyJson($family, null) + ['media' => $this->mediaJson($family), 'tasks' => $this->tasksJson($family), 'lastChange' => $this->lastChangeJson($family)]);
     }
 
     /**

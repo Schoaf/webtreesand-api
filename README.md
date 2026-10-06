@@ -175,8 +175,11 @@ file's path inside the tree's media folder, for naming the same file to another 
 
 ### Compatibility
 
+The interface is complete since level 30 (1.18): every route needed for everyday genealogy work is there, and releases are
+rare from now on – changes and fixes are collected, pull requests are merged without an immediate release.
+
 The interface only grows. Every release that adds routes or fields raises the **API level** (`apiVersion` in `Info`,
-29 today); existing routes, parameters and fields keep their names, types and meaning. A client built for level N works
+30 today); existing routes, parameters and fields keep their names, types and meaning. A client built for level N works
 with every module from level N on, and an older client keeps working with a newer module – it simply does not see
 the new fields. New fields are optional, so clients should ignore what they do not know. The tests check every answer
 against the documented schema, so a field cannot disappear unnoticed. Where a limit is raised (generations, page

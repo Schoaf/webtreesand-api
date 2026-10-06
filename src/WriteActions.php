@@ -1612,7 +1612,8 @@ trait WriteActions
     }
 
     /**
-     * Merkliste aendern (ab Stufe 11): Rumpf { xref, add: true|false }. Antwort wie Bookmarks (die ganze Liste).
+     * Merkliste aendern (ab Stufe 11, ab Stufe 30 in webtrees' Favoriten): Rumpf { xref, add: true|false, note?,
+     * forTree? }. forTree setzt die Favoriten des Stammbaums (nur Verwalter). Antwort wie Bookmarks (beide Listen).
      */
     public function postBookmarksAction(ServerRequestInterface $request): ResponseInterface
     {
@@ -1620,10 +1621,16 @@ trait WriteActions
             return $this->error(403, 'not-logged-in');
         }
 
-        $tree = Validator::attributes($request)->tree();
-        $body = $this->body($request);
-        $xref = $this->str($body, 'xref');
-        $add  = (bool) ($body['add'] ?? true);
+        $tree     = Validator::attributes($request)->tree();
+        $body     = $this->body($request);
+        $xref     = $this->str($body, 'xref');
+        $add      = (bool) ($body['add'] ?? true);
+        $for_tree = ($body['forTree'] ?? false) === true;
+        $note     = trim($this->str($body, 'note'));
+
+        if ($for_tree && !Auth::isManager($tree)) {
+            return $this->error(403, 'not-manager');
+        }
 
         $individual = Registry::individualFactory()->make($xref, $tree);
 
@@ -1631,14 +1638,20 @@ trait WriteActions
             return $this->error(404, 'not-found');
         }
 
-        $xrefs = $this->bookmarkXrefs($tree);
-        $xrefs = array_values(array_filter($xrefs, static fn (string $x): bool => $x !== $xref));
+        $this->bookmarksMigrate($tree);
+        $query = DB::table('favorite')->where('gedcom_id', '=', $tree->id())->where('xref', '=', $xref);
+        $for_tree ? $query->whereNull('user_id') : $query->where('user_id', '=', Auth::id());
 
         if ($add) {
-            $xrefs[] = $xref;
+            $vorhanden = $query->first();
+            if ($vorhanden === null) {
+                DB::table('favorite')->insert(['gedcom_id' => $tree->id(), 'user_id' => $for_tree ? null : Auth::id(), 'xref' => $xref, 'favorite_type' => 'INDI', 'note' => $note]);
+            } elseif (isset($body['note'])) {
+                $query->update(['note' => $note]);
+            }
+        } else {
+            $query->delete();
         }
-
-        $tree->setUserPreference(Auth::user(), self::BOOKMARKS_PREF, implode(',', array_slice($xrefs, -self::BOOKMARKS_MAX)));
 
         return $this->getBookmarksAction($request);
     }

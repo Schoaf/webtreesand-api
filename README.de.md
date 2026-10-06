@@ -144,8 +144,11 @@ zuletzt (1.13.0, Stufen 21–24): Orte lesen, schreiben, umbenennen und zusammen
 GEDCOM-L mit GOV-Kennung, Koordinaten, Postleitzahl, Region, Land, Kurzname, Notizen, Quellen, Medien), Titel und Art
 von Medienobjekten, Startperson festlegen.
 
+**Vollständig:** Seit Stufe 30 (1.18) ist die Schnittstelle vollständig – alle Routen für die tägliche Arbeit sind da. Releases
+bleiben ab jetzt selten; Änderungen und Fehlerbehebungen werden gesammelt, Pull Requests ohne sofortiges Release gemergt.
+
 **Kompatibilität:** Die Schnittstelle wächst nur. Jedes Release mit neuen Routen oder Feldern erhöht die **API-Stufe**
-(`apiVersion` in `Info`, heute 29); bestehende Routen, Parameter und Felder behalten Name, Typ und Bedeutung. Ein Client
+(`apiVersion` in `Info`, heute 30); bestehende Routen, Parameter und Felder behalten Name, Typ und Bedeutung. Ein Client
 für Stufe N läuft mit jedem Modul ab Stufe N, und ein älterer Client läuft mit einem neueren Modul weiter, er sieht die
 neuen Felder nur nicht. Die Tests prüfen jede Antwort gegen das dokumentierte Schema, ein Feld kann also nicht unbemerkt
 verschwinden. Müsste sich je etwas unverträglich ändern, wäre es eine neue Route, nie eine geänderte.

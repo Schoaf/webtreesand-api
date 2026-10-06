@@ -78,7 +78,9 @@ ROUTEN = [
      "Birthdays, weddings and deaths in the next `days` days. At most 100 entries: per day living people first, "
      "then round anniversaries (25, 50 …); `total` and `more` tell whether there were more (since 1.9.6).",
      [P("days", "1–60, default 14", "integer")], None),
-    ("get", "Bookmarks", True, 11, "member", "The signed-in user's bookmarks in this tree (user setting, all clients).", [], None),
+    ("get", "Bookmarks", True, 11, "member", "The signed-in user's bookmarks in this tree. From level 30 they are webtrees' own favourites "
+     "(table `favorite`, block “My favourites” on “My page”): `data` the user's, `treeFavorites` the tree's (set by managers), "
+     "each person with `note`. Bookmarks from the old user setting (levels 11–29) are taken over once.", [], None),
     ("get", "Pending", True, 5, "moderator", "Records with pending changes.", [], None),
     ("get", "Tags", True, 1, "visitor", "Facts and events the client may offer for adding, with labels.",
      [P("type", "`INDI` or `FAM`", pflicht=True)], None),
@@ -191,7 +193,26 @@ ROUTEN = [
      "`multipart/form-data`: `file`, `title?`, `note?`"),
     ("post", "UnlinkMedia", True, 8, "editor", "Unlink a media object; object and file stay.", [XREF], "`{media}`"),
     ("post", "PrimaryMedia", True, 8, "editor", "Make a linked image the main photo.", [XREF], "`{media}`"),
-    ("post", "Bookmarks", True, 11, "member", "Add or remove a bookmark; answers with the whole list.", [], "`{xref, add: true|false}`"),
+    ("post", "Bookmarks", True, 11, "member", "Add or remove a bookmark; answers with both lists. From level 30 `note` (text shown with the favourite) and "
+     "`forTree: true` (the tree's favourites, managers only, error `not-manager`).", [], "`{xref, add: true|false, note?, forTree?}`"),
+    ("get", "Tasks", True, 30, "member",
+     "All research tasks of the tree – webtrees' own `_TODO` facts at individuals and families (text, date, user, note), as the "
+     "module “Research tasks” writes and shows them – at records the user may see, by date. `?open=1` only the ones due (date not in "
+     "the future; webtrees treats a future date as a reminder). A task is done when it is deleted (`DeleteFact` with its `factId`).",
+     [P("open", "`1`: only tasks whose date is not in the future")], None),
+    ("post", "Task", True, 30, "editor",
+     "Add or change a research task at an individual or family: `1 _TODO text` with `2 DATE` (today when missing), `2 _WT_USER` "
+     "(the signed-in user when missing) and `2 NOTE`. With `factId` the task is changed, without it created. The answer's `factId` "
+     "is the new id. Delete (= done) with `DeleteFact`.", [XREF], "`{factId?, text, date?, user?, note?}`. Answer: `{ok, xref, pending, factId}`."),
+    ("post", "Reorder", True, 30, "editor",
+     "Reorder children (`children`, at a family), partnerships (`families`), names (`names`, at an individual) or media (`media`, "
+     "both) – like the “Re-order” pages in webtrees, only the order of the lines changes. `order` lists the identifiers (for names "
+     "the fact ids) in the new order; what is not listed comes after. The answer's `order` is the resulting order.",
+     [XREF], "`{type: children|families|names|media, order: [...]}`. Answer: `{ok, xref, pending, order}`."),
+    ("get", "Changes", True, 30, "member",
+     "The change history of the tree from webtrees' change table, newest first: who created, changed or deleted which record and "
+     "when, including pending changes. Only records the user may see; deleted records only for managers. `?limit=50` (at most 200), "
+     "`?xref=` only that record.", [P("limit", "At most this many entries (1–200, default 50)", "integer"), P("xref", "Only this record")], None),
     ("post", "Accept", True, 5, "moderator", "Accept pending changes of one record, or of the whole tree without `xref`.",
      [P("xref", "Record, optional")], None),
     ("post", "Reject", True, 5, "moderator", "Reject pending changes of one record, or of the whole tree without `xref`.",
@@ -202,7 +223,7 @@ ROUTEN = [
 
 FEHLER = sorted(set(re.findall(r"error\((\d+), '([a-z-]+)'\)", "".join(
     open(os.path.join(umgebung.MODUL, f)).read() for f in
-    ["Api4WebtreesModule.php", "src/ReadActions.php", "src/WriteActions.php", "src/AppPages.php", "src/MergeActions.php"]))),
+    ["Api4WebtreesModule.php", "src/ReadActions.php", "src/WriteActions.php", "src/AppPages.php", "src/MergeActions.php", "src/TaskActions.php"]))),
     key=lambda e: (e[0], e[1]))
 
 
@@ -320,7 +341,13 @@ def sammeln(u):
     open(os.path.join(umgebung.WT, "data", "media", "archiv", "manifest.png"), "wb").write(PNG)
     merken("post", "MediaFromFile", admin.post("MediaFromFile", "testbaum", {"file": "archiv/manifest.png", "title": "Manifestscan"}, xref="I1"))
     merken("post", "MediaFromFile", admin.post("MediaFromFile", "testbaum", {"file": "archiv/manifest.png"}, xref="I1"))
-    merken("post", "Bookmarks", admin.post("Bookmarks", "testbaum", {"xref": "I1", "add": True}))
+    merken("post", "Bookmarks", admin.post("Bookmarks", "testbaum", {"xref": "I1", "add": True, "note": "Manifest"}))
+    merken("post", "Bookmarks", admin.post("Bookmarks", "testbaum", {"xref": "I2", "add": True, "forTree": True}))
+    aufgabe = admin.post("Task", "testbaum", {"text": "Manifestaufgabe", "note": "Taufe suchen"}, xref="I4")
+    merken("post", "Task", aufgabe)
+    merken("post", "Task", admin.post("Task", "testbaum", {"factId": aufgabe.json["factId"], "text": "Manifestaufgabe geaendert", "date": "1 JAN 2030"}, xref="I4"))
+    merken("post", "Reorder", admin.post("Reorder", "testbaum", {"type": "children", "order": ["I5", "I4"]}, xref="F1"))
+    merken("post", "Reorder", admin.post("Reorder", "testbaum", {"type": "children", "order": ["I4", "I5"]}, xref="F1"))
     merken("post", "StartPerson", admin.post("StartPerson", "testbaum", {"xref": "I1"}))
     merken("post", "MyAccount", admin.post("MyAccount", None, {"realName": admin.info()["user"]["realName"]}))
     # Info.loginForm mit Bedingungen: ohne SHOW_REGISTER_CAUTION waere registrationTerms immer null und das Schema falsch.

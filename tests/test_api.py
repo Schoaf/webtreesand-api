@@ -80,6 +80,10 @@ def leseaufrufe(baum="testbaum"):
         ("Places", baum, {"q": "Marker"}),
         ("Places", baum, {"list": 1}),
         ("Merges", baum, {}),
+        ("Tasks", baum, {}),
+        ("Tasks", baum, {"open": 1}),
+        ("Changes", baum, {"limit": 20}),
+        ("Changes", baum, {"xref": "I1"}),
     ]
     for ort in ["Offenbach", "Bieber, Offenbach", "Markerlebendort", "Markerkonfidenzort", "Gibtesnicht"]:
         aufrufe.append(("Place", baum, {"name": ort}))
@@ -423,6 +427,93 @@ class Orte(unittest.TestCase):
         self.assertEqual("not-editable", U.sitzung("mitglied").post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": "X"}).json["error"])
         self.assertEqual("not-found", U.sitzung("bearbeiter").post("PlaceRename", "testbaum", {"from": "Markerkonfidenzort", "to": "X"}).json["error"])
         self.assertEqual("name-missing", s.post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": " , "}).json["error"])
+
+class StufeDreissig(unittest.TestCase):
+    """Stufe 30: Merkliste in den Favoriten, Forschungsaufgaben (_TODO), Reihenfolge, Aenderungsverlauf."""
+
+    def test_merkliste_in_favoriten(self):
+        m = U.sitzung("mitglied")
+        uid = umgebung.sql("SELECT user_id FROM wt_user WHERE user_name = 'mitglied'")[0][0]
+        gid = umgebung.sql("SELECT gedcom_id FROM wt_gedcom WHERE gedcom_name = 'testbaum'")[0][0]
+        umgebung.sql("DELETE FROM wt_favorite WHERE gedcom_id = ? AND user_id = ?", gid, uid)
+        # Alte Einstellung (bis Stufe 29) wird einmalig uebernommen
+        umgebung.sql("INSERT OR REPLACE INTO wt_user_gedcom_setting (user_id, gedcom_id, setting_name, setting_value) VALUES (?, ?, 'api4webtrees_bookmarks', 'I1,I2')", uid, gid)
+        b = m.get("Bookmarks", "testbaum").json
+        self.assertEqual(["I1", "I2"], [p["xref"] for p in b["data"]], b)
+        self.assertEqual("", umgebung.sql("SELECT setting_value FROM wt_user_gedcom_setting WHERE user_id = ? AND gedcom_id = ? AND setting_name = 'api4webtrees_bookmarks'", uid, gid)[0][0], "Einstellung geleert")
+        self.assertEqual(2, umgebung.sql("SELECT COUNT(*) FROM wt_favorite WHERE gedcom_id = ? AND user_id = ? AND favorite_type = 'INDI'", gid, uid)[0][0])
+        # Hinzufuegen mit Notiz, Entfernen
+        b = m.post("Bookmarks", "testbaum", {"xref": "I4", "add": True, "note": "Taufe pruefen"}).json
+        self.assertEqual(("I4", "Taufe pruefen"), (b["data"][-1]["xref"], b["data"][-1]["note"]))
+        b = m.post("Bookmarks", "testbaum", {"xref": "I1", "add": False}).json
+        self.assertEqual(["I2", "I4"], [p["xref"] for p in b["data"]])
+        # Favoriten des Stammbaums: nur Verwalter
+        self.assertEqual("not-manager", m.post("Bookmarks", "testbaum", {"xref": "I1", "add": True, "forTree": True}).json["error"])
+        v = U.sitzung("verwalter")
+        b = v.post("Bookmarks", "testbaum", {"xref": "I1", "add": True, "forTree": True, "note": "Stammvater"}).json
+        self.assertEqual([("I1", "Stammvater")], [(p["xref"], p["note"]) for p in b["treeFavorites"]])
+        self.assertEqual(["I1"], [p["xref"] for p in m.get("Bookmarks", "testbaum").json["treeFavorites"]], "Mitglied sieht die Stammbaum-Favoriten")
+        v.post("Bookmarks", "testbaum", {"xref": "I1", "add": False, "forTree": True})
+        self.assertEqual("not-logged-in", U.sitzung().get("Bookmarks", "testbaum").json["error"])
+
+    def test_aufgaben(self):
+        s = U.sitzung("admin")
+        a = s.post("Task", "testbaum", {"text": "Taufe in Offenbach suchen", "note": "Kirchenbuch\nzweite Zeile"}, xref="I4").json
+        self.assertEqual((True, False), (a["ok"], a["pending"]), a)
+        t = s.get("Tasks", "testbaum").json
+        meine = [x for x in t["tasks"] if x["record"] == "I4"]
+        self.assertEqual(1, len(meine), t)
+        self.assertEqual(("Taufe in Offenbach suchen", "admin", "Kirchenbuch\nzweite Zeile", a["factId"]), (meine[0]["text"], meine[0]["user"], meine[0]["note"], meine[0]["factId"]))
+        self.assertIsNotNone(meine[0]["date"], "ohne Datum wird heute eingetragen")
+        self.assertEqual(1, len(s.get("Individual", "testbaum", xref="I4").json["tasks"]), "auch in der Personenantwort")
+        self.assertEqual(0, len([f for f in s.get("Individual", "testbaum", xref="I4").json["facts"] if f["tag"] == "_TODO"]), "nicht in den Ereignissen")
+        # Aendern mit Wiedervorlage in der Zukunft: faellt aus ?open=1 heraus
+        b = s.post("Task", "testbaum", {"factId": a["factId"], "text": "Taufe suchen", "date": "1 JAN 2099"}, xref="I4").json
+        self.assertEqual(True, b["ok"], b)
+        self.assertEqual([], [x for x in s.get("Tasks", "testbaum", open=1).json["tasks"] if x["record"] == "I4"])
+        self.assertEqual(["Taufe suchen"], [x["text"] for x in s.get("Tasks", "testbaum").json["tasks"] if x["record"] == "I4"])
+        # Fehler, dann erledigt = geloescht
+        self.assertEqual("text-missing", s.post("Task", "testbaum", {"text": "  "}, xref="I4").json["error"])
+        self.assertEqual("not-editable", U.sitzung("mitglied").post("Task", "testbaum", {"text": "x"}, xref="I4").json["error"])
+        self.assertEqual(True, s.post("DeleteFact", "testbaum", {"factId": b["factId"]}, xref="I4").json["ok"])
+        self.assertEqual([], [x for x in s.get("Tasks", "testbaum").json["tasks"] if x["record"] == "I4"])
+        # Bearbeiter ohne Sofortfreigabe: ausstehend
+        e = U.sitzung("bearbeiter").post("Task", "testbaum", {"text": "Wartet"}, xref="I4").json
+        try:
+            self.assertEqual(True, e["pending"], e)
+        finally:
+            s.post("Reject", "testbaum", {}, xref="I4")
+
+    def test_reihenfolge(self):
+        s = U.sitzung("admin")
+        vorher = [c["xref"] for c in s.get("Family", "testbaum", xref="F1").json["children"]]
+        self.assertEqual(["I4", "I5"], vorher)
+        r = s.post("Reorder", "testbaum", {"type": "children", "order": ["I5"]}, xref="F1").json
+        self.assertEqual((True, ["I5", "I4"]), (r["ok"], r["order"]), r)
+        self.assertEqual(["I5", "I4"], [c["xref"] for c in s.get("Family", "testbaum", xref="F1").json["children"]])
+        ged = umgebung.sql("SELECT f_gedcom FROM wt_families WHERE f_id = 'F1'")[0][0]
+        self.assertIn("1 CHIL @I5@\n1 CHIL @I4@", ged, "nur die Reihenfolge der Zeilen aendert sich")
+        self.assertIn("1 HUSB @I1@", ged)
+        s.post("Reorder", "testbaum", {"type": "children", "order": ["I4", "I5"]}, xref="F1")
+        self.assertEqual("invalid-value", s.post("Reorder", "testbaum", {"type": "children", "order": []}, xref="I1").json["error"], "Kinder nur an der Familie")
+        self.assertIn(U.sitzung("mitglied").post("Reorder", "testbaum", {"type": "children", "order": []}, xref="F1").json["error"], ("not-editable", "private"))
+
+    def test_aenderungsverlauf(self):
+        s = U.sitzung("admin")
+        s.post("Fact", "testbaum", {"tag": "OCCU", "value": "Verlaufsberuf"}, xref="I4")
+        c = s.get("Changes", "testbaum", limit=5).json
+        self.assertEqual(True, c["ok"], c)
+        self.assertTrue(1 <= len(c["changes"]) <= 5)
+        e = c["changes"][0]
+        self.assertEqual(("I4", "INDI", "updated", False), (e["xref"], e["type"], e["action"], e["pending"]), e)
+        self.assertTrue(e["time"].startswith("20") and e["user"])
+        nur = s.get("Changes", "testbaum", xref="I4").json["changes"]
+        self.assertTrue(all(x["xref"] == "I4" for x in nur) and nur)
+        lc = s.get("Individual", "testbaum", xref="I4").json["lastChange"]
+        self.assertTrue(lc and lc["time"].startswith("20"), lc)
+        self.assertEqual("not-logged-in", U.sitzung().get("Changes", "testbaum").json["error"])
+        self.assertTrue(len(U.sitzung("mitglied").get("Changes", "testbaum").json["changes"]) >= 1, "Mitglieder sehen den Verlauf sichtbarer Datensaetze")
+
 
 class Zusammenfuehren(unittest.TestCase):
     """Stufe 29: POST Merge mit Vorschau, GET Merges, POST MergeUndo - nur Verwalter."""

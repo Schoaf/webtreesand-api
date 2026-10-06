@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.18.0 – 2026-10-06
+**API level 30: the interface is complete.** With this release every route needed for everyday genealogy work is there:
+individuals, families, events, names, sources and citations, media, places and location records, godparents, merging with
+undo, and now research tasks, ordering, change history and favourites. **From here on releases will be rare.** Changes
+and fixes are collected and published together; pull requests are merged without an immediate release, so clients built
+on this API are not served a new version every few days. Everything is additive; older clients keep working.
+- **Bookmarks → webtrees favourites.** `GET/POST Bookmarks` now use webtrees' own `favorite` table, so the bookmarks appear
+  in the browser under “My page › My favourites” and survive any client. `data` are the user's, `treeFavorites` the
+  tree's (managers set them with `forTree: true`), each person with a `note`. Bookmarks from the old user setting are
+  taken over once, automatically.
+- **Research tasks.** `GET Tasks` lists webtrees' `_TODO` facts of the tree (text, date, user, note; `?open=1` only the
+  ones due); `POST Task` adds or changes one (date defaults to today, user to the signed-in one); deleting with
+  `DeleteFact` means done. `Individual` and `Family` answer with `tasks`. Nothing proprietary: `_TODO` is what the
+  webtrees module “Research tasks” writes and shows.
+- **Ordering.** `POST Reorder` sorts children, partnerships, names or media – like the “Re-order” pages in webtrees,
+  only the order of the GEDCOM lines changes.
+- **Change history.** `GET Changes` lists who created, changed or deleted which record and when (webtrees' change table,
+  pending changes included), `?xref=` for one record; `Individual` and `Family` answer with `lastChange` (CHAN).
+- Tests: `StufeDreissig` (favourites with migration, tasks, ordering, history); the documentation is generated again.
+
 ## 1.17.2 – 2026-10-06
 **Merge preview: contained facts.** No API change; API level stays 29.
 - A fact that is contained in a fact of the other individual – same first line, every further line present there too, but
