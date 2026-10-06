@@ -1,7 +1,7 @@
 <?php
 
 /**
- * api4webtrees - JSON-Schnittstelle fuer die native Android-App wtAnd.
+ * api4webtrees - JSON-Schnittstelle fuer die Apps wtAnd, wtWin, wtTux, wtMac und andere Clients.
  *
  * Installation: diesen Ordner nach modules_v4/api4webtrees kopieren. Der webtrees-Kern bleibt unveraendert.
  * Die Modulklasse liegt daneben, ihre Teile (Traits, Helfer) unter src/ - siehe Kopf von Api4WebtreesModule.php.

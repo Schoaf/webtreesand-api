@@ -95,7 +95,7 @@ trait AppPages
             'version'      => $this->customModuleVersion(),
             'api'          => self::API_VERSION,
             'https'        => str_starts_with($base_url, 'https://'),
-            'home'         => !str_starts_with($base_url, 'https://') && self::homeNetwork((string) parse_url($base_url, PHP_URL_HOST)),
+            'home'         => self::homeNetworkUrl($base_url),
             'max_upload'   => $this->maxUploadBytes(),
         ]);
     }
@@ -140,20 +140,19 @@ trait AppPages
         $tree     = $tree instanceof Tree ? $tree : null;
         $user     = Auth::user();
         $base_url = Validator::attributes($request)->string('base_url');
-        $host     = (string) parse_url($base_url, PHP_URL_HOST);
 
         // Der Einmal-Code ist so gut wie ein Passwort - er darf nur verschluesselt reisen. Ausnahme: das Heimnetz
-        // (nas4webtrees unter http://192.168.x.y:8095, 26.09.2026) - dieselbe Regel, nach der die Apps http:// zulassen.
-        $home   = !str_starts_with($base_url, 'https://') && self::homeNetwork($host);
+        // (etwa eine NAS, die nur per http:// erreichbar ist) - dieselbe Regel, nach der die Apps http:// zulassen.
+        $home   = self::homeNetworkUrl($base_url);
         $secure = str_starts_with($base_url, 'https://') || $home;
 
-        $device      = self::device($request->getHeaderLine('User-Agent'));
+        $device      = self::requestDevice($request);
         $apps        = Apps::forDevice($this->apps(), $device);
         $connect_url = '';
         $deep        = [];
 
         if (Auth::check() && $secure) {
-            $code = bin2hex(random_bytes(24));
+            $code = bin2hex(random_bytes(self::PAIR_CODE_BYTES));
             $user->setPreference(self::PAIR_SETTING, hash('sha256', $code) . '|' . (time() + self::PAIR_SECONDS) . '|' . ($tree?->name() ?? ''));
 
             $params      = ['code' => $code, 'tree' => $tree?->name() ?? '', 'user' => $user->userName()];
@@ -173,6 +172,8 @@ trait AppPages
 
         $qr = [];
 
+        // Der QR-Code wird mit dem Handy gescannt: bei einer App fuer Android und iOS zeigt er den Android-Download,
+        // sonst den einzigen, den es gibt.
         foreach ($apps as $app) {
             if ($app['kind'] === 'phone') {
                 $qr[$app['id']] = $this->qrSvg(Apps::download($app, 'android'));
@@ -204,7 +205,7 @@ trait AppPages
     public function postHintOffAction(ServerRequestInterface $request): ResponseInterface
     {
         if (Auth::check()) {
-            Auth::user()->setPreference(self::hintKey($request->getHeaderLine('User-Agent')), 'dismissed');
+            Auth::user()->setPreference(self::hintKey($request), self::HINT_DISMISSED);
         }
 
         return redirect(Validator::parsedBody($request)->isLocalUrl()->string('url', $this->actionUrl('App', null)));
@@ -217,7 +218,7 @@ trait AppPages
      */
     public function getConnectAction(ServerRequestInterface $request): ResponseInterface
     {
-        $device = self::device($request->getHeaderLine('User-Agent'));
+        $device = self::requestDevice($request);
         $apps   = Apps::forDevice(Apps::kind($this->apps(), 'phone'), $device);
 
         return $this->viewResponse($this->name() . '::connect', [
@@ -238,7 +239,7 @@ trait AppPages
     {
         $code = $this->str($this->body($request), 'code');
 
-        if (preg_match('/^[0-9a-f]{48}$/', $code) !== 1) {
+        if (preg_match('/^[0-9a-f]{' . (2 * self::PAIR_CODE_BYTES) . '}$/', $code) !== 1) {
             return $this->error(400, 'pair-invalid');
         }
 
@@ -269,19 +270,22 @@ trait AppPages
         Auth::login($user);
         Log::addAuthenticationLog('Login (App, Einmal-Code): ' . $user->userName() . '/' . $user->realName());
         $user->setPreference(UserInterface::PREF_TIMESTAMP_ACTIVE, (string) time());
-        $user->setPreference(self::hintKey($request->getHeaderLine('User-Agent')), 'connected');
+        $user->setPreference(self::hintKey($request), self::HINT_CONNECTED);
 
         return response(['ok' => true, 'tree' => $tree_name, 'user' => $user->userName()]);
     }
 
     /**
-     * @param array<string,string> $params
-     */
-    /**
      * Heimnetz wie in den Apps (Heimnetz.kt): private, Loopback- und Link-Local-Adressen (IPv4 10/8, 172.16/12,
      * 192.168/16, 127/8, 169.254/16; IPv6 ::1, fc00::/7, fe80::/10), Namen ohne Punkt ("diskstation") und die
      * Endungen .local, .lan, .home, .home.arpa, .internal, .fritz.box, .box. Der Server loest keine Namen auf.
      */
+    /** Laeuft diese Installation unverschluesselt im Heimnetz (etwa eine NAS unter http://)? */
+    private static function homeNetworkUrl(string $base_url): bool
+    {
+        return !str_starts_with($base_url, 'https://') && self::homeNetwork((string) parse_url($base_url, PHP_URL_HOST));
+    }
+
     public static function homeNetwork(string $host): bool
     {
         $host = strtolower(rtrim(trim($host, '[]'), '.'));
@@ -340,11 +344,20 @@ trait AppPages
      * Der Hinweis nach dem Anmelden merkt sich Handy und PC getrennt: wer wtAnd verbunden hat, soll trotzdem von wtWin
      * erfahren (und umgekehrt). Die Apps melden sich mit wtAnd/…, wtWin/… (Windows) bzw. wtTux/… (Linux).
      */
-    private static function hintKey(string $user_agent): string
+    private static function hintKey(ServerRequestInterface $request): string
     {
-        return in_array(self::device($user_agent), ['windows', 'linux'], true) ? self::HINT_DESK_SETTING : self::HINT_SETTING;
+        return in_array(self::requestDevice($request), ['windows', 'linux'], true) ? self::HINT_DESK_SETTING : self::HINT_SETTING;
     }
 
+    /** Das Geraet, von dem diese Anfrage kommt - siehe device(). */
+    private static function requestDevice(ServerRequestInterface $request): string
+    {
+        return self::device($request->getHeaderLine('User-Agent'));
+    }
+
+    /**
+     * @param array<string,string> $params
+     */
     private function deepLink(string $scheme, string $base_url, array $params): string
     {
         return $scheme . '://connect?' . http_build_query(['url' => $base_url] + $params);
@@ -414,6 +427,7 @@ trait AppPages
     private function qrSvg(string $data): string
     {
         try {
+            // 5 Pixel je Modul (Kaestchen); tc-lib-barcode versteht negative Masse als Modulgroesse statt Gesamtgroesse.
             if (class_exists('TCPDF2DBarcode')) {
                 return (new \TCPDF2DBarcode($data, 'QRCODE,M'))->getBarcodeSVGcode(5, 5, 'black');
             }

@@ -11,6 +11,8 @@ use function array_slice;
 use function explode;
 use function in_array;
 use function preg_match;
+use function preg_match_all;
+use function preg_quote;
 use function preg_replace;
 use function str_contains;
 use function str_replace;
@@ -19,6 +21,8 @@ use function strtoupper;
 use function substr;
 use function substr_count;
 use function trim;
+
+use const PREG_SET_ORDER;
 
 /**
  * Reine Textfunktionen fuer GEDCOM-Zeilen: bauen, pruefen, entschaerfen. Ohne webtrees-Zustand,
@@ -77,35 +81,35 @@ final class GedcomText
      *
      * @return array<int,array{0:string,1:string}>
      */
-    public static function unterzeilen(string $block, int $ebene, string $tag): array
+    public static function subrecords(string $block, int $level, string $tag): array
     {
-        $tiefer = $ebene + 1;
-        preg_match_all('/\n' . $ebene . ' ' . $tag . '(?: ([^\n]*))?((?:\n[' . $tiefer . '-9] [^\n]*)*)/', $block, $treffer, PREG_SET_ORDER);
+        $deeper = $level + 1;
+        preg_match_all('/\n' . $level . ' ' . $tag . '(?: ([^\n]*))?((?:\n[' . $deeper . '-9] [^\n]*)*)/', $block, $matches, PREG_SET_ORDER);
 
-        return array_map(static fn (array $t): array => [$t[1] ?? '', $t[2] ?? ''], $treffer);
+        return array_map(static fn (array $t): array => [$t[1] ?? '', $t[2] ?? ''], $matches);
     }
 
     /**
-     * Ein Wert samt Fortsetzungen: CONT beginnt eine neue Zeile, CONC haengt an ([$ebene] ist die Ebene des Werts).
+     * Ein Wert samt Fortsetzungen: CONT beginnt eine neue Zeile, CONC haengt an ([$level] ist die Ebene des Werts).
      */
-    public static function mitFortsetzung(string $wert, string $unter, int $ebene): string
+    public static function withContinuations(string $value, string $sub, int $level): string
     {
-        $text = $wert;
-        preg_match_all('/\n' . ($ebene + 1) . ' (CONT|CONC)(?: ([^\n]*))?/', $unter, $teile, PREG_SET_ORDER);
+        $text = $value;
+        preg_match_all('/\n' . ($level + 1) . ' (CONT|CONC)(?: ([^\n]*))?/', $sub, $parts, PREG_SET_ORDER);
 
-        foreach ($teile as $teil) {
-            $text .= ($teil[1] === 'CONT' ? "\n" : '') . ($teil[2] ?? '');
+        foreach ($parts as $part) {
+            $text .= ($part[1] === 'CONT' ? "\n" : '') . ($part[2] ?? '');
         }
 
         return $text;
     }
 
     /** Der erste Wert "<ebene> <tag>" eines Datensatzes samt Fortsetzungen; leer, wenn es ihn nicht gibt. */
-    public static function ersterWert(string $gedcom, int $ebene, string $tag): string
+    public static function firstValue(string $gedcom, int $level, string $tag): string
     {
-        $t = self::unterzeilen("\n" . $gedcom, $ebene, $tag)[0] ?? null;
+        $t = self::subrecords("\n" . $gedcom, $level, $tag)[0] ?? null;
 
-        return $t === null ? '' : self::mitFortsetzung($t[0], $t[1], $ebene);
+        return $t === null ? '' : self::withContinuations($t[0], $t[1], $level);
     }
 
     /**
@@ -120,6 +124,49 @@ final class GedcomText
         preg_match('/^[^\n]*(\n2 CONT[^\n]*)*/', $gedcom, $match);
 
         return $match[0] . $insert . substr($gedcom, strlen($match[0]));
+    }
+
+    /**
+     * Ein Ereignis in Kopfzeile und Ebene-2-Bloecke zerlegen: jeder Block beginnt mit "\n2 " und traegt seine
+     * Unterzeilen 3-9. Kopf . implode('', Bloecke) ergibt wieder das Ereignis.
+     *
+     * @return array{0:string,1:list<string>}
+     */
+    public static function headAndBlocks(string $gedcom): array
+    {
+        [$head] = explode("\n", $gedcom, 2);
+        preg_match_all('/\n2 [^\n]*(?:\n[3-9] [^\n]*)*/', substr($gedcom, strlen($head)), $matches);
+
+        return [$head, $matches[0]];
+    }
+
+    /**
+     * Alle Unterzeilen "<level> <tag> ..." samt ihren tieferen Zeilen aus einem Block entfernen und $new anhaengen
+     * ('' = nur entfernen). Das Muster fuer "nur genannte Teile ersetzen, alles andere bleibt".
+     */
+    public static function replaceSubrecords(string $block, int $level, string $tag, string $new): string
+    {
+        $pattern = '/\n' . $level . ' ' . preg_quote($tag, '/') . '(?= |\n|$)(?: [^\n]*)?(?:\n[' . ($level + 1) . '-9] [^\n]*)*/';
+
+        return (string) preg_replace($pattern, '', $block) . $new;
+    }
+
+    /**
+     * Die Medienverweise "<level> OBJE @M1@" eines Blocks durch diese Liste ersetzen; nur gueltige Kennungen kommen an.
+     *
+     * @param array<mixed> $media Kennungen, mit oder ohne @
+     */
+    public static function replaceMediaLinks(string $block, int $level, array $media): string
+    {
+        $block = (string) preg_replace('/\n' . $level . ' OBJE @[^\n]*(?:\n[' . ($level + 1) . '-9] [^\n]*)*/', '', $block);
+
+        foreach ($media as $m) {
+            if (preg_match('/^@?([A-Za-z0-9:_.-]+)@?$/', (string) $m, $match) === 1) {
+                $block .= "\n" . $level . ' OBJE @' . $match[1] . '@';
+            }
+        }
+
+        return $block;
     }
 
     public static function eventGedcom(string $tag, string $date, string $place, bool $happened): string

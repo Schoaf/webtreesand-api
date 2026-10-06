@@ -9,7 +9,6 @@ use Fisharebest\Webtrees\Contracts\UserInterface;
 use Fisharebest\Webtrees\DB;
 use Fisharebest\Webtrees\Fact;
 use Fisharebest\Webtrees\Family;
-use Fisharebest\Webtrees\GedcomRecord;
 use Fisharebest\Webtrees\Individual;
 use Fisharebest\Webtrees\Registry;
 use Fisharebest\Webtrees\Services\GedcomImportService;
@@ -27,7 +26,6 @@ use function array_values;
 use function bin2hex;
 use function count;
 use function date;
-use function explode;
 use function implode;
 use function in_array;
 use function is_array;
@@ -65,7 +63,7 @@ trait MergeActions
     /** So viele Vorgaenge merkt sich das Modul je Baum (aelteste fallen heraus). */
     private const int MERGE_LOG_SIZE = 200;
 
-    /** Verknuepfungen bleiben immer und sind nicht waehlbar. */
+    /** Verknuepfungen bleiben beim Zusammenfuehren immer und sind nicht waehlbar (anders als SKIP_FACTS und GedcomText::LINK_TAGS). */
     private const array MERGE_LINK_TAGS = ['FAMC', 'FAMS', 'OBJE'];
 
     /**
@@ -132,10 +130,58 @@ trait MergeActions
         $keep2 = $this->mergeKeep($body, 'keep2', $facts2);
 
         // Die Aenderungsnummern dieses Vorgangs: alles, was ab jetzt in diesem Baum dazukommt
-        $vorher = (int) DB::table('change')->where('gedcom_id', '=', $tree->id())->max('change_id');
+        $before = $this->lastChangeId($tree);
 
-        // 1. Alles, was auf die zweite Person zeigt, auf die erste umhaengen (doppelte Verweise fallen weg)
+        $this->relinkRecords($person2, $xref1);
+        $accounts = $this->mergeUserData($tree, $xref1, $xref2);
+        $person1->updateRecord($this->mergedGedcom($person1, $person2, $keep1, $keep2), true);
+        $person2->deleteRecord();
+
+        $ids = DB::table('change')
+            ->where('gedcom_id', '=', $tree->id())
+            ->where('change_id', '>', $before)
+            ->orderBy('change_id')
+            ->pluck('change_id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
+
+        $entry = [
+            'id'          => bin2hex(random_bytes(8)),
+            'time'        => time(),
+            'user'        => Auth::user()->realName(),
+            'xref'        => $xref1,
+            'removed'     => $xref2,
+            'name'        => $this->plain($person1->fullName()),
+            'removedName' => $this->plain($person2->fullName()),
+            'changes'     => $ids,
+            'accounts'    => $accounts,
+            'undone'      => null,
+        ];
+        $log   = $this->mergeLog($tree);
+        $log[] = $entry;
+        $this->mergeLogSave($tree, $log);
+
+        $pending = $this->pendingChanges($tree)->whereIn('change_id', $ids === [] ? [-1] : $ids)->exists();
+
+        return response([
+            'ok'      => true,
+            'preview' => false,
+            'xref'    => $xref1,
+            'removed' => $xref2,
+            'mergeId' => $entry['id'],
+            'records' => count($ids),
+            'pending' => $pending,
+        ]);
+    }
+
+    /**
+     * 1. Schritt: Alles, was auf die zweite Person zeigt, auf die erste umhaengen - doppelte Verweise fallen weg.
+     */
+    private function relinkRecords(Individual $person2, string $xref1): void
+    {
+        $xref2   = $person2->xref();
         $service = Registry::container()->get(LinkedRecordService::class);
+
         foreach ($service->allLinkedRecords($person2) as $record) {
             if ($record->isPendingDeletion() || $record->xref() === $xref1 || $record->xref() === $xref2) {
                 continue;
@@ -146,88 +192,59 @@ trait MergeActions
                 $record->updateRecord($gedcom, true);
             }
         }
+    }
 
-        // 2. Benutzerkonten und Startpersonen, Bloecke, Favoriten, Zaehler - wie webtrees
-        $konten = DB::table('user_gedcom_setting')
+    /**
+     * 2. Schritt: Benutzerkonten und Startpersonen, Bloecke, Favoriten und Zaehler umhaengen - wie webtrees selbst.
+     * Liefert die umgehaengten Kontoeinstellungen, damit MergeUndo sie zurueckstellen kann.
+     *
+     * @return list<array{user:int,name:string}>
+     */
+    private function mergeUserData(Tree $tree, string $xref1, string $xref2): array
+    {
+        $settings = DB::table('user_gedcom_setting')
             ->where('gedcom_id', '=', $tree->id())
             ->whereIn('setting_name', [UserInterface::PREF_TREE_ACCOUNT_XREF, UserInterface::PREF_TREE_DEFAULT_XREF])
-            ->where('setting_value', '=', $xref2)
-            ->get()
+            ->where('setting_value', '=', $xref2);
+        $accounts = $settings->get()
             ->map(static fn (object $row): array => ['user' => (int) $row->user_id, 'name' => (string) $row->setting_name])
             ->all();
-        DB::table('user_gedcom_setting')
-            ->where('gedcom_id', '=', $tree->id())
-            ->whereIn('setting_name', [UserInterface::PREF_TREE_ACCOUNT_XREF, UserInterface::PREF_TREE_DEFAULT_XREF])
-            ->where('setting_value', '=', $xref2)
-            ->update(['setting_value' => $xref1]);
+        $settings->update(['setting_value' => $xref1]);
+
         DB::table('block')->where('gedcom_id', '=', $tree->id())->where('xref', '=', $xref2)->update(['xref' => $xref1]);
         if (DB::schema()->hasTable('favorite')) {
             DB::table('favorite')->where('gedcom_id', '=', $tree->id())->where('xref', '=', $xref2)->update(['xref' => $xref1]);
         }
         DB::table('hit_counter')->where('gedcom_id', '=', $tree->id())->where('page_parameter', '=', $xref2)->delete();
 
-        // 3. Die bleibende Person neu aufbauen: gewaehlte Fakten beider, Verknuepfungen immer
-        $gedcom = '0 @' . $xref1 . '@ INDI';
+        return $accounts;
+    }
+
+    /**
+     * 3. Schritt: der Text der bleibenden Person - die gewaehlten Fakten beider, Verknuepfungen immer, nichts doppelt.
+     *
+     * @param list<string> $keep1 Fakt-IDs der ersten Person, die bleiben
+     * @param list<string> $keep2 Fakt-IDs der zweiten Person, die dazukommen
+     */
+    private function mergedGedcom(Individual $person1, Individual $person2, array $keep1, array $keep2): string
+    {
+        $gedcom = '0 @' . $person1->xref() . '@ INDI';
+
         foreach ([[$person1, $keep1], [$person2, $keep2]] as [$person, $keep]) {
             foreach ($person->facts([], false, Auth::PRIV_HIDE, true) as $fact) {
                 $tag = $this->shortTag($fact->tag());
                 if ($tag === 'CHAN') {
                     continue;
                 }
-                $zeile = "\n" . $fact->gedcom();
-                if (in_array($tag, self::MERGE_LINK_TAGS, true) || $tag === '_UID' && $person === $person1) {
-                    if (!str_contains($gedcom, $zeile)) {
-                        $gedcom .= $zeile;
-                    }
-                } elseif (in_array($fact->id(), $keep, true) && !str_contains($gedcom, $zeile)) {
-                    $gedcom .= $zeile;
+                $line   = "\n" . $fact->gedcom();
+                $always = in_array($tag, self::MERGE_LINK_TAGS, true) || $tag === '_UID' && $person === $person1;
+                if (($always || in_array($fact->id(), $keep, true)) && !str_contains($gedcom, $line)) {
+                    $gedcom .= $line;
                 }
             }
         }
-        $gedcom = str_replace('@' . $xref2 . '@', '@' . $xref1 . '@', $gedcom);
 
-        $person1->updateRecord($gedcom, true);
-        $person2->deleteRecord();
-
-        $ids = DB::table('change')
-            ->where('gedcom_id', '=', $tree->id())
-            ->where('change_id', '>', $vorher)
-            ->orderBy('change_id')
-            ->pluck('change_id')
-            ->map(static fn ($id): int => (int) $id)
-            ->all();
-
-        $eintrag = [
-            'id'          => bin2hex(random_bytes(8)),
-            'time'        => time(),
-            'user'        => Auth::user()->realName(),
-            'xref'        => $xref1,
-            'removed'     => $xref2,
-            'name'        => $this->plain($person1->fullName()),
-            'removedName' => $this->plain($person2->fullName()),
-            'changes'     => $ids,
-            'accounts'    => $konten,
-            'undone'      => null,
-        ];
-        $log = $this->mergeLog($tree);
-        $log[] = $eintrag;
-        $this->mergeLogSave($tree, $log);
-
-        $pending = DB::table('change')
-            ->where('gedcom_id', '=', $tree->id())
-            ->whereIn('change_id', $ids === [] ? [-1] : $ids)
-            ->where('status', '=', 'pending')
-            ->exists();
-
-        return response([
-            'ok'      => true,
-            'preview' => false,
-            'xref'    => $xref1,
-            'removed' => $xref2,
-            'mergeId' => $eintrag['id'],
-            'records' => count($ids),
-            'pending' => $pending,
-        ]);
+        return str_replace('@' . $person2->xref() . '@', '@' . $person1->xref() . '@', $gedcom);
     }
 
     /**
@@ -258,56 +275,61 @@ trait MergeActions
             return $this->error(404, 'not-found');
         }
 
-        $eintrag = $log[$pos];
+        $entry = $log[$pos];
 
-        if ($eintrag['undone'] !== null) {
+        if ($entry['undone'] !== null) {
             return $this->error(409, 'already-undone');
         }
 
         $rows = DB::table('change')
             ->where('gedcom_id', '=', $tree->id())
-            ->whereIn('change_id', $eintrag['changes'] === [] ? [-1] : $eintrag['changes'])
+            ->whereIn('change_id', $entry['changes'] === [] ? [-1] : $entry['changes'])
             ->orderByDesc('change_id')
             ->get();
 
-        if ($rows->count() !== count($eintrag['changes'])) {
+        if ($rows->count() !== count($entry['changes'])) {
             return $this->error(409, 'history-missing');
         }
 
         // Seitdem geaendert? Angenommen: der heutige Text muss der von damals sein (eine geloeschte Person darf es nicht
         // mehr geben). Ausstehend: es darf keine juengere Aenderung am Datensatz geben.
-        $geaendert = [];
-        $letzte    = (int) $eintrag['changes'][count($eintrag['changes']) - 1];
+        $changed = [];
+        $last    = (int) $entry['changes'][count($entry['changes']) - 1];
         foreach ($rows as $row) {
             if ($row->status === 'rejected') {
                 continue;
             }
             $record = Registry::gedcomRecordFactory()->make($row->xref, $tree);
-            $juenger = DB::table('change')
+            $newer = DB::table('change')
                 ->where('gedcom_id', '=', $tree->id())
                 ->where('xref', '=', $row->xref)
-                ->where('change_id', '>', $letzte)
+                ->where('change_id', '>', $last)
                 ->where('status', '<>', 'rejected')
                 ->exists();
-            $passt = $row->status === 'pending'
-                ? !$juenger
-                : ($row->new_gedcom === '' ? $record === null || $record->isPendingDeletion() : $record !== null && $record->gedcom() === $row->new_gedcom && !$juenger);
-            if (!$passt) {
-                $geaendert[] = ['xref' => $row->xref, 'name' => $record === null ? $row->xref : $this->plain($record->fullName())];
+            if ($row->status === 'pending') {
+                $matches = !$newer;
+            } elseif ($row->new_gedcom === '') {
+                // damals geloescht: den Datensatz darf es heute nicht (mehr) geben
+                $matches = $record === null || $record->isPendingDeletion();
+            } else {
+                $matches = $record !== null && $record->gedcom() === $row->new_gedcom && !$newer;
+            }
+            if (!$matches) {
+                $changed[] = ['xref' => $row->xref, 'name' => $record === null ? $row->xref : $this->plain($record->fullName())];
             }
         }
 
-        if ($geaendert !== []) {
-            return response(['ok' => false, 'error' => 'changed-since', 'status' => 409, 'changed' => $geaendert]);
+        if ($changed !== []) {
+            return response(['ok' => false, 'error' => 'changed-since', 'status' => 409, 'changed' => $changed]);
         }
 
         if ($preview) {
-            return response(['ok' => true, 'preview' => true, 'xref' => $eintrag['xref'], 'removed' => $eintrag['removed'], 'records' => $rows->count()]);
+            return response(['ok' => true, 'preview' => true, 'xref' => $entry['xref'], 'removed' => $entry['removed'], 'records' => $rows->count()]);
         }
 
         $auto     = Auth::user()->getPreference(UserInterface::PREF_AUTO_ACCEPT_EDITS) === '1';
         $import   = Registry::container()->get(GedcomImportService::class);
-        $neuIds   = [];
+        $new_ids   = [];
 
         foreach ($rows as $row) {
             if ($row->status === 'pending') {
@@ -319,7 +341,7 @@ trait MergeActions
             }
             // Angenommen: den alten Text als neue Aenderung einspielen (bei '' war es eine Loeschung - der Datensatz
             // entsteht unter seiner alten Kennung neu; bei altem Text '' war es eine Neuanlage - die wird geloescht)
-            $neuIds[] = (int) DB::table('change')->insertGetId([
+            $new_ids[] = (int) DB::table('change')->insertGetId([
                 'gedcom_id'  => $tree->id(),
                 'xref'       => $row->xref,
                 'old_gedcom' => $row->new_gedcom,
@@ -336,26 +358,26 @@ trait MergeActions
             }
         }
 
-        foreach ($eintrag['accounts'] as $konto) {
+        foreach ($entry['accounts'] as $konto) {
             DB::table('user_gedcom_setting')
                 ->where('gedcom_id', '=', $tree->id())
                 ->where('user_id', '=', $konto['user'])
                 ->where('setting_name', '=', $konto['name'])
-                ->where('setting_value', '=', $eintrag['xref'])
-                ->update(['setting_value' => $eintrag['removed']]);
+                ->where('setting_value', '=', $entry['xref'])
+                ->update(['setting_value' => $entry['removed']]);
         }
 
         $log[$pos]['undone']      = time();
-        $log[$pos]['undoChanges'] = $neuIds;
+        $log[$pos]['undoChanges'] = $new_ids;
         $this->mergeLogSave($tree, $log);
 
         return response([
             'ok'      => true,
             'preview' => false,
-            'xref'    => $eintrag['xref'],
-            'removed' => $eintrag['removed'],
+            'xref'    => $entry['xref'],
+            'removed' => $entry['removed'],
             'records' => $rows->count(),
-            'pending' => !$auto && $neuIds !== [],
+            'pending' => !$auto && $new_ids !== [],
         ]);
     }
 
@@ -393,30 +415,30 @@ trait MergeActions
      */
     private function mergeFactLists(Individual $person1, Individual $person2): array
     {
-        $texte1 = [];
-        $texte2 = [];
+        $texts1 = [];
+        $texts2 = [];
         $tags1  = [];
         $tags2  = [];
         foreach ($person1->facts([], false, Auth::PRIV_HIDE, true) as $fact) {
-            $texte1[] = trim($fact->gedcom());
+            $texts1[] = trim($fact->gedcom());
             $tags1[]  = $this->shortTag($fact->tag());
         }
         foreach ($person2->facts([], false, Auth::PRIV_HIDE, true) as $fact) {
-            $texte2[] = trim($fact->gedcom());
+            $texts2[] = trim($fact->gedcom());
             $tags2[]  = $this->shortTag($fact->tag());
         }
 
-        $liste = function (Individual $person, array $andere, array $andereTags, bool $erste): array {
+        $list = function (Individual $person, array $other_texts, array $other_tags, bool $first): array {
             $out = [];
             foreach ($person->facts([], false, Auth::PRIV_HIDE, true) as $fact) {
                 $tag = $this->shortTag($fact->tag());
-                if ($tag === 'CHAN' || $tag === '_UID' && !$erste) {
+                if ($tag === 'CHAN' || $tag === '_UID' && !$first) {
                     continue;
                 }
                 $text = trim($fact->gedcom());
                 // "1 DEAT Y" ist nur die Angabe "verstorben" - hat die andere Person einen Tod mit Datum, ist sie gemeint
-                $flag = preg_match('/^1 ([A-Z]{3,5}) Y$/', $text, $m) === 1 && in_array($m[1], $andereTags, true);
-                $same = $flag || in_array($text, $andere, true);
+                $flag = preg_match('/^1 ([A-Z]{3,5}) Y$/', $text, $m) === 1 && in_array($m[1], $other_tags, true);
+                $same = $flag || in_array($text, $other_texts, true);
                 $link = in_array($tag, self::MERGE_LINK_TAGS, true);
                 $out[] = [
                     'id'    => $fact->id(),
@@ -425,14 +447,14 @@ trait MergeActions
                     'text'  => $this->mergeFactText($fact),
                     'same'  => $same,
                     'link'  => $link,
-                    'keep'  => $link || !$flag && ($erste || !$same),
+                    'keep'  => $link || !$flag && ($first || !$same),
                 ];
             }
 
             return $out;
         };
 
-        return [$liste($person1, $texte2, $tags2, true), $liste($person2, $texte1, $tags1, false)];
+        return [$list($person1, $texts2, $tags2, true), $list($person2, $texts1, $tags1, false)];
     }
 
     /** Kurztext eines Fakts fuer die Gegenueberstellung: Wert, Datum, Ort. */
@@ -440,25 +462,25 @@ trait MergeActions
     {
         $tag = $this->shortTag($fact->tag());
         if (in_array($tag, self::MERGE_LINK_TAGS, true)) {
-            $ziel = $fact->target();
+            $target = $fact->target();
 
-            return $ziel === null ? $fact->value() : $this->plain($ziel->fullName());
+            return $target === null ? $fact->value() : $this->plain($target->fullName());
         }
-        $teile = [];
-        $wert  = $tag === 'NAME' ? trim(str_replace('/', '', $fact->value())) : $this->factValue($fact, $fact->record()->tree());
-        if ($wert !== '') {
-            $teile[] = $wert;
+        $parts = [];
+        $value  = $tag === 'NAME' ? trim(str_replace('/', '', $fact->value())) : $this->factValue($fact, $fact->record()->tree());
+        if ($value !== '') {
+            $parts[] = $value;
         }
-        $datum = $fact->attribute('DATE');
-        if ($datum !== '') {
-            $teile[] = $this->plain($fact->date()->display());
+        $date = $fact->attribute('DATE');
+        if ($date !== '') {
+            $parts[] = $this->plain($fact->date()->display());
         }
-        $ort = $fact->place()->gedcomName();
-        if ($ort !== '') {
-            $teile[] = $ort;
+        $place = $fact->place()->gedcomName();
+        if ($place !== '') {
+            $parts[] = $place;
         }
 
-        return implode(' · ', $teile);
+        return implode(' · ', $parts);
     }
 
     /**
@@ -489,36 +511,36 @@ trait MergeActions
     private function mergeSuggestions(Individual $person1, Individual $person2): array
     {
         $out  = [];
-        $paar = function (string $role, Individual|null $a, Individual|null $b) use (&$out): void {
+        $pair = function (string $role, Individual|null $a, Individual|null $b) use (&$out): void {
             if ($a === null || $b === null || $a->xref() === $b->xref() || !$a->canShow() || !$b->canShow()) {
                 return;
             }
             $out[] = ['role' => $role, 'xref1' => $a->xref(), 'name1' => $this->plain($a->fullName()), 'xref2' => $b->xref(), 'name2' => $this->plain($b->fullName())];
         };
-        $eltern = static function (Individual $p): array {
+        $parents = static function (Individual $p): array {
             $f = $p->childFamilies()->first();
 
             return $f instanceof Family ? [$f->husband(), $f->wife()] : [null, null];
         };
-        [$v1, $m1] = $eltern($person1);
-        [$v2, $m2] = $eltern($person2);
-        $paar('father', $v1, $v2);
-        $paar('mother', $m1, $m2);
+        [$father1, $mother1] = $parents($person1);
+        [$father2, $mother2] = $parents($person2);
+        $pair('father', $father1, $father2);
+        $pair('mother', $mother1, $mother2);
 
-        $schluessel = static fn (Individual $p): string => mb_strtolower(trim((string) preg_replace('/\s+/', ' ', str_replace('/', '', $p->getAllNames()[$p->getPrimaryName()]['fullNN'] ?? $p->xref()))));
-        $gleich     = function (string $role, array $a, array $b) use ($paar, $schluessel): void {
+        $name_key = static fn (Individual $p): string => mb_strtolower(trim((string) preg_replace('/\s+/', ' ', str_replace('/', '', $p->getAllNames()[$p->getPrimaryName()]['fullNN'] ?? $p->xref()))));
+        $same_name     = function (string $role, array $a, array $b) use ($pair, $name_key): void {
             foreach ($a as $pa) {
                 foreach ($b as $pb) {
-                    if ($pa instanceof Individual && $pb instanceof Individual && $pa->xref() !== $pb->xref() && $schluessel($pa) === $schluessel($pb)) {
-                        $paar($role, $pa, $pb);
+                    if ($pa instanceof Individual && $pb instanceof Individual && $pa->xref() !== $pb->xref() && $name_key($pa) === $name_key($pb)) {
+                        $pair($role, $pa, $pb);
                     }
                 }
             }
         };
-        $partner = static fn (Individual $p): array => $p->spouseFamilies()->map(static fn (Family $f): Individual|null => $f->spouse($p))->filter()->all();
-        $kinder  = static fn (Individual $p): array => $p->spouseFamilies()->flatMap(static fn (Family $f) => $f->children())->all();
-        $gleich('spouse', $partner($person1), $partner($person2));
-        $gleich('child', $kinder($person1), $kinder($person2));
+        $spouses = static fn (Individual $p): array => $p->spouseFamilies()->map(static fn (Family $f): Individual|null => $f->spouse($p))->filter()->all();
+        $children  = static fn (Individual $p): array => $p->spouseFamilies()->flatMap(static fn (Family $f) => $f->children())->all();
+        $same_name('spouse', $spouses($person1), $spouses($person2));
+        $same_name('child', $children($person1), $children($person2));
 
         return $out;
     }
@@ -532,9 +554,9 @@ trait MergeActions
      */
     private function mergeKeep(array $body, string $key, array $facts): array
     {
-        $wert = $body[$key] ?? null;
-        if (is_array($wert)) {
-            return array_values(array_filter($wert, static fn ($v): bool => is_string($v)));
+        $value = $body[$key] ?? null;
+        if (is_array($value)) {
+            return array_values(array_filter($value, static fn ($v): bool => is_string($v)));
         }
 
         return array_values(array_map(static fn (array $f): string => $f['id'], array_filter($facts, static fn (array $f): bool => $f['keep'] === true)));

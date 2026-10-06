@@ -44,6 +44,9 @@ final class Apps
 
     public const array DEVICES = ['android', 'ios', 'windows', 'linux', 'mac'];
 
+    /** Die Felder jedes Eintrags, in dieser Reihenfolge (siehe oben). */
+    private const array FIELDS = ['name', 'author', 'kind', 'devices', 'scheme', 'download', 'badge', 'asset', 'always'];
+
     /** @var array<string,array<string,mixed>> */
     public const array ALL = [
         'wtand' => [
@@ -200,13 +203,13 @@ final class Apps
                 $errors[] = "$id: Kennung nur aus Kleinbuchstaben, Ziffern und -";
             }
 
-            foreach (['name', 'author', 'kind', 'devices', 'scheme', 'download', 'badge', 'asset', 'always'] as $key) {
+            foreach (self::FIELDS as $key) {
                 if (!isset($app[$key])) {
                     $errors[] = "$id: Feld $key fehlt";
                 }
             }
 
-            if (array_keys($app) !== ['name', 'author', 'kind', 'devices', 'scheme', 'download', 'badge', 'asset', 'always']) {
+            if (array_keys($app) !== self::FIELDS) {
                 $errors[] = "$id: unbekannte oder fehlende Felder";
                 continue;
             }

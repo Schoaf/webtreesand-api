@@ -80,9 +80,9 @@ trait ReadActions
         $trees = [];
 
         // Eine angemeldete App fragt beim Start hier nach: dann braucht dieser Benutzer den Hinweis auf die App nicht mehr.
-        $hint = self::hintKey($request->getHeaderLine('User-Agent'));
+        $hint = self::hintKey($request);
         if (Auth::check() && $user->getPreference($hint) === '') {
-            $user->setPreference($hint, 'connected');
+            $user->setPreference($hint, self::HINT_CONNECTED);
         }
 
         foreach (Registry::container()->get(TreeService::class)->all() as $tree) {
@@ -107,10 +107,8 @@ trait ReadActions
                 // des Stammbaums, sonst die erste Person - nur wenn der Benutzer sie sehen darf (ab Stufe 24)
                 'startXref'   => $this->startXref($tree, $user),
                 'treeDefaultXref' => $tree->getPreference('PEDIGREE_ROOT_ID'),
-                // Nummer der letzten Aenderung im Baum (auch ausstehende, angenommene, verworfene). Ein anderer Wert
-                // als beim letzten Mal heisst: neu laden. Nur auf Gleichheit vergleichen - ein neuer GEDCOM-Import
-                // loescht die Aenderungsliste, dann wird die Zahl kleiner.
-                'lastChange'  => (int) DB::table('change')->where('gedcom_id', '=', $tree->id())->max('change_id'),
+                // Anderer Wert als beim letzten Mal = neu laden (siehe lastChangeId())
+                'lastChange'  => $this->lastChangeId($tree),
             ];
         }
 
@@ -251,12 +249,10 @@ trait ReadActions
         $tree       = Validator::attributes($request)->tree();
         $individual = Registry::individualFactory()->make($this->xref($request), $tree);
 
-        if ($individual === null) {
-            return $this->error(404, 'not-found');
-        }
+        $denied = $this->denyShow($individual);
 
-        if (!$individual->canShow()) {
-            return $this->error(403, 'private');
+        if ($denied !== null) {
+            return $denied;
         }
 
         $parents = [];
@@ -291,6 +287,33 @@ trait ReadActions
             // ab Stufe 19: wo diese Person Pate, Trauzeuge ... ist (Gegenrichtung zu associates an den Fakten)
             'associatedIn'   => $this->associatedIn($individual),
         ]);
+    }
+
+    /**
+     * "Urgrossmutter", "Cousin" ... - wie $individual mit einer Bezugsperson verwandt ist.
+     * Bezugsperson: ?relativeTo=<xref>, sonst die eigene Person des angemeldeten Benutzers.
+     */
+    private function relationship(ServerRequestInterface $request, Individual $individual): string
+    {
+        $tree = $individual->tree();
+        $xref = Validator::queryParams($request)->string('relativeTo', '');
+
+        if ($xref === '') {
+            $xref = $tree->getUserPreference(Auth::user(), UserInterface::PREF_TREE_ACCOUNT_XREF);
+        }
+
+        if ($xref === '' || $xref === $individual->xref()) {
+            return '';
+        }
+
+        $other = Registry::individualFactory()->make($xref, $tree);
+
+        if ($other === null || !$other->canShow()) {
+            return '';
+        }
+
+        // Liefert '' fuer nicht verwandte Personen.
+        return $this->plain(Registry::container()->get(RelationshipService::class)->getCloseRelationshipName($other, $individual));
     }
 
     /**
@@ -347,7 +370,7 @@ trait ReadActions
             }
 
             $people = [];
-            foreach ($linked->linkedIndividuals($media)->take(3) as $individual) {
+            foreach ($linked->linkedIndividuals($media)->take(self::MEDIA_LIST_PEOPLE) as $individual) {
                 if ($individual->canShowName()) {
                     $people[] = ['xref' => $individual->xref(), 'name' => $this->plain($individual->fullName())];
                 }
@@ -365,10 +388,6 @@ trait ReadActions
         ]);
     }
 
-    /**
-     * Jahrestage der naechsten Tage: ?days=<1..60> (Standard 14) - Geburts-, Heirats- und Todestage.
-     * Nutzt den Kalenderdienst von webtrees; es erscheint nur, was der Benutzer sehen darf.
-     */
     /**
      * Merkliste (ab Stufe 11): Personen, die sich der angemeldete Benutzer in diesem Baum gemerkt hat. Liegt als
      * Benutzereinstellung je Baum in webtrees (kein Modul, kein GEDCOM, keine Freigabe) und gilt fuer alle Clients.
@@ -401,10 +420,14 @@ trait ReadActions
         return $raw === '' ? [] : array_values(array_filter(explode(',', $raw)));
     }
 
+    /**
+     * Jahrestage der naechsten Tage: ?days=<1..60> (Standard 14) - Geburts-, Heirats- und Todestage.
+     * Nutzt den Kalenderdienst von webtrees; es erscheint nur, was der Benutzer sehen darf.
+     */
     public function getAnniversariesAction(ServerRequestInterface $request): ResponseInterface
     {
         $tree  = Validator::attributes($request)->tree();
-        $days  = min(60, max(1, Validator::queryParams($request)->integer('days', 14)));
+        $days  = min(self::ANNIV_MAX_DAYS, max(1, Validator::queryParams($request)->integer('days', self::ANNIV_DEFAULT_DAYS)));
         // In webtrees 2.2 liefert timestampFactory()->now() ein Timestamp, das julianDay() kennt;
         // ab 2.3 kommt direkt ein CarbonImmutable, und dort wirft der Aufruf ("Method julianDay does
         // not exist."). Der Umweg ueber die Gregorianische Kalenderklasse, die webtrees ohnehin
@@ -431,7 +454,7 @@ trait ReadActions
                 ? !$record->isDead()
                 : $record instanceof Family && $record->spouses()->every(static fn (Individual $spouse): bool => !$spouse->isDead());
 
-            $candidates[] = [$fact->jd - $today, $living ? 0 : 1, $fact->anniv % 25 === 0 ? 0 : 1, $record->xref(), $fact];
+            $candidates[] = [$fact->jd - $today, $living ? 0 : 1, $fact->anniv % self::ROUND_ANNIVERSARY_YEARS === 0 ? 0 : 1, $record->xref(), $fact];
         }
 
         usort($candidates, static fn (array $a, array $b): int => array_slice($a, 0, 4) <=> array_slice($b, 0, 4));
@@ -461,7 +484,7 @@ trait ReadActions
             ];
         }
 
-        // Innerhalb eines Tages alphabetisch, wie bisher.
+        // Innerhalb eines Tages alphabetisch nach Namen.
         usort($data, static fn (array $a, array $b): int => [$a['inDays'], $a['name']] <=> [$b['inDays'], $b['name']]);
 
         return response(['days' => $days, 'data' => $data, 'total' => count($candidates), 'more' => count($candidates) > count($data)]);
@@ -475,12 +498,10 @@ trait ReadActions
         $tree   = Validator::attributes($request)->tree();
         $family = Registry::familyFactory()->make($this->xref($request), $tree);
 
-        if ($family === null) {
-            return $this->error(404, 'not-found');
-        }
+        $denied = $this->denyShow($family);
 
-        if (!$family->canShow()) {
-            return $this->error(403, 'private');
+        if ($denied !== null) {
+            return $denied;
         }
 
         return response($this->familyJson($family, null) + ['media' => $this->mediaJson($family)]);
@@ -496,12 +517,10 @@ trait ReadActions
         $generations = min(self::MAX_PEDIGREE_GEN, max(1, Validator::queryParams($request)->integer('generations', 4)));
         $root        = Registry::individualFactory()->make($this->xref($request), $tree);
 
-        if ($root === null) {
-            return $this->error(404, 'not-found');
-        }
+        $denied = $this->denyShow($root);
 
-        if (!$root->canShow()) {
-            return $this->error(403, 'private');
+        if ($denied !== null) {
+            return $denied;
         }
 
         /** @var array<int,Individual> $ancestors */
@@ -827,12 +846,10 @@ trait ReadActions
         $generations = min(self::MAX_DESCENDANTS_GEN, max(1, Validator::queryParams($request)->integer('generations', 3)));
         $root        = Registry::individualFactory()->make($this->xref($request), $tree);
 
-        if ($root === null) {
-            return $this->error(404, 'not-found');
-        }
+        $denied = $this->denyShow($root);
 
-        if (!$root->canShow()) {
-            return $this->error(403, 'private');
+        if ($denied !== null) {
+            return $denied;
         }
 
         return response([
@@ -906,7 +923,7 @@ trait ReadActions
         }
 
         return response([
-            'lastChange'  => (int) DB::table('change')->where('gedcom_id', '=', $tree->id())->max('change_id'),
+            'lastChange'  => $this->lastChangeId($tree),
             'page'        => $page,
             'nextPage'    => $offset + self::EXPORT_PAGE_SIZE < $individual_count + $family_count ? $page + 1 : null,
             'total'       => ['individuals' => $individual_count, 'families' => $family_count],
@@ -960,10 +977,8 @@ trait ReadActions
             return $this->error(403, 'not-moderator');
         }
 
-        $rows = DB::table('change')
+        $rows = $this->pendingChanges($tree)
             ->join('user', 'user.user_id', '=', 'change.user_id')
-            ->where('gedcom_id', '=', $tree->id())
-            ->where('status', '=', 'pending')
             ->orderBy('change_id')
             ->select(['xref', 'real_name', 'change_time', 'old_gedcom', 'new_gedcom'])
             ->get()
@@ -997,13 +1012,6 @@ trait ReadActions
         return response(['data' => $data]);
     }
 
-    //
-    // Alle POST-Aktionen laufen durch die CSRF-Pruefung von webtrees: die App schickt
-    // das Token aus "Info" im Header X-CSRF-TOKEN. Der Rumpf ist JSON (oder ein Formular).
-    // Geschrieben wird nur ueber createFact/updateFact/createIndividual ... - damit gelten
-    // Bearbeiterrechte, RESN-Sperren, Aenderungsprotokoll und die Moderation ("ausstehende
-    // Aenderungen") genau wie in der Weboberflaeche.
-
     /**
      * Notname aus dem Rohtext, wenn webtrees kein Objekt liefern kann: die erste NAME-Zeile ohne die Schraegstriche.
      */
@@ -1013,9 +1021,6 @@ trait ReadActions
     }
 
     /**
-     * Beschriftete Liste der Ereignisse, die die App zum Hinzufuegen anbietet: ?type=INDI|FAM
-     */
-    /**
      * Alle Quellen des Baums, die der Betrachter sehen darf (ab Stufe 18), nach Titel: Titel, Autor, Publikation,
      * Kurztitel, erstes Archiv mit Signatur und wie viele Personen und Familien sie zitieren.
      */
@@ -1023,12 +1028,7 @@ trait ReadActions
     {
         $tree = Validator::attributes($request)->tree();
 
-        $uses = DB::table('link')
-            ->where('l_file', '=', $tree->id())
-            ->where('l_type', '=', 'SOUR')
-            ->groupBy(['l_to'])
-            ->selectRaw('l_to, COUNT(DISTINCT l_from) AS n')
-            ->pluck('n', 'l_to');
+        $uses = $this->linkCounts($tree, 'SOUR');
 
         $sources = DB::table('sources')
             ->where('s_file', '=', $tree->id())
@@ -1050,12 +1050,7 @@ trait ReadActions
     {
         $tree = Validator::attributes($request)->tree();
 
-        $uses = DB::table('link')
-            ->where('l_file', '=', $tree->id())
-            ->where('l_type', '=', 'REPO')
-            ->groupBy(['l_to'])
-            ->selectRaw('l_to, COUNT(DISTINCT l_from) AS n')
-            ->pluck('n', 'l_to');
+        $uses = $this->linkCounts($tree, 'REPO');
 
         $repos = DB::table('other')
             ->where('o_file', '=', $tree->id())
@@ -1066,7 +1061,7 @@ trait ReadActions
             ->map(fn (Repository $repo): array => [
                 'xref'    => $repo->xref(),
                 'name'    => $this->plain($repo->fullName()),
-                'address' => GedcomText::ersterWert($repo->gedcom(), 1, 'ADDR'),
+                'address' => GedcomText::firstValue($repo->gedcom(), 1, 'ADDR'),
                 'canEdit' => $repo->canEdit(),
                 'uses'    => (int) ($uses[$repo->xref()] ?? 0),
             ])
@@ -1079,26 +1074,24 @@ trait ReadActions
 
     /**
      * Eine Quelle vollstaendig (ab Stufe 18): ?xref=S1 - dazu Text, Notizen, Medien, Archive und wer sie zitiert:
-     * Personen und Familien mit den Ereignissen, an denen der Verweis steht (hoechstens 1000 je Art).
+     * Personen und Familien mit den Ereignissen, an denen der Verweis steht (hoechstens LINKED_RECORDS_LIMIT je Art).
      */
     public function getSourceAction(ServerRequestInterface $request): ResponseInterface
     {
         $tree   = Validator::attributes($request)->tree();
         $source = Registry::sourceFactory()->make($this->xref($request), $tree);
 
-        if ($source === null) {
-            return $this->error(404, 'not-found');
-        }
+        $denied = $this->denyShow($source);
 
-        if (!$source->canShow()) {
-            return $this->error(403, 'private');
+        if ($denied !== null) {
+            return $denied;
         }
 
         $linked = Registry::container()->get(LinkedRecordService::class);
         $xref   = $source->xref();
 
         // Die Ereignisse eines Datensatzes, die diese Quelle zitieren (auch die allgemeine Quelle "1 SOUR").
-        $wo = function (GedcomRecord $record) use ($xref): array {
+        $citing_facts = function (GedcomRecord $record) use ($xref): array {
             $labels = [];
             foreach ($record->facts() as $fact) {
                 if ($fact->canShow() && str_contains($fact->gedcom(), '@' . $xref . '@')) {
@@ -1113,25 +1106,28 @@ trait ReadActions
         $families    = $linked->linkedFamilies($source, 'SOUR')->filter(static fn (Family $f): bool => $f->canShow());
 
         return response($this->sourceSummary($source) + [
-            'text'         => GedcomText::ersterWert($source->gedcom(), 1, 'TEXT'),
+            'text'         => GedcomText::firstValue($source->gedcom(), 1, 'TEXT'),
             'notes'        => $source->facts(['NOTE'])->filter(static fn (Fact $f): bool => $f->canShow())
                 ->map(fn (Fact $f): string => $f->target() instanceof Note ? $f->target()->getNote() : $this->plainLines($f->value()))
                 ->filter(static fn (string $t): bool => trim($t) !== '')->values()->all(),
             'media'        => $this->mediaJson($source),
             'repositories' => $this->sourceRepositories($source),
-            'individuals'  => $individuals->take(1000)->map(fn (Individual $i): array => $this->personShort($i) + ['facts' => $wo($i)])->values()->all(),
-            'families'     => $families->take(1000)->map(fn (Family $f): array => [
+            'individuals'  => $individuals->take(self::LINKED_RECORDS_LIMIT)->map(fn (Individual $i): array => $this->personShort($i) + ['facts' => $citing_facts($i)])->values()->all(),
+            'families'     => $families->take(self::LINKED_RECORDS_LIMIT)->map(fn (Family $f): array => [
                 'xref'    => $f->xref(),
                 'name'    => $this->plain($f->fullName()),
                 'husband' => $f->husband() instanceof Individual && $f->husband()->canShowName() ? $f->husband()->xref() : null,
                 'wife'    => $f->wife() instanceof Individual && $f->wife()->canShowName() ? $f->wife()->xref() : null,
-                'facts'   => $wo($f),
+                'facts'   => $citing_facts($f),
             ])->values()->all(),
-            'moreIndividuals' => max(0, $individuals->count() - 1000),
-            'moreFamilies'    => max(0, $families->count() - 1000),
+            'moreIndividuals' => max(0, $individuals->count() - self::LINKED_RECORDS_LIMIT),
+            'moreFamilies'    => max(0, $families->count() - self::LINKED_RECORDS_LIMIT),
         ]);
     }
 
+    /**
+     * Beschriftete Liste der Ereignisse, die die App zum Hinzufuegen anbietet: ?type=INDI|FAM
+     */
     public function getTagsAction(ServerRequestInterface $request): ResponseInterface
     {
         Validator::attributes($request)->tree();
@@ -1178,6 +1174,21 @@ trait ReadActions
             ->all();
 
         return response(['query' => $query, 'data' => $data]);
+    }
+
+    /**
+     * Wie viele Datensaetze auf jeden Datensatz einer Art verweisen (SOUR: Quellen, REPO: Archive): Kennung -> Zahl.
+     *
+     * @return Collection<string,int>
+     */
+    private function linkCounts(Tree $tree, string $type): Collection
+    {
+        return DB::table('link')
+            ->where('l_file', '=', $tree->id())
+            ->where('l_type', '=', $type)
+            ->groupBy(['l_to'])
+            ->selectRaw('l_to, COUNT(DISTINCT l_from) AS n')
+            ->pluck('n', 'l_to');
     }
 
     private function startXref(Tree $tree, UserInterface $user): string
