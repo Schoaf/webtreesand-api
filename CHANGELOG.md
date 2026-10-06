@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.17.1 – 2026-10-06
+**Shorter “App” page.** No API change.
+- Only the app for the visitor's device is open; every other app is one folded line below (before: wtWin and wtAnd
+  were always open, which made the page long on every device). wtWin now comes first in the list, since most people
+  open the page at a PC.
+
 ## 1.17.0 – 2026-10-06
 **Logos on the “App” page, readable code.** No API change; API level stays 29.
 - The “App” and “Connect” pages show an app's logo before its name (new optional field `icon` in `src/Apps.php`, file

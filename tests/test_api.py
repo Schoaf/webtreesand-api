@@ -959,7 +959,7 @@ class Schreiben(unittest.TestCase):
         code = 'require "src/Apps.php"; echo json_encode([Api4Webtrees\\Apps::check(), array_keys(Api4Webtrees\\Apps::ALL)]);'
         fehler, kennungen = json.loads(subprocess.check_output(["php", "-r", code], cwd=modul, text=True))
         self.assertEqual([], fehler)
-        self.assertEqual(["wtand", "wtwin", "wttux", "wtmac"], kennungen[:4])
+        self.assertEqual(["wtwin", "wtand", "wttux", "wtmac"], kennungen[:4])
 
     def test_seite_app_je_geraet(self):
         """Die Seite App zeigt die Apps fuer das Geraet des Besuchers zuerst; ein Geraet ohne passende App bekommt den Browser-Hinweis."""

@@ -34,10 +34,12 @@ use function str_starts_with;
  *   icon      Logo der App, Dateiname unter resources/img (PNG oder SVG, quadratisch; leer = kein Logo) - steht auf den
  *             Seiten "App" und "Verbinden" vor dem Namen
  *   asset     nur pc: Muster des Dateinamens im GitHub-Release (die Seite "App" sucht die neueste Datei per API)
- *   always    auf jedem Geraet aufgeklappt zeigen (sonst nur auf den passenden, anderswo eingeklappt)
+ *   always    auf jedem Geraet aufgeklappt zeigen (sonst nur auf den passenden, anderswo als eine Zeile eingeklappt).
+ *             Zurzeit nirgends gesetzt: pro Geraet ist eine App offen, die Seite bleibt kurz.
  *
  * Reihenfolge auf der Seite "App": Apps fuer das Geraet des Besuchers zuerst, dabei die eigenen (OWNER) vor
- * fremden; danach die uebrigen. Die Reihenfolge hier in der Liste bleibt innerhalb jeder Gruppe erhalten.
+ * fremden; danach die uebrigen. Die Reihenfolge hier in der Liste bleibt innerhalb jeder Gruppe erhalten - wtWin
+ * steht vorn, weil die meisten die Seite am PC oeffnen und das Programm fuer Windows am haeufigsten gesucht wird.
  */
 final class Apps
 {
@@ -51,18 +53,6 @@ final class Apps
 
     /** @var array<string,array<string,mixed>> */
     public const array ALL = [
-        'wtand' => [
-            'name'     => 'wtAnd',
-            'author'   => 'thobgg',
-            'kind'     => 'phone',
-            'devices'  => ['android'],
-            'scheme'   => 'webtreesand',
-            'download' => ['android' => 'https://github.com/thobgg/app4webtrees/releases/latest'],
-            'badge'    => [],
-            'icon'     => 'wt-apps.png',
-            'asset'    => '',
-            'always'   => true,
-        ],
         'wtwin' => [
             'name'     => 'wtWin',
             'author'   => 'thobgg',
@@ -73,7 +63,19 @@ final class Apps
             'badge'    => [],
             'icon'     => 'wt-apps.png',
             'asset'    => '\\.exe$',
-            'always'   => true,
+            'always'   => false,
+        ],
+        'wtand' => [
+            'name'     => 'wtAnd',
+            'author'   => 'thobgg',
+            'kind'     => 'phone',
+            'devices'  => ['android'],
+            'scheme'   => 'webtreesand',
+            'download' => ['android' => 'https://github.com/thobgg/app4webtrees/releases/latest'],
+            'badge'    => [],
+            'icon'     => 'wt-apps.png',
+            'asset'    => '',
+            'always'   => false,
         ],
         'wttux' => [
             'name'     => 'wtTux',

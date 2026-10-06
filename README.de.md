@@ -82,7 +82,7 @@ Angemeldete Benutzer sehen oben auf der Seite einen Hinweis mit einem Knopf zur 
 **„Den Stammbaum als Programm auf dem PC“** (wtWin/wtTux), am Handy **„Den Stammbaum aufs Handy“** (wtAnd). Handy und PC
 werden getrennt gemerkt: Der Hinweis verschwindet für diese Geräteart, sobald ihre App verbunden ist (oder nach *Nicht
 mehr anzeigen*); danach führen die Links in der Fußzeile dorthin. Die Seite zeigt die Apps für das Gerät des Besuchers
-zuerst (eigene vor fremden), wtWin und wtAnd immer aufgeklappt, die übrigen eingeklappt darunter. Auf iPhone und iPad
+zuerst (eigene vor fremden); nur diese App ist aufgeklappt, die übrigen stehen als je eine Zeile eingeklappt darunter, die Seite bleibt kurz. Auf iPhone und iPad
 zeigt sie webtrees mobile von Andreas Scharf (App Store); ein Gerät ohne passende App bekommt einen Hinweis auf den
 Browser. Je App zwei Schritte:
 
