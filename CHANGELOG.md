@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.17.2 – 2026-10-06
+**Merge preview: contained facts.** No API change; API level stays 29.
+- A fact that is contained in a fact of the other individual – same first line, every further line present there too, but
+  the other version has more lines (birth with date only next to birth with date and place) – is now reported as `same`
+  and not suggested for keeping; the more complete version stays, whichever individual it belongs to. Before, both
+  births would have been kept.
+- Test `Zusammenfuehren` covers it.
+
 ## 1.17.1 – 2026-10-06
 **Shorter “App” page.** No API change.
 - Only the app for the visitor's device is open; every other app is one folded line below (before: wtWin and wtAnd

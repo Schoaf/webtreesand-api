@@ -439,15 +439,20 @@ class Zusammenfuehren(unittest.TestCase):
         s.post("Fact", "testbaum", {"tag": "OCCU", "value": "Schmied"}, xref=p1)
         s.post("Fact", "testbaum", {"tag": "OCCU", "value": "Schmied"}, xref=p2)
         s.post("Fact", "testbaum", {"tag": "RESI", "place": "Offenbach am Main"}, xref=p2)
+        # Geburt von p2 um den Ort ergaenzen: die Geburt von p1 (nur Datum) ist darin enthalten
+        geb2 = [f for f in s.get("Individual", "testbaum", xref=p2).json["facts"] if f["tag"] == "BIRT"][0]["id"]
+        s.post("Fact", "testbaum", {"factId": geb2, "tag": "BIRT", "date": "1850", "place": "Offenbach am Main"}, xref=p2)
         # p2 ist Partner von I4 (neue Familie) und wird an einer Quelle zitiert
         fam = s.post("Link", "testbaum", {"individual": p2, "relation": "spouse", "relativeTo": "I4"}).json["family"]
         # Vorschau: alle Fakten von p1, von p2 nur Tod und Wohnort (Name, Geschlecht, Geburt, Beruf sind wortgleich)
         v = s.post("Merge", "testbaum", {"xref1": p1, "xref2": p2, "preview": True}).json
         self.assertEqual((True, True, p1, p2), (v["ok"], v["preview"], v["person1"]["xref"], v["person2"]["xref"]), v)
         # p1 hat "1 DEAT Y" (verstorben ohne Datum) - der Tod mit Datum von p2 ersetzt ihn
-        self.assertEqual({"NAME": True, "SEX": True, "BIRT": True, "OCCU": True, "DEAT": False}, {f["tag"]: f["keep"] for f in v["facts1"]}, v["facts1"])
+        # p1 hat "1 DEAT Y" (verstorben ohne Datum) und eine Geburt nur mit Datum - beides ist in p2 vollstaendiger enthalten
+        self.assertEqual({"NAME": True, "SEX": True, "BIRT": False, "OCCU": True, "DEAT": False}, {f["tag"]: f["keep"] for f in v["facts1"]}, v["facts1"])
         behalten2 = {f["tag"]: f["keep"] for f in v["facts2"] if not f["link"]}
-        self.assertEqual({"NAME": False, "SEX": False, "BIRT": False, "OCCU": False, "DEAT": True, "RESI": True}, behalten2, v["facts2"])
+        self.assertEqual({"NAME": False, "SEX": False, "BIRT": True, "OCCU": False, "DEAT": True, "RESI": True}, behalten2, v["facts2"])
+        self.assertTrue([f for f in v["facts1"] if f["tag"] == "BIRT"][0]["same"], "die Geburt von p1 gilt als enthalten")
         self.assertEqual([("FAMS", True)], [(f["tag"], f["keep"]) for f in v["facts2"] if f["link"]], "die Familie bleibt immer")
         self.assertEqual([fam], [l["xref"] for l in v["links"]], v["links"])
         self.assertEqual([], v["suggestions"])
@@ -460,6 +465,7 @@ class Zusammenfuehren(unittest.TestCase):
         rest = s.get("Individual", "testbaum", xref=p1).json
         tags = sorted(f["tag"] for f in rest["facts"])
         self.assertEqual(["BIRT", "DEAT", "NAME", "OCCU", "RESI", "SEX"], tags, "Tod und Wohnort kamen dazu, nichts doppelt")
+        self.assertEqual("Offenbach am Main", [f for f in rest["facts"] if f["tag"] == "BIRT"][0]["place"]["name"], "die vollstaendigere Geburt blieb")
         self.assertEqual([fam], [f["xref"] for f in rest["spouseFamilies"]], "p1 steht jetzt in der Familie")
         paar = s.get("Family", "testbaum", xref=fam).json
         self.assertEqual({"I4", p1}, {paar["husband"]["xref"], paar["wife"]["xref"]}, "die Familie zeigt auf p1")

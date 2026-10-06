@@ -18,6 +18,7 @@ use Fisharebest\Webtrees\Validator;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
+use function array_diff;
 use function array_filter;
 use function array_map;
 use function array_reverse;
@@ -438,7 +439,11 @@ trait MergeActions
                 $text = trim($fact->gedcom());
                 // "1 DEAT Y" ist nur die Angabe "verstorben" - hat die andere Person einen Tod mit Datum, ist sie gemeint
                 $flag = preg_match('/^1 ([A-Z]{3,5}) Y$/', $text, $m) === 1 && in_array($m[1], $other_tags, true);
-                $same = $flag || in_array($text, $other_texts, true);
+                $exact = in_array($text, $other_texts, true);
+                // Enthalten: dieselbe Angabe mit weniger Unterzeilen (Geburt mit Datum, drueben Datum und Ort) - die
+                // vollstaendigere Fassung bleibt, egal bei welcher Person sie steht
+                $contained = !$exact && $this->mergeContained($text, $other_texts);
+                $same = $flag || $exact || $contained;
                 $link = in_array($tag, self::MERGE_LINK_TAGS, true);
                 $out[] = [
                     'id'    => $fact->id(),
@@ -447,7 +452,7 @@ trait MergeActions
                     'text'  => $this->mergeFactText($fact),
                     'same'  => $same,
                     'link'  => $link,
-                    'keep'  => $link || !$flag && ($first || !$same),
+                    'keep'  => $link || !$flag && !$contained && ($first || !$exact),
                 ];
             }
 
@@ -455,6 +460,28 @@ trait MergeActions
         };
 
         return [$list($person1, $texts2, $tags2, true), $list($person2, $texts1, $tags1, false)];
+    }
+
+    /**
+     * Ist der Fakt in einem Fakt der anderen Person enthalten? Gleiche erste Zeile und jede weitere Zeile kommt dort auch
+     * vor, die andere Fassung hat aber mehr Zeilen.
+     *
+     * @param list<string> $other_texts
+     */
+    private function mergeContained(string $text, array $other_texts): bool
+    {
+        $lines = explode("\n", $text);
+        foreach ($other_texts as $other) {
+            $other_lines = explode("\n", $other);
+            if (count($other_lines) <= count($lines) || $other_lines[0] !== $lines[0]) {
+                continue;
+            }
+            if (array_diff($lines, $other_lines) === []) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** Kurztext eines Fakts fuer die Gegenueberstellung: Wert, Datum, Ort. */
