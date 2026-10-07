@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.18.1 – 2026-10-07
+- **Place type with GOV type number.** `Places?list=1`, `Place` and its `children` now carry `govType`: the GOV type number
+  from `2 _GOVTYPE` under the `_LOC` record's `1 TYPE` (GEDCOM-L addendum; 24 farm, 87 mill, 55 village …, list at
+  gov.genealogy.net/type/list). Clients can classify houses, farms and higher levels by the number instead of the free text.
+- `type` is the last of several dated `1 TYPE` lines (the current one), not the first.
+- `POST Place` with `type` changes only the value of the latest TYPE line; its `_GOVTYPE`, date and sources and older
+  dated TYPE lines stay. Before, the whole TYPE block was replaced.
+- API level stays 30; the field is additive.
+
 ## 1.18.0 – 2026-10-06
 **API level 30: the interface is complete.** With this release every route needed for everyday genealogy work is there:
 individuals, families, events, names, sources and citations, media, places and location records, godparents, merging with

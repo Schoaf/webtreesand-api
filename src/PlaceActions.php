@@ -171,7 +171,7 @@ trait PlaceActions
                 $child_key = mb_strtolower((string) $row->p_place);
                 if (!isset($seen[$child_key]) && $this->placeVisible($tree, (int) $row->p_id)) {
                     $seen[$child_key] = true;
-                    $children[]       = ['name' => $row->p_place . ', ' . $parent_name, 'location' => null, 'type' => null];
+                    $children[]       = ['name' => $row->p_place . ', ' . $parent_name, 'location' => null, 'type' => null, 'govType' => null];
                 }
             }
         }
@@ -200,18 +200,19 @@ trait PlaceActions
                     continue;
                 }
                 $child_key = mb_strtolower($child_name);
-                $type      = $this->locValue($child_loc, ['TYPE']);
+                $type      = $this->locType($child_loc);
                 if (isset($seen[$child_key])) {
                     foreach ($children as &$c) {
                         if (mb_strtolower(explode(', ', $c['name'])[0]) === $child_key && $c['location'] === null) {
                             $c['location'] = $child_xref;
-                            $c['type']     = $type;
+                            $c['type']     = $type['type'];
+                            $c['govType']  = $type['govType'];
                         }
                     }
                     unset($c);
                 } else {
                     $seen[$child_key] = true;
-                    $children[]       = ['name' => $child_name . ', ' . $parent_name, 'location' => $child_xref, 'type' => $type];
+                    $children[]       = ['name' => $child_name . ', ' . $parent_name, 'location' => $child_xref, 'type' => $type['type'], 'govType' => $type['govType']];
                 }
             }
         }
@@ -221,7 +222,9 @@ trait PlaceActions
                 $leaf = mb_strtolower(explode(', ', $c['name'])[0]);
                 if (count($context['byName'][$leaf] ?? []) === 1 && ($context['leaves'][$leaf] ?? 0) <= 1) {
                     $c['location'] = $context['byName'][$leaf][0];
-                    $c['type']     = $this->locValue($context['locs'][$c['location']], ['TYPE']);
+                    $type          = $this->locType($context['locs'][$c['location']]);
+                    $c['type']     = $type['type'];
+                    $c['govType']  = $type['govType'];
                 }
             }
         }
@@ -465,10 +468,20 @@ trait PlaceActions
             }
         }
 
-        // Art des Orts (1 TYPE: Hof, Haus, Gemeinde ...) - ab Stufe 27
+        // Art des Orts (1 TYPE: Hof, Haus, Gemeinde ...) - ab Stufe 27. GEDCOM-L erlaubt mehrere Arten mit Datum, Quelle
+        // und GOV-Typnummer (2 _GOVTYPE); geaendert wird nur der Wert der juengsten Art, ihre Unterzeilen und aeltere
+        // Arten bleiben. Leer entfernt alle Arten.
         if (array_key_exists('type', $body)) {
             $type  = GedcomText::line($this->str($body, 'type'));
-            $rest = GedcomText::replaceSubrecords($rest, 1, 'TYPE', $type === '' ? '' : "\n1 TYPE " . $type);
+            $types = GedcomText::subrecords($rest, 1, 'TYPE');
+            $rest  = GedcomText::replaceSubrecords($rest, 1, 'TYPE', '');
+            if ($type !== '') {
+                $latest = array_pop($types);
+                foreach ($types as $t) {
+                    $rest .= "\n1 TYPE " . $t[0] . $t[1];
+                }
+                $rest .= "\n1 TYPE " . $type . ($latest[1] ?? '');
+            }
         }
 
         // Uebergeordneter Ort ("1 _LOC @L1@"): ersetzt alle Hierarchiezeiger; null oder leer loest den Ort heraus
@@ -793,7 +806,8 @@ trait PlaceActions
                 'location'    => $location?->xref(),
                 'gov'         => $location === null ? null : $this->locGov($location),
                 'shortName'   => $location === null ? null : $this->locShortName($location),
-                'type'        => $location === null ? null : $this->locValue($location, ['TYPE']),
+                'type'        => $location === null ? null : $this->locType($location)['type'],
+                'govType'     => $location === null ? null : $this->locType($location)['govType'],
             ];
         }
 
@@ -820,7 +834,8 @@ trait PlaceActions
                 'location'    => $xref,
                 'gov'         => $this->locGov($location),
                 'shortName'   => $this->locShortName($location),
-                'type'        => $this->locValue($location, ['TYPE']),
+                'type'        => $this->locType($location)['type'],
+                'govType'     => $this->locType($location)['govType'],
             ];
         }
 
@@ -1412,8 +1427,10 @@ trait PlaceActions
         return [
             'xref'    => $location->xref(),
             'name'    => GedcomText::firstValue($location->gedcom(), 1, 'NAME'),
-            // Art des Orts (1 TYPE: Hof, Haus, Gemeinde ...), uebergeordnete Orte und Ereignisse am Ort - ab Stufe 27
-            'type'    => $this->locValue($location, ['TYPE']),
+            // Art des Orts (1 TYPE: Hof, Haus, Gemeinde ...) mit GOV-Typnummer (2 _GOVTYPE, GEDCOM-L), uebergeordnete Orte
+            // und Ereignisse am Ort - ab Stufe 27; govType seit 1.18.1
+            'type'    => $this->locType($location)['type'],
+            'govType' => $this->locType($location)['govType'],
             'parents' => $this->locParentsJson($location, $locs),
             'events'  => $this->locEventsJson($location),
             'gov'     => $this->locGov($location),
@@ -1439,6 +1456,26 @@ trait PlaceActions
      *
      * @param list<string> $tags
      */
+    /**
+     * Die Art eines Orts: GEDCOM-L erlaubt mehrere "1 TYPE" mit Datum - die letzte gilt als die heutige. Dazu die
+     * GOV-Typnummer aus "2 _GOVTYPE" (gov.genealogy.net/type/list: 24 Hof, 87 Muehle, 55 Dorf ...), die Programme
+     * sicherer auswerten koennen als den freien Text.
+     *
+     * @return array{type: string|null, govType: string|null}
+     */
+    private function locType(Location $location): array
+    {
+        $types = GedcomText::subrecords("\n" . $location->gedcom(), 1, 'TYPE');
+        $last  = end($types);
+        if ($last === false) {
+            return ['type' => null, 'govType' => null];
+        }
+        $type = trim(GedcomText::withContinuations($last[0], $last[1], 1));
+        $gov  = trim(GedcomText::firstValue(ltrim($last[1], "\n"), 2, '_GOVTYPE'));
+
+        return ['type' => $type === '' ? null : $type, 'govType' => $gov === '' ? null : $gov];
+    }
+
     private function locValue(Location $location, array $tags): string|null
     {
         foreach ($tags as $tag) {

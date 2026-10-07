@@ -257,15 +257,15 @@ class Orte(unittest.TestCase):
         self.assertEqual("L2", orte["Markerkonfidenzort"]["location"], "Blattname eindeutig: _LOC gefunden")
         # Stufe 27: Hof mit Bewohner ueber 3 _LOC, Hof ohne Ereignis nur ueber die _LOC-Hierarchie
         self.assertEqual((1, 1, "L3", "Hof", 50.11), tuple(orte["Hof Nr. 1, Offenbach"][k] for k in ("events", "individuals", "location", "type", "lat")))
-        self.assertEqual((0, 0, "L4", "Hof", None), tuple(orte["Hof Nr. 2, Offenbach"][k] for k in ("events", "individuals", "location", "type", "lat")))
+        self.assertEqual((0, 0, "L4", "farm", None), tuple(orte["Hof Nr. 2, Offenbach"][k] for k in ("events", "individuals", "location", "type", "lat")))
         gast = [o["name"] for o in U.sitzung().get("Places", "testbaum", list=1).json["places"]]
         self.assertEqual(["Bieber, Offenbach", "Hof Nr. 1, Offenbach", "Hof Nr. 2, Offenbach", "Offenbach"], gast, "Orte verborgener Personen fehlen (F2 hat ein lebendes Kind)")
 
     def test_ein_ort(self):
         o = U.sitzung("verwalter").get("Place", "testbaum", name="offenbach").json
         self.assertEqual(("Offenbach", ["Offenbach"], None, 3), (o["name"], o["levels"], o["parent"], o["events"]))
-        self.assertEqual([("Bieber, Offenbach", None, None), ("Hof Nr. 1, Offenbach", "L3", "Hof"), ("Hof Nr. 2, Offenbach", "L4", "Hof")],
-                         [(c["name"], c["location"], c["type"]) for c in o["children"]], "Unterorte aus Ortstabelle und _LOC-Hierarchie")
+        self.assertEqual([("Bieber, Offenbach", None, None, None), ("Hof Nr. 1, Offenbach", "L3", "Hof", "24"), ("Hof Nr. 2, Offenbach", "L4", "farm", "24")],
+                         [(c["name"], c["location"], c["type"], c["govType"]) for c in o["children"]], "Unterorte aus Ortstabelle und _LOC-Hierarchie, Art mit GOV-Typnummer")
         self.assertEqual({"birth": 1, "marriage": 0, "death": 0, "other": 2}, o["eventCounts"], "Geburt I1; Taufe I1 und Wohnort I2")
         self.assertEqual(["I2", "I1"], [p["xref"] for p in o["individuals"]], "nach Namen: Anna vor Theodor")
         self.assertEqual(["BIRT", "CHR"], [f["tag"] for f in o["individuals"][1]["facts"]])
@@ -283,7 +283,8 @@ class Orte(unittest.TestCase):
         h = U.sitzung("verwalter").get("Place", "testbaum", name="Hof Nr. 1, Offenbach").json
         self.assertEqual(("Offenbach", 1, ["I4"], "L3"), (h["parent"], h["events"], [p["xref"] for p in h["individuals"]], h["location"]["xref"]))
         loc = h["location"]
-        self.assertEqual("Hof", loc["type"])
+        # zwei Arten (GEDCOM-L: 1 TYPE mehrfach mit Datum): die letzte gilt, dazu die GOV-Typnummer aus 2 _GOVTYPE (24 = Hof)
+        self.assertEqual(("Hof", "24"), (loc["type"], loc["govType"]))
         self.assertEqual([("L1", "Offenbach", "Offenbach", "POLI", 1800)], [(p["xref"], p["name"], p["fullName"], p["type"], p["date"]["year"]) for p in loc["parents"]])
         self.assertEqual(1, len(loc["events"]))
         e = loc["events"][0]
@@ -291,7 +292,9 @@ class Orte(unittest.TestCase):
         self.assertAlmostEqual(50.11, h["lat"])
         # Hof ohne Ereignis: nur ueber die Hierarchie, Ereignisse 0, kein not-found
         h2 = U.sitzung().get("Place", "testbaum", name="hof nr. 2, offenbach").json
-        self.assertEqual(("Hof Nr. 2, Offenbach", 0, [], "L4", "Hof", []), (h2["name"], h2["events"], h2["individuals"], h2["location"]["xref"], h2["location"]["type"], h2["location"]["events"]))
+        self.assertEqual(("Hof Nr. 2, Offenbach", 0, [], "L4", "farm", "24", []), (h2["name"], h2["events"], h2["individuals"], h2["location"]["xref"], h2["location"]["type"], h2["location"]["govType"], h2["location"]["events"]))
+        liste = {o["name"]: o for o in U.sitzung("verwalter").get("Places", "testbaum", list=1).json["places"]}
+        self.assertEqual([("Hof", "24"), ("farm", "24"), (None, None)], [(liste[n]["type"], liste[n]["govType"]) for n in ("Hof Nr. 1, Offenbach", "Hof Nr. 2, Offenbach", "Bieber, Offenbach")])
         self.assertEqual([], h2["children"])
 
     def test_unbekannt_und_verborgen(self):
@@ -308,6 +311,20 @@ class Orte(unittest.TestCase):
         self.assertEqual((True, "L1", 0), (a.json["ok"], a.json["xref"], a.json["linked"]), a)
         loc = s.get("Place", "testbaum", name="Offenbach").json["location"]
         self.assertEqual(("OFFACHJO40BD", ["Stadt am Main"], 2, 50.1), (loc["gov"], loc["notes"], len(loc["sources"]), loc["lat"]))
+        # Art aendern: Unterzeilen der juengsten Art (2 _GOVTYPE, 2 SOUR) und die aeltere Art mit Datum bleiben (1.18.1)
+        a = s.post("Place", "testbaum", {"name": "Hof Nr. 1, Offenbach", "type": "Bauernhof"})
+        self.assertEqual((True, "L3"), (a.json["ok"], a.json["xref"]), a)
+        g = umgebung.sql("SELECT o_gedcom FROM wt_other WHERE o_id = 'L3'")[0][0]
+        self.assertIn("\n1 TYPE Mühle\n2 DATE TO 1799\n1 TYPE Bauernhof\n2 _GOVTYPE 24\n2 SOUR @S1@\n3 PAGE Ortschronik S. 3", g)
+        self.assertEqual(1, g.count("1 TYPE Bauernhof"))
+        loc = s.get("Place", "testbaum", name="Hof Nr. 1, Offenbach").json["location"]
+        self.assertEqual(("Bauernhof", "24"), (loc["type"], loc["govType"]))
+        # leer entfernt alle Arten; dann neu setzen ohne Unterzeilen
+        s.post("Place", "testbaum", {"name": "Hof Nr. 1, Offenbach", "type": ""})
+        self.assertNotIn("1 TYPE", umgebung.sql("SELECT o_gedcom FROM wt_other WHERE o_id = 'L3'")[0][0])
+        s.post("Place", "testbaum", {"name": "Hof Nr. 1, Offenbach", "type": "Hof"})
+        loc = s.get("Place", "testbaum", name="Hof Nr. 1, Offenbach").json["location"]
+        self.assertEqual(("Hof", None), (loc["type"], loc["govType"]))
         # Koordinaten und Notiz ersetzen, auch in die Geografischen Daten (Admin)
         a = s.post("Place", "testbaum", {"name": "Offenbach", "lat": 50.104444, "lng": -8.766, "note": "Stadt am Main\nzweite Zeile", "mapData": True})
         self.assertEqual((True, True), (a.json["ok"], a.json["mapData"]), a)

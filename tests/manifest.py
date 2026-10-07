@@ -89,7 +89,8 @@ ROUTEN = [
      "With `list=1` (level 21, visitor): every place at a visible fact – as written there – with the number of "
      "events, individuals and families, coordinates and their origin (`location`: the GEDCOM-L `_LOC` record, "
      "`mapData`: webtrees' geographic data, `event`: `MAP` at a fact), the `_LOC` record and its GOV identifier. From level 27 "
-     "also `type` (the `_LOC` record's TYPE: farm, house, parish …) and places that exist only as a `_LOC` in the GEDCOM-L "
+     "also `type` (the `_LOC` record's TYPE: farm, house, parish …; with several dated TYPE lines the last one) and, since 1.18.1, "
+     "`govType` (the GOV type number from `2 _GOVTYPE`, GEDCOM-L: 24 farm, 87 mill, 55 village …) and places that exist only as a `_LOC` in the GEDCOM-L "
      "hierarchy (`1 _LOC @parent@`, e.g. a farm without recorded residents) with 0 events.",
      [P("q", "Beginning or part of the place name"), P("list", "`1`: list of all places (level 21)", "integer")], None),
     ("get", "Place", True, 21, "visitor",
@@ -97,9 +98,9 @@ ROUTEN = [
      "coordinates, notes, sources, media) and the individuals and families with their events at this place "
      "(at most 1000 each). The `_LOC` record is found like the Ortsregister module does: `3 _LOC` at the events, "
      "the module's binding, its GOV identifier, the leaf name if unique on both sides. From level 27 the `_LOC` record also "
-     "carries `type` (TYPE), `parents` (the GEDCOM-L hierarchy `1 _LOC @parent@` with pointer type and date) and `events` "
+     "carries `type` (TYPE, the last of several dated ones), `govType` (`2 _GOVTYPE`, since 1.18.1), `parents` (the GEDCOM-L hierarchy `1 _LOC @parent@` with pointer type and date) and `events` "
      "(`1 EVEN` at the place: fire, rebuilding, change of ownership … with type, date, notes, sources); `children` are "
-     "merged from webtrees' place table and the `_LOC` hierarchy, each with `location` and `type`. A place that exists only "
+     "merged from webtrees' place table and the `_LOC` hierarchy, each with `location`, `type` and `govType`. A place that exists only "
      "as a `_LOC` in the hierarchy is answered with 0 events. `not-found` if neither a visible event nor a `_LOC` names the place.",
      [P("name", "The place as written at the event, e.g. `Kortau, Allenstein`", pflicht=True)], None),
     ("post", "Place", True, 22, "editor",
@@ -109,7 +110,7 @@ ROUTEN = [
      "webtrees' geographic data (site administrators only) – webtrees' own maps read only those and `MAP` at the events.",
      [], "`{name, gov?, lat?, lng?, note?, media?, mapData?, postalCode?, region?, country?, shortName?, type?, parent?}` – `lat`/`lng` together, `null` removes the coordinates; "
      "`media` replaces the linked media objects (upload new ones with route Media and the `_LOC` identifier). `type` (level 27) sets the "
-     "`_LOC` record's TYPE, `parent` the identifier of the superior `_LOC` (`1 _LOC @parent@`, replaces all hierarchy pointers; `null` detaches); "
+     "`_LOC` record's TYPE – only the value of the latest TYPE line changes, its `_GOVTYPE`, date and sources and older dated TYPE lines stay (1.18.1), empty removes all TYPE lines –, `parent` the identifier of the superior `_LOC` (`1 _LOC @parent@`, replaces all hierarchy pointers; `null` detaches); "
      "with `parent` a place without events may be created (a farm without recorded residents). "
      "Answer: `{ok, xref, pending, linked, mapData}`, status 201 when the `_LOC` was created."),
     ("post", "MediaObject", True, 23, "editor",

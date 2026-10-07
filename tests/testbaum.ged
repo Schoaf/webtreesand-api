@@ -163,7 +163,12 @@
 2 LONG E9.0
 0 @L3@ _LOC
 1 NAME Hof Nr. 1
+1 TYPE Mühle
+2 DATE TO 1799
 1 TYPE Hof
+2 _GOVTYPE 24
+2 SOUR @S1@
+3 PAGE Ortschronik S. 3
 1 _LOC @L1@
 2 TYPE POLI
 2 DATE FROM 1800
@@ -178,7 +183,8 @@
 2 LONG E8.77
 0 @L4@ _LOC
 1 NAME Hof Nr. 2
-1 TYPE Hof
+1 TYPE farm
+2 _GOVTYPE 24
 1 _LOC @L1@
 0 @R1@ REPO
 1 NAME Bistumsarchiv Mainz
