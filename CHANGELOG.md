@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+**API level 31.** `Info.trees[].availableModules`: the names of the enabled modules the user can use in the tree – modules
+with an access level only when it allows the user (as webtrees' `ModuleService::findByComponent()`). Clients can offer
+features of optional modules (privacy policy, Sammlungen, …) only when they are there.
+
 ## 1.18.0 – 2026-10-06
 **API level 30: the interface is complete.** With this release every route needed for everyday genealogy work is there:
 individuals, families, events, names, sources and citations, media, places and location records, godparents, merging with
