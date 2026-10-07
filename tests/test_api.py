@@ -954,6 +954,20 @@ class Schreiben(unittest.TestCase):
         neu = [f for f in self.fakten(s, "I2") if f.get("tag") == "RESI" and (f.get("place") or {}).get("name") == ort["name"].lower()]
         self.assertEqual(True, s.post("DeleteFact", "testbaum", {"factId": neu[0]["id"]}, xref="I2").json["ok"])
 
+    def test_verfuegbare_module(self):
+        """Stufe 31: Info nennt je Baum die Module, die der Benutzer dort nutzen kann - ein abgeschaltetes fehlt."""
+        def module(sitzung):
+            return next(b for b in sitzung.info()["trees"] if b["name"] == "testbaum")["availableModules"]
+        m = U.sitzung("mitglied")
+        self.assertIn("privacy-policy", module(m))
+        self.assertIn("_api4webtrees_", module(m))
+        umgebung.sql("INSERT INTO wt_module (module_name, status) VALUES ('privacy-policy', 'disabled') "
+                     "ON CONFLICT (module_name) DO UPDATE SET status = 'disabled'")
+        try:
+            self.assertNotIn("privacy-policy", module(U.sitzung("mitglied")))
+        finally:
+            umgebung.sql("UPDATE wt_module SET status = 'enabled' WHERE module_name = 'privacy-policy'")
+
     def test_startperson(self):
         """Stufe 24: Info nennt die Startperson wie webtrees; StartPerson setzt die eigene Standardperson, die des
         Stammbaums nur fuer Verwalter."""

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+**API level 31.** `Info.trees[].availableModules`: the names of the enabled modules the user can use in the tree – modules
+with an access level only when it allows the user (as webtrees' `ModuleService::findByComponent()`). Clients can offer
+features of optional modules (privacy policy, Sammlungen, …) only when they are there.
+
 ## 1.18.1 – 2026-10-07
 - **Place type with GOV type number.** `Places?list=1`, `Place` and its `children` now carry `govType`: the GOV type number
   from `2 _GOVTYPE` under the `_LOC` record's `1 TYPE` (GEDCOM-L addendum; 24 farm, 87 mill, 55 village …, list at

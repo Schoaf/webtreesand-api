@@ -38,7 +38,10 @@ ROUTEN = [
      "CSRF token for POST requests and the largest accepted upload. From level 26 also `loginForm`, the settings of the "
      "sign-in page: `welcomeMessage`, `isSelfRegistrationAllowed` and `registrationTerms` (`null` when the site shows no "
      "terms). `welcomeMessage` and `registrationTerms` are HTML written by the site administrator, in the language of the "
-     "request – show them as HTML only after sanitising.", [], None),
+     "request – show them as HTML only after sanitising. From level 31 each tree also has `availableModules`: the names "
+     "of the enabled modules this user can use there (modules with an access level – menus, tabs, footers … – only when "
+     "it allows the user), so a client can offer e.g. the privacy policy only when that module is on. This makes `Info` "
+     "longer by one list of module names per tree.", [], None),
     ("get", "Individuals", True, 1, "visitor",
      "List of individuals, sorted by name, 50 per page. `q` filters by name; with `scope=all` the words may appear "
      "anywhere in the visible data (place, year, occupation …).",
