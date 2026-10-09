@@ -11,6 +11,7 @@ use Fisharebest\Webtrees\I18N;
  * @var string                             $device   android, ios, ... (Browser des Handys)
  * @var list<array<string,mixed>>          $apps     Handy-Apps aus src/Apps.php, passende zuerst
  * @var array<string,array<string,string>> $badges   App-Kennung => Geraet => Bild des Store-Badges
+ * @var array<string,string>              $icons    App-Kennung => Logo der App (nur Apps mit Logo)
  */
 
 $connectable = array_values(array_filter($apps, static fn (array $app): bool => $app['scheme'] !== ''));
@@ -21,7 +22,7 @@ $connectable = array_values(array_filter($apps, static fn (array $app): bool => 
 
 <p>
     <?php foreach ($connectable as $i => $app) : ?>
-        <a class="btn <?= $i === 0 ? 'btn-primary' : 'btn-outline-primary' ?> btn-lg mb-1" data-scheme="<?= e($app['scheme']) ?>" href="<?= e($app['scheme']) ?>://connect?url=<?= e(rawurlencode($base_url)) ?>"><?= I18N::translate('%s öffnen', e($app['name'])) ?></a>
+        <a class="btn <?= $i === 0 ? 'btn-primary' : 'btn-outline-primary' ?> btn-lg mb-1" data-scheme="<?= e($app['scheme']) ?>" href="<?= e($app['scheme']) ?>://connect?url=<?= e(rawurlencode($base_url)) ?>"><?php if (isset($icons[$app['id']])) : ?><img src="<?= e($icons[$app['id']]) ?>" alt="" class="me-2" style="height: 1.5rem; vertical-align: text-bottom; border-radius: 0.3rem;"><?php endif ?><?= I18N::translate('%s öffnen', e($app['name'])) ?></a>
     <?php endforeach ?>
 </p>
 

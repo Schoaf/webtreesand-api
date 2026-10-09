@@ -82,7 +82,7 @@ Angemeldete Benutzer sehen oben auf der Seite einen Hinweis mit einem Knopf zur 
 **„Den Stammbaum als Programm auf dem PC“** (wtWin/wtTux), am Handy **„Den Stammbaum aufs Handy“** (wtAnd). Handy und PC
 werden getrennt gemerkt: Der Hinweis verschwindet für diese Geräteart, sobald ihre App verbunden ist (oder nach *Nicht
 mehr anzeigen*); danach führen die Links in der Fußzeile dorthin. Die Seite zeigt die Apps für das Gerät des Besuchers
-zuerst (eigene vor fremden), wtWin und wtAnd immer aufgeklappt, die übrigen eingeklappt darunter. Auf iPhone und iPad
+zuerst (eigene vor fremden); nur diese App ist aufgeklappt, die übrigen stehen als je eine Zeile eingeklappt darunter, die Seite bleibt kurz. Auf iPhone und iPad
 zeigt sie webtrees mobile von Andreas Scharf (App Store); ein Gerät ohne passende App bekommt einen Hinweis auf den
 Browser. Je App zwei Schritte:
 
@@ -121,10 +121,15 @@ sie wie jede andere Bearbeitung auf die Freigabe durch einen Moderator.
 ## Hinter SSO oder Passwortschutz
 
 Sitzt vor webtrees eine eigene Anmeldung (Authelia, Authentik, oauth2-proxy, Cloudflare Access, Basic-Auth), kommt die
-App nicht durch; wtAnd und wtWin melden das ab der nächsten Version so. Abhilfe: im Anmeldedienst nur die Anfragen
-freigeben, deren `route` `_api4webtrees_`, `media-thumbnail` oder `media-download` enthält, nicht die ganze Seite.
-Dahinter schützt weiter der webtrees-Login. Die App dann über die Seite „App“ verbinden: Die Anmeldung läuft im Browser
-über das SSO, die App braucht kein Passwort.
+App nicht durch und meldet das. Zwei Wege, ohne dass an diesem Modul etwas zu ändern wäre – es läuft vor dieser
+Anmeldung gar nicht erst:
+
+- **Passwortschutz des Webservers** (Basic-Auth, `.htaccess`/`.htpasswd`, der Browser zeigt ein kleines Anmeldefenster):
+  wtAnd, wtWin und wtTux ab 1.38 nehmen Benutzername und Passwort auf dem Adressbildschirm unter „Verzeichnisschutz“
+  entgegen und schicken sie mit jeder Anfrage an diesen Server mit.
+- **SSO-Dienste:** im Anmeldedienst nur die Anfragen freigeben, deren `route` `_api4webtrees_`, `media-thumbnail` oder
+  `media-download` enthält, nicht die ganze Seite. Dahinter schützt weiter der webtrees-Login. Die App dann über die
+  Seite „App“ verbinden: Die Anmeldung läuft im Browser über das SSO, die App braucht kein Passwort.
 
 ## Ein Medienordner je Stammbaum
 
@@ -144,8 +149,11 @@ zuletzt (1.13.0, Stufen 21–24): Orte lesen, schreiben, umbenennen und zusammen
 GEDCOM-L mit GOV-Kennung, Koordinaten, Postleitzahl, Region, Land, Kurzname, Notizen, Quellen, Medien), Titel und Art
 von Medienobjekten, Startperson festlegen.
 
+**Vollständig:** Seit Stufe 30 (1.18) ist die Schnittstelle vollständig – alle Routen für die tägliche Arbeit sind da. Releases
+bleiben ab jetzt selten; Änderungen und Fehlerbehebungen werden gesammelt, Pull Requests ohne sofortiges Release gemergt.
+
 **Kompatibilität:** Die Schnittstelle wächst nur. Jedes Release mit neuen Routen oder Feldern erhöht die **API-Stufe**
-(`apiVersion` in `Info`, heute 19); bestehende Routen, Parameter und Felder behalten Name, Typ und Bedeutung. Ein Client
+(`apiVersion` in `Info`, heute 30); bestehende Routen, Parameter und Felder behalten Name, Typ und Bedeutung. Ein Client
 für Stufe N läuft mit jedem Modul ab Stufe N, und ein älterer Client läuft mit einem neueren Modul weiter, er sieht die
 neuen Felder nur nicht. Die Tests prüfen jede Antwort gegen das dokumentierte Schema, ein Feld kann also nicht unbemerkt
 verschwinden. Müsste sich je etwas unverträglich ändern, wäre es eine neue Route, nie eine geänderte.
@@ -153,8 +161,9 @@ verschwinden. Müsste sich je etwas unverträglich ändern, wäre es eine neue R
 **Apps auf der Seite „App“:** Jeder Client kann die Schnittstelle mit der normalen Anmeldung benutzen, nichts an den
 JSON-Endpunkten, Rechten oder dem Datenschutz ist an eine App gebunden. Die Seiten „App“ und „Verbinden“, der Hinweis
 und die Fußzeile zeigen die Apps aus `src/Apps.php`. Eine App kommt per Pull Request mit einem Eintrag dazu: Name,
-Autor, Art (Handy oder PC), Geräte, Download-Adressen (https), das URL-Schema fürs Verbinden per Tipp und bei einem
-Store-Link das Badge unter `resources/img`. Bedingung: Die App ist öffentlich installierbar (Store oder Release) und
+Autor, Art (Handy oder PC), Geräte, Download-Adressen (https), das URL-Schema fürs Verbinden per Tipp, bei einem
+Store-Link das Badge unter `resources/img` und wahlweise das Logo der App unter `resources/img` (`icon`, quadratisches PNG
+oder SVG, steht auf den Seiten „App“ und „Verbinden“ vor dem Namen). Bedingung: Die App ist öffentlich installierbar (Store oder Release) und
 nimmt den Koppel-Link an. Die Tests weisen Einträge mit fehlenden Feldern, Links ohne https oder schon vergebenem Schema
 ab. Verwalter können jede App in den Einstellungen abhaken. Der Vertrag fürs Koppeln ist der von wtAnd: Die Seiten
 „App“ und „Verbinden“ öffnen `<schema>://connect?url=<Basisadresse>&code=<48 Hex>&tree=<Baumname>&user=<Benutzername>`

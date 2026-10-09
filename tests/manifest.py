@@ -24,7 +24,8 @@ OPENAPI = os.path.join(DOCS, "openapi.json")
 ROUTE = "/module/_api4webtrees_/{action}"
 
 ROLLEN = {"visitor": "anyone (visitors see only what webtrees shows them)", "member": "signed in, member of the tree",
-          "editor": "editor of the tree", "moderator": "moderator of the tree", "admin": "site administrator"}
+          "editor": "editor of the tree", "moderator": "moderator of the tree", "manager": "manager of the tree",
+          "admin": "site administrator"}
 
 P = lambda name, beschreibung, typ="string", pflicht=False: {  # noqa: E731
     "name": name, "in": "query", "required": pflicht, "description": beschreibung, "schema": {"type": typ}}
@@ -37,14 +38,19 @@ ROUTEN = [
      "CSRF token for POST requests and the largest accepted upload. From level 26 also `loginForm`, the settings of the "
      "sign-in page: `welcomeMessage`, `isSelfRegistrationAllowed` and `registrationTerms` (`null` when the site shows no "
      "terms). `welcomeMessage` and `registrationTerms` are HTML written by the site administrator, in the language of the "
-     "request – show them as HTML only after sanitising.", [], None),
+     "request – show them as HTML only after sanitising. From level 31 each tree also has `availableModules`: the names "
+     "of the enabled modules this user can use there (modules with an access level – menus, tabs, footers … – only when "
+     "it allows the user), so a client can offer e.g. the privacy policy only when that module is on. This makes `Info` "
+     "longer by one list of module names per tree.", [], None),
     ("get", "Individuals", True, 1, "visitor",
      "List of individuals, sorted by name, 50 per page. `q` filters by name; with `scope=all` the words may appear "
      "anywhere in the visible data (place, year, occupation …).",
      [P("q", "Search words"), P("page", "Page, from 1", "integer"), P("scope", "`all`: search all visible data")], None),
     ("get", "Individual", True, 1, "visitor",
      "One individual with facts, parent/spouse/step families, media and – with `relativeTo` – the relationship "
-     "to another individual.", [XREF, P("relativeTo", "Relationship relative to this individual (default: own individual)")], None),
+     "to another individual. From level 28 each fact has `pending` (`true`: a change waiting for approval, visible only "
+     "to users whom webtrees shows pending changes, i.e. editors and moderators) and `sex` is the value the user sees in "
+     "the facts, also while a change of sex is pending.", [XREF, P("relativeTo", "Relationship relative to this individual (default: own individual)")], None),
     ("get", "Family", True, 1, "visitor", "One family with spouses, children and facts.",
      [P("xref", "Family identifier, e.g. `F12`", pflicht=True)], None),
     ("get", "Pedigree", True, 1, "visitor",
@@ -75,7 +81,9 @@ ROUTEN = [
      "Birthdays, weddings and deaths in the next `days` days. At most 100 entries: per day living people first, "
      "then round anniversaries (25, 50 …); `total` and `more` tell whether there were more (since 1.9.6).",
      [P("days", "1–60, default 14", "integer")], None),
-    ("get", "Bookmarks", True, 11, "member", "The signed-in user's bookmarks in this tree (user setting, all clients).", [], None),
+    ("get", "Bookmarks", True, 11, "member", "The signed-in user's bookmarks in this tree. From level 30 they are webtrees' own favourites "
+     "(table `favorite`, block “My favourites” on “My page”): `data` the user's, `treeFavorites` the tree's (set by managers), "
+     "each person with `note`. Bookmarks from the old user setting (levels 11–29) are taken over once.", [], None),
     ("get", "Pending", True, 5, "moderator", "Records with pending changes.", [], None),
     ("get", "Tags", True, 1, "visitor", "Facts and events the client may offer for adding, with labels.",
      [P("type", "`INDI` or `FAM`", pflicht=True)], None),
@@ -83,22 +91,30 @@ ROUTEN = [
      "Place suggestions while typing, like webtrees' own autocomplete. `Berlin, Deu` searches per level. "
      "With `list=1` (level 21, visitor): every place at a visible fact – as written there – with the number of "
      "events, individuals and families, coordinates and their origin (`location`: the GEDCOM-L `_LOC` record, "
-     "`mapData`: webtrees' geographic data, `event`: `MAP` at a fact), the `_LOC` record and its GOV identifier.",
+     "`mapData`: webtrees' geographic data, `event`: `MAP` at a fact), the `_LOC` record and its GOV identifier. From level 27 "
+     "also `type` (the `_LOC` record's TYPE: farm, house, parish …; with several dated TYPE lines the last one) and, since 1.18.1, "
+     "`govType` (the GOV type number from `2 _GOVTYPE`, GEDCOM-L: 24 farm, 87 mill, 55 village …) and places that exist only as a `_LOC` in the GEDCOM-L "
+     "hierarchy (`1 _LOC @parent@`, e.g. a farm without recorded residents) with 0 events.",
      [P("q", "Beginning or part of the place name"), P("list", "`1`: list of all places (level 21)", "integer")], None),
     ("get", "Place", True, 21, "visitor",
      "One place: levels, sub-places one level down, coordinates with origin, the `_LOC` record (GOV identifier, "
      "coordinates, notes, sources, media) and the individuals and families with their events at this place "
      "(at most 1000 each). The `_LOC` record is found like the Ortsregister module does: `3 _LOC` at the events, "
-     "the module's binding, its GOV identifier, the leaf name if unique on both sides. `not-found` if no visible "
-     "event names the place.",
+     "the module's binding, its GOV identifier, the leaf name if unique on both sides. From level 27 the `_LOC` record also "
+     "carries `type` (TYPE, the last of several dated ones), `govType` (`2 _GOVTYPE`, since 1.18.1), `parents` (the GEDCOM-L hierarchy `1 _LOC @parent@` with pointer type and date) and `events` "
+     "(`1 EVEN` at the place: fire, rebuilding, change of ownership … with type, date, notes, sources); `children` are "
+     "merged from webtrees' place table and the `_LOC` hierarchy, each with `location`, `type` and `govType`. A place that exists only "
+     "as a `_LOC` in the hierarchy is answered with 0 events. `not-found` if neither a visible event nor a `_LOC` names the place.",
      [P("name", "The place as written at the event, e.g. `Kortau, Allenstein`", pflicht=True)], None),
     ("post", "Place", True, 22, "editor",
      "Save a place's data in its GEDCOM-L `_LOC` record – created if there is none. Only the parts named in the body are "
      "replaced; sources, media and unknown lines of the `_LOC` stay. If the leaf name is not unique in the tree, the events "
      "at the place get the pointer `3 _LOC @L1@` (`linked`: how many). `mapData: true` also writes the coordinates to "
      "webtrees' geographic data (site administrators only) – webtrees' own maps read only those and `MAP` at the events.",
-     [], "`{name, gov?, lat?, lng?, note?, media?, mapData?, postalCode?, region?, country?, shortName?}` – `lat`/`lng` together, `null` removes the coordinates; "
-     "`media` replaces the linked media objects (upload new ones with route Media and the `_LOC` identifier). "
+     [], "`{name, gov?, lat?, lng?, note?, media?, mapData?, postalCode?, region?, country?, shortName?, type?, parent?}` – `lat`/`lng` together, `null` removes the coordinates; "
+     "`media` replaces the linked media objects (upload new ones with route Media and the `_LOC` identifier). `type` (level 27) sets the "
+     "`_LOC` record's TYPE – only the value of the latest TYPE line changes, its `_GOVTYPE`, date and sources and older dated TYPE lines stay (1.18.1), empty removes all TYPE lines –, `parent` the identifier of the superior `_LOC` (`1 _LOC @parent@`, replaces all hierarchy pointers; `null` detaches); "
+     "with `parent` a place without events may be created (a farm without recorded residents). "
      "Answer: `{ok, xref, pending, linked, mapData}`, status 201 when the `_LOC` was created."),
     ("post", "MediaObject", True, 23, "editor",
      "Change title and type of a media object (first file: `2 TITL`, `2 FORM` / `3 TYPE`); everything else stays.",
@@ -120,6 +136,28 @@ ROUTEN = [
      "`skipped`. With `preview: true` nothing changes. Without automatic acceptance the changes are pending as usual.",
      [], "`{from, to, preview?}`. Answer: `{ok, preview, from, to, merge, records, events, subPlaces, skipped, "
      "location: {from, to, conflicts}, pending?}`."),
+    ("post", "Merge", True, 29, "manager",
+     "Merge two individuals: `xref2` is absorbed into `xref1`. Everything that pointed to `xref2` (families, sources, notes, "
+     "media, associations) points to `xref1` afterwards, duplicate links are dropped, `xref2` is deleted – as webtrees' own "
+     "merge does. Which facts stay is up to the client (`keep1`, `keep2`, fact ids); links (FAMC, FAMS, OBJE) always stay "
+     "from both. With `preview: true` nothing changes: the answer lists both persons, their facts with a suggestion "
+     "(`keep`: all of the first, from the second only what the first does not have word for word; `same` marks identical "
+     "facts, `link` the ones that always stay), the records that link to `xref2` and `suggestions` – further pairs that are "
+     "probably the same person too (father, mother, spouses and children with the same name). Without `preview` the merge "
+     "is done and remembered: `mergeId` is the handle for `MergeUndo`. Only managers of the tree, like in webtrees. Without "
+     "automatic acceptance the changes are pending as usual.",
+     [], "`{xref1, xref2, keep1?, keep2?, preview?}`. Answer (preview): `{ok, preview, person1, person2, facts1, facts2, links, "
+     "suggestions}`; (merge): `{ok, preview, xref, removed, mergeId, records, pending}`."),
+    ("post", "MergeUndo", True, 29, "manager",
+     "Take a merge back. webtrees keeps every change with the old and the new text; the module remembered which changes "
+     "belong to the merge and replays the old texts in reverse order – the deleted individual comes back under its old "
+     "identifier, links point to it again. Only if none of the records was changed since: otherwise `changed-since` with "
+     "the records in `changed`, and nothing is changed. Pending changes of the merge are rejected instead. With "
+     "`preview: true` only the check is done. Without automatic acceptance the undo is pending as usual.",
+     [], "`{id, preview?}`. Answer: `{ok, preview, xref, removed, records, pending?}`."),
+    ("get", "Merges", True, 29, "manager",
+     "The merges of this tree, newest first: who merged whom into whom and when, how many records were changed, and "
+     "whether the merge was undone (`undone`: time or `null`).", [], None),
     ("post", "Fact", True, 1, "editor",
      "Add or change a fact or event. Unmentioned sub-lines (sources, media …) are kept when changing.",
      [XREF], "`{factId?, tag, value?, date?, place?, note?, type?}` or `{factId?, gedcom: \"1 BIRT\\n2 DATE …\"}`. "
@@ -159,7 +197,26 @@ ROUTEN = [
      "`multipart/form-data`: `file`, `title?`, `note?`"),
     ("post", "UnlinkMedia", True, 8, "editor", "Unlink a media object; object and file stay.", [XREF], "`{media}`"),
     ("post", "PrimaryMedia", True, 8, "editor", "Make a linked image the main photo.", [XREF], "`{media}`"),
-    ("post", "Bookmarks", True, 11, "member", "Add or remove a bookmark; answers with the whole list.", [], "`{xref, add: true|false}`"),
+    ("post", "Bookmarks", True, 11, "member", "Add or remove a bookmark; answers with both lists. From level 30 `note` (text shown with the favourite) and "
+     "`forTree: true` (the tree's favourites, managers only, error `not-manager`).", [], "`{xref, add: true|false, note?, forTree?}`"),
+    ("get", "Tasks", True, 30, "member",
+     "All research tasks of the tree – webtrees' own `_TODO` facts at individuals and families (text, date, user, note), as the "
+     "module “Research tasks” writes and shows them – at records the user may see, by date. `?open=1` only the ones due (date not in "
+     "the future; webtrees treats a future date as a reminder). A task is done when it is deleted (`DeleteFact` with its `factId`).",
+     [P("open", "`1`: only tasks whose date is not in the future")], None),
+    ("post", "Task", True, 30, "editor",
+     "Add or change a research task at an individual or family: `1 _TODO text` with `2 DATE` (today when missing), `2 _WT_USER` "
+     "(the signed-in user when missing) and `2 NOTE`. With `factId` the task is changed, without it created. The answer's `factId` "
+     "is the new id. Delete (= done) with `DeleteFact`.", [XREF], "`{factId?, text, date?, user?, note?}`. Answer: `{ok, xref, pending, factId}`."),
+    ("post", "Reorder", True, 30, "editor",
+     "Reorder children (`children`, at a family), partnerships (`families`), names (`names`, at an individual) or media (`media`, "
+     "both) – like the “Re-order” pages in webtrees, only the order of the lines changes. `order` lists the identifiers (for names "
+     "the fact ids) in the new order; what is not listed comes after. The answer's `order` is the resulting order.",
+     [XREF], "`{type: children|families|names|media, order: [...]}`. Answer: `{ok, xref, pending, order}`."),
+    ("get", "Changes", True, 30, "member",
+     "The change history of the tree from webtrees' change table, newest first: who created, changed or deleted which record and "
+     "when, including pending changes. Only records the user may see; deleted records only for managers. `?limit=50` (at most 200), "
+     "`?xref=` only that record.", [P("limit", "At most this many entries (1–200, default 50)", "integer"), P("xref", "Only this record")], None),
     ("post", "Accept", True, 5, "moderator", "Accept pending changes of one record, or of the whole tree without `xref`.",
      [P("xref", "Record, optional")], None),
     ("post", "Reject", True, 5, "moderator", "Reject pending changes of one record, or of the whole tree without `xref`.",
@@ -170,7 +227,8 @@ ROUTEN = [
 
 FEHLER = sorted(set(re.findall(r"error\((\d+), '([a-z-]+)'\)", "".join(
     open(os.path.join(umgebung.MODUL, f)).read() for f in
-    ["Api4WebtreesModule.php", "src/ReadActions.php", "src/WriteActions.php", "src/AppPages.php"]))), key=lambda e: (e[0], e[1]))
+    ["Api4WebtreesModule.php", "src/ReadActions.php", "src/WriteActions.php", "src/AppPages.php", "src/MergeActions.php", "src/TaskActions.php"]))),
+    key=lambda e: (e[0], e[1]))
 
 
 # ── Schema aus Beispielen ────────────────────────────────────────────────────────────────────────────────────────
@@ -287,7 +345,13 @@ def sammeln(u):
     open(os.path.join(umgebung.WT, "data", "media", "archiv", "manifest.png"), "wb").write(PNG)
     merken("post", "MediaFromFile", admin.post("MediaFromFile", "testbaum", {"file": "archiv/manifest.png", "title": "Manifestscan"}, xref="I1"))
     merken("post", "MediaFromFile", admin.post("MediaFromFile", "testbaum", {"file": "archiv/manifest.png"}, xref="I1"))
-    merken("post", "Bookmarks", admin.post("Bookmarks", "testbaum", {"xref": "I1", "add": True}))
+    merken("post", "Bookmarks", admin.post("Bookmarks", "testbaum", {"xref": "I1", "add": True, "note": "Manifest"}))
+    merken("post", "Bookmarks", admin.post("Bookmarks", "testbaum", {"xref": "I2", "add": True, "forTree": True}))
+    aufgabe = admin.post("Task", "testbaum", {"text": "Manifestaufgabe", "note": "Taufe suchen"}, xref="I4")
+    merken("post", "Task", aufgabe)
+    merken("post", "Task", admin.post("Task", "testbaum", {"factId": aufgabe.json["factId"], "text": "Manifestaufgabe geaendert", "date": "1 JAN 2030"}, xref="I4"))
+    merken("post", "Reorder", admin.post("Reorder", "testbaum", {"type": "children", "order": ["I5", "I4"]}, xref="F1"))
+    merken("post", "Reorder", admin.post("Reorder", "testbaum", {"type": "children", "order": ["I4", "I5"]}, xref="F1"))
     merken("post", "StartPerson", admin.post("StartPerson", "testbaum", {"xref": "I1"}))
     merken("post", "MyAccount", admin.post("MyAccount", None, {"realName": admin.info()["user"]["realName"]}))
     # Info.loginForm mit Bedingungen: ohne SHOW_REGISTER_CAUTION waere registrationTerms immer null und das Schema falsch.
@@ -314,6 +378,15 @@ def sammeln(u):
     link = admin.post("Link", "testbaum", {"individual": ehe.json["xref"], "relation": "spouse", "relativeTo": "I4"})
     merken("post", "Link", link)
     merken("post", "Unlink", admin.post("Unlink", "testbaum", {"family": link.json["family"], "individual": ehe.json["xref"]}))
+    # Zusammenfuehren: zwei Wegwerfpersonen, Vorschau, Zusammenfuehren, Protokoll, Rueckgaengig
+    d1 = admin.post("AddIndividual", "testbaum", {"relation": "none", "given": "Manifest", "surname": "Doppel", "sex": "M", "dead": True, "birthDate": "1850"}).json["xref"]
+    d2 = admin.post("AddIndividual", "testbaum", {"relation": "none", "given": "Manifest", "surname": "Doppel", "sex": "M", "dead": True, "deathDate": "1900"}).json["xref"]
+    merken("post", "Merge", admin.post("Merge", "testbaum", {"xref1": d1, "xref2": d2, "preview": True}))
+    zusammen = admin.post("Merge", "testbaum", {"xref1": d1, "xref2": d2})
+    merken("post", "Merge", zusammen)
+    merken("post", "MergeUndo", admin.post("MergeUndo", "testbaum", {"id": zusammen.json["mergeId"], "preview": True}))
+    merken("post", "MergeUndo", admin.post("MergeUndo", "testbaum", {"id": zusammen.json["mergeId"]}))
+    merken("post", "MergeUndo", admin.post("MergeUndo", "testbaum", {"id": zusammen.json["mergeId"]}))
     # Koppeln: die Seite "App" legt den Einmal-Code an, eine frische Sitzung loest ihn ein.
     seite = admin._senden(urllib.request.Request(admin.url("/module/_api4webtrees_/App")))
     code = re.findall(r"[0-9a-f]{48}", seite.text)[0]

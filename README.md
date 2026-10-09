@@ -81,7 +81,7 @@ Signed-in users see a note at the top of the page with a button to the “App”
 **“The family tree as a program on your PC”** (wtWin/wtTux), on a phone **“The family tree on your phone”** (wtAnd).
 Phone and PC are remembered separately: the note disappears for that kind of device once its app is connected (or when
 they click *Do not show again*); after that the links in the footer lead there. The page shows the apps for the
-visitor's device first (own apps before others), wtWin and wtAnd always open, the rest folded below. On an iPhone or iPad it
+visitor's device first (own apps before others); only that app is open, the rest is folded to one line each below, so the page stays short. On an iPhone or iPad it
 shows webtrees mobile by Andreas Scharf (App Store); a device without a matching app gets a note recommending the
 browser. Each app has two steps:
 
@@ -116,10 +116,14 @@ The module deliberately has no login and no permission system of its own:
 ## Behind SSO or password protection
 
 If a sign-in sits in front of webtrees (Authelia, Authentik, oauth2-proxy, Cloudflare Access, basic auth), the app
-cannot get through; wtAnd and wtWin say so from their next version. Fix: in the sign-in service, let through only
-requests whose `route` contains `_api4webtrees_`, `media-thumbnail` or `media-download`, not the whole site. The webtrees
-login still protects everything behind it. Then connect the app via the “App” page: you sign in through SSO in the
-browser, and the app needs no password.
+cannot get through and says so. Two ways out, nothing to change in this module, which never runs before that sign-in:
+
+- **Password protection of the web server** (basic auth, `.htaccess`/`.htpasswd`, the browser shows a small sign-in box):
+  wtAnd, wtWin and wtTux from 1.38 take the user name and password under “directory protection” on their address
+  screen and send them with every request to that server.
+- **SSO services:** in the sign-in service, let through only requests whose `route` contains `_api4webtrees_`,
+  `media-thumbnail` or `media-download`, not the whole site. The webtrees login still protects everything behind it.
+  Then connect the app via the “App” page: you sign in through SSO in the browser, and the app needs no password.
 
 ## One media folder per tree
 
@@ -175,8 +179,11 @@ file's path inside the tree's media folder, for naming the same file to another 
 
 ### Compatibility
 
+The interface is complete since level 30 (1.18): every route needed for everyday genealogy work is there, and releases are
+rare from now on – changes and fixes are collected, pull requests are merged without an immediate release.
+
 The interface only grows. Every release that adds routes or fields raises the **API level** (`apiVersion` in `Info`,
-19 today); existing routes, parameters and fields keep their names, types and meaning. A client built for level N works
+30 today); existing routes, parameters and fields keep their names, types and meaning. A client built for level N works
 with every module from level N on, and an older client keeps working with a newer module – it simply does not see
 the new fields. New fields are optional, so clients should ignore what they do not know. The tests check every answer
 against the documented schema, so a field cannot disappear unnoticed. Where a limit is raised (generations, page
@@ -188,7 +195,8 @@ be a new route, never a changed one.
 Any client can use the interface with the normal sign-in above – nothing in the JSON endpoints, rights or privacy is
 specific to one app. The “App” page, the “Connect” page, the note and the footer show the apps listed in
 `src/Apps.php`. To add an app, send a pull request with one entry: name, author, kind (phone or PC), devices, download
-addresses (https), the URL scheme for one-tap connecting and, for a store link, the store badge under `resources/img`.
+addresses (https), the URL scheme for one-tap connecting, for a store link the store badge under `resources/img` and,
+optionally, the app's logo under `resources/img` (`icon`, square PNG or SVG, shown before the name on the “App” and “Connect” pages).
 Conditions: the app is publicly installable (store or release), and it accepts the connect link below. The tests reject
 entries with missing fields, non-https links or a scheme already taken. Managers can untick any app in the settings.
 

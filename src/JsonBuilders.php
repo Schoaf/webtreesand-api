@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Api4Webtrees;
 
-use Fisharebest\Webtrees\Auth;
-use Fisharebest\Webtrees\Contracts\UserInterface;
 use Fisharebest\Webtrees\Date;
 use Fisharebest\Webtrees\Elements\RelationIsDescriptor;
 use Fisharebest\Webtrees\Elements\UnknownElement;
@@ -22,11 +20,8 @@ use Fisharebest\Webtrees\Registry;
 use Fisharebest\Webtrees\Repository;
 use Fisharebest\Webtrees\Source;
 use Fisharebest\Webtrees\Services\LinkedRecordService;
-use Fisharebest\Webtrees\Services\RelationshipService;
 use Fisharebest\Webtrees\Tree;
-use Fisharebest\Webtrees\Validator;
 use Illuminate\Support\Collection;
-use Psr\Http\Message\ServerRequestInterface;
 
 use function array_keys;
 use function array_map;
@@ -38,7 +33,6 @@ use function html_entity_decode;
 use function in_array;
 use function mb_strtolower;
 use function preg_match;
-use function preg_match_all;
 use function preg_replace;
 use function str_replace;
 use function str_contains;
@@ -59,6 +53,42 @@ use const ENT_QUOTES;
 trait JsonBuilders
 {
     /**
+     * Das Geschlecht (M, F, X oder U), wie der Benutzer es in den Fakten sieht (ab Stufe 28). webtrees' sex() nimmt den
+     * ersten "1 SEX" - bei einer ausstehenden Aenderung ist das noch der freigegebene Wert, waehrend facts() dem
+     * Bearbeiter schon den neuen zeigt. Ohne ausstehende Aenderung, und fuer alle, die keine sehen, bleibt es sex().
+     */
+    private function sexCode(Individual $individual): string
+    {
+        foreach ($individual->facts(['SEX']) as $fact) {
+            if ($fact->isPendingAddition() && in_array($fact->value(), ['M', 'F', 'X', 'U'], true)) {
+                return $fact->value();
+            }
+        }
+
+        return $individual->sex();
+    }
+
+    /**
+     * Kurzform fuer lange Listen (Jahrestage): nur, was eine Zeile mit Bild braucht. Die Felder sind dieselben wie in
+     * personSummary(), Clients lesen sie mit demselben Modell (fehlende Felder bleiben leer).
+     *
+     * @return array<string,mixed>
+     */
+    private function personShort(Individual $individual): array
+    {
+        return [
+            'xref'     => $individual->xref(),
+            'name'     => $this->plain($individual->fullName()),
+            'sex'      => $this->sexCode($individual),
+            'isDead'   => $individual->isDead(),
+            'private'  => !$individual->canShow(),
+            'lifespan' => $this->plain($individual->lifespan()),
+            'thumb'    => $this->portraitUrl($individual),
+            'url'      => $individual->url(),
+        ];
+    }
+
+    /**
      * Kurzform einer Person. Fuer nicht sichtbare Personen liefert webtrees selbst
      * "Privat" als Namen und leere Daten - hier wird nichts zusaetzlich preisgegeben.
      *
@@ -68,32 +98,8 @@ trait JsonBuilders
      *
      * @return array<string,mixed>
      */
-    /**
-     * Kurzform fuer lange Listen (Jahrestage): nur, was eine Zeile mit Bild braucht. Die Felder sind dieselben wie in
-     * personSummary(), Clients lesen sie mit demselben Modell (fehlende Felder bleiben leer).
-     *
-     * @return array<string,mixed>
-     */
-    private function personShort(Individual $individual): array
-    {
-        $media_file = $individual->findHighlightedMediaFile();
-
-        return [
-            'xref'     => $individual->xref(),
-            'name'     => $this->plain($individual->fullName()),
-            'sex'      => $individual->sex(),
-            'isDead'   => $individual->isDead(),
-            'private'  => !$individual->canShow(),
-            'lifespan' => $this->plain($individual->lifespan()),
-            'thumb'    => $media_file !== null && $media_file->isImage() ? $media_file->imageUrl(200, 200, 'crop') : null,
-            'url'      => $individual->url(),
-        ];
-    }
-
     private function personSummary(Individual $individual, bool $with_counts = false): array
     {
-        $media_file = $individual->findHighlightedMediaFile();
-        $thumb      = $media_file !== null && $media_file->isImage() ? $media_file->imageUrl(200, 200, 'crop') : null;
         // Vor- und Nachname getrennt (Nachname samt Namenszusatz wie "de' Medici"): der Desktop-Client zeigt
         // "Nachname, Vorname" wie ein Register; sortName von webtrees laesst den Zusatz weg.
         $names   = $individual->getAllNames();
@@ -107,7 +113,7 @@ trait JsonBuilders
             'sortName'   => $individual->sortName(),
             'given'      => $individual->canShowName() ? $given : '',
             'surname'    => $individual->canShowName() ? $surname : '',
-            'sex'        => $individual->sex(),
+            'sex'        => $this->sexCode($individual),
             'isDead'     => $individual->isDead(),
             'private'    => !$individual->canShow(),
             'lifespan'   => $this->plain($individual->lifespan()),
@@ -119,7 +125,7 @@ trait JsonBuilders
             'chr'        => $this->firstEventJson($individual, ['CHR', 'BAPM']),
             'buri'       => $this->firstEventJson($individual, ['BURI', 'CREM']),
             'occupation' => $this->firstFactValue($individual, 'OCCU'),
-            'thumb'      => $thumb,
+            'thumb'      => $this->portraitUrl($individual),
             'url'        => $individual->url(),
         ];
 
@@ -130,6 +136,14 @@ trait JsonBuilders
         }
 
         return $summary;
+    }
+
+    /** Das Hauptfoto als quadratische Vorschau - null, wenn es keins gibt oder es kein Bild ist. */
+    private function portraitUrl(Individual $individual): string|null
+    {
+        $media_file = $individual->findHighlightedMediaFile();
+
+        return $media_file !== null && $media_file->isImage() ? $media_file->imageUrl(self::THUMB_SIZE, self::THUMB_SIZE, 'crop') : null;
     }
 
     /**
@@ -190,8 +204,8 @@ trait JsonBuilders
             // Die Heiraten der Kinder gehoeren in die Lebenslinie der Eltern (ab Stufe 10): je Partnerfamilie des
             // Kindes Partner und Heirat; ohne Datum bleibt date null, die Heirat zaehlt trotzdem.
             $marriages = [];
-            // Eigener Variablenname: $spouse ist der Partner DIESER Familie und wird unten noch gebraucht -
-            // bis 1.6.0 hat die Schleife ihn ueberschrieben, die App zeigte dann den Partner des letzten Kindes (Fehler 1.5.0-1.6.0).
+            // Eigener Variablenname: $spouse ist der Partner DIESER Familie und wird unten noch gebraucht - eine
+            // Schleifenvariable gleichen Namens zeigte der App einmal den Partner des letzten Kindes.
             foreach ($child->spouseFamilies() as $child_family) {
                 $child_spouse = $child_family->spouse($child);
                 $marriages[]  = [
@@ -311,6 +325,9 @@ trait JsonBuilders
 
             $data[] = [
                 'id'             => $fact->id(),
+                // Ab Stufe 28: true = eine Aenderung, die auf Freigabe wartet. Sehen nur Benutzer, denen webtrees ausstehende
+                // Aenderungen zeigt (Bearbeiter, Moderatoren); fuer alle anderen immer false.
+                'pending'        => $fact->isPendingAddition(),
                 'tag'            => $tag,
                 'label'          => $this->factLabel($fact),
                 // false: ein Tag, das webtrees nicht kennt (Hersteller-Tag ohne Definition, z. B. _INET).
@@ -393,8 +410,8 @@ trait JsonBuilders
 
         $data = [];
 
-        foreach (GedcomText::unterzeilen($fact->gedcom(), 2, '_ASSO') as [$wert, $unter]) {
-            $entry = $this->associateJson($wert, $unter, 2, $tree, false);
+        foreach (GedcomText::subrecords($fact->gedcom(), 2, '_ASSO') as [$value, $sub]) {
+            $entry = $this->associateJson($value, $sub, 2, $tree, false);
 
             if ($entry !== null) {
                 $data[] = $entry;
@@ -411,9 +428,9 @@ trait JsonBuilders
      *
      * @return array<string,mixed>|null
      */
-    private function associateJson(string $wert, string $unter, int $ebene, Tree $tree, bool $level1): array|null
+    private function associateJson(string $value, string $sub, int $level, Tree $tree, bool $level1): array|null
     {
-        if (preg_match('/^@([^@]+)@$/', trim($wert), $match) !== 1) {
+        if (preg_match('/^@([^@]+)@$/', trim($value), $match) !== 1) {
             return null;
         }
 
@@ -423,22 +440,22 @@ trait JsonBuilders
             return null;
         }
 
-        $u       = $ebene + 1;
+        $sub_level       = $level + 1;
         $private = !$individual->canShow();
-        $rela    = trim(GedcomText::unterzeilen($unter, $u, 'RELA')[0][0] ?? '');
+        $rela    = trim(GedcomText::subrecords($sub, $sub_level, 'RELA')[0][0] ?? '');
         $role    = $this->associateRole($rela);
 
         return [
             'xref'    => $match[1],
             'name'    => $private ? null : $this->plain($individual->fullName()),
-            'sex'     => $private ? null : $individual->sex(),
+            'sex'     => $private ? null : $this->sexCode($individual),
             'rela'    => $rela,
             'role'    => $role,
-            'label'   => $this->associateLabel($rela, $role, $private ? 'U' : $individual->sex()),
+            'label'   => $this->associateLabel($rela, $role, $private ? 'U' : $this->sexCode($individual)),
             'private' => $private,
             'level1'  => $level1,
-            'notes'   => $this->notesFromBlock($unter, $u, $tree),
-            'sources' => $this->sourcesFromBlock($unter, $u, $tree),
+            'notes'   => $this->notesFromBlock($sub, $sub_level, $tree),
+            'sources' => $this->sourcesFromBlock($sub, $sub_level, $tree),
         ];
     }
 
@@ -513,9 +530,9 @@ trait JsonBuilders
                     $links[] = [trim($fact->attribute('RELA')), true];
                 }
 
-                foreach (GedcomText::unterzeilen($fact->gedcom(), 2, '_ASSO') as [$wert, $unter]) {
-                    if (trim($wert) === $pointer) {
-                        $links[] = [trim(GedcomText::unterzeilen($unter, 3, 'RELA')[0][0] ?? ''), false];
+                foreach (GedcomText::subrecords($fact->gedcom(), 2, '_ASSO') as [$value, $sub]) {
+                    if (trim($value) === $pointer) {
+                        $links[] = [trim(GedcomText::subrecords($sub, 3, 'RELA')[0][0] ?? ''), false];
                     }
                 }
 
@@ -536,7 +553,7 @@ trait JsonBuilders
                         'place'      => $this->placeJson($shown->place(), null, null),
                         'rela'       => $rela,
                         'role'       => $role,
-                        'label2'     => $this->associateLabel($rela, $role, $individual->sex()),
+                        'label2'     => $this->associateLabel($rela, $role, $this->sexCode($individual)),
                         'level1'     => $level1,
                         'url'        => $record->url(),
                         // Bei Familien die Partner, damit ein Client den Eintrag oeffnen kann - nur sichtbare
@@ -590,7 +607,7 @@ trait JsonBuilders
 
         foreach ($media->mediaFiles() as $media_file) {
             $is_image = $media_file->isImage();
-            $thumb    = $is_image ? $media_file->imageUrl(400, 400, 'contain') : null;
+            $thumb    = $is_image ? $media_file->imageUrl(self::PREVIEW_SIZE, self::PREVIEW_SIZE, 'contain') : null;
             $full     = $media_file->isExternal() ? $media_file->filename() : $media_file->downloadUrl('inline');
 
             $data[] = [
@@ -611,33 +628,6 @@ trait JsonBuilders
         }
 
         return $data;
-    }
-
-    /**
-     * "Urgrossmutter", "Cousin" ... - wie $individual mit einer Bezugsperson verwandt ist.
-     * Bezugsperson: ?relativeTo=<xref>, sonst die eigene Person des angemeldeten Benutzers.
-     */
-    private function relationship(ServerRequestInterface $request, Individual $individual): string
-    {
-        $tree = $individual->tree();
-        $xref = Validator::queryParams($request)->string('relativeTo', '');
-
-        if ($xref === '') {
-            $xref = $tree->getUserPreference(Auth::user(), UserInterface::PREF_TREE_ACCOUNT_XREF);
-        }
-
-        if ($xref === '' || $xref === $individual->xref()) {
-            return '';
-        }
-
-        $other = Registry::individualFactory()->make($xref, $tree);
-
-        if ($other === null || !$other->canShow()) {
-            return '';
-        }
-
-        // Liefert '' fuer nicht verwandte Personen.
-        return $this->plain(Registry::container()->get(RelationshipService::class)->getCloseRelationshipName($other, $individual));
     }
 
     /**
@@ -730,7 +720,7 @@ trait JsonBuilders
     }
 
     /**
-     * Notizen eines Ereignisses (2 NOTE) samt Einordnung: notes (Texte, wie bisher), noteKinds (parallel dazu:
+     * Notizen eines Ereignisses (2 NOTE) samt Einordnung: notes (die Texte), noteKinds (parallel dazu:
      * "note" oder "associates") und freeAssociates - zuerst aus den GEDCOM-L-Tags "2 _GODP <Text>" (Paten, unter
      * CHR/BAPM) und "2 _WITN <Text>" (Zeugen; GEDCOM-L, webtrees kennt sie), je Person eine Zeile
      * ("Friedrich Plate, Anbauer zu Celle"): name bis zum ersten Komma, detail der Rest; eine Zeile mit ";" zaehlt wie
@@ -745,8 +735,8 @@ trait JsonBuilders
         $free  = [];
 
         foreach (['_GODP' => 'godparent', '_WITN' => 'witness'] as $tag => $role) {
-            foreach (GedcomText::unterzeilen($fact->gedcom(), 2, $tag) as [$wert, $unter]) {
-                $text = GedcomText::mitFortsetzung($wert, $unter, 2);
+            foreach (GedcomText::subrecords($fact->gedcom(), 2, $tag) as [$value, $sub]) {
+                $text = GedcomText::withContinuations($value, $sub, 2);
                 $free = [...$free, ...$this->freeEntries($role, str_contains($text, ';') ? $text : $text . ';')];
             }
         }
@@ -767,16 +757,16 @@ trait JsonBuilders
      *
      * @return array<int,string>
      */
-    private function notesFromBlock(string $block, int $ebene, Tree $tree): array
+    private function notesFromBlock(string $block, int $level, Tree $tree): array
     {
         $notes = [];
 
-        foreach (GedcomText::unterzeilen($block, $ebene, 'NOTE') as [$wert, $unter]) {
-            if (preg_match('/^@([^@]+)@$/', trim($wert), $match) === 1) {
+        foreach (GedcomText::subrecords($block, $level, 'NOTE') as [$value, $sub]) {
+            if (preg_match('/^@([^@]+)@$/', trim($value), $match) === 1) {
                 $note = Registry::noteFactory()->make($match[1], $tree);
                 $text = $note instanceof Note && $note->canShow() ? $note->getNote() : '';
             } else {
-                $text = GedcomText::mitFortsetzung($wert, $unter, $ebene);
+                $text = GedcomText::withContinuations($value, $sub, $level);
             }
 
             if (trim($text) !== '') {
@@ -823,15 +813,15 @@ trait JsonBuilders
 
         $entries = [];
 
-        foreach (explode(';', $rest) as $teil) {
-            $teil = trim($teil);
+        foreach (explode(';', $rest) as $part) {
+            $part = trim($part);
 
-            if ($teil === '') {
+            if ($part === '') {
                 continue;
             }
 
-            [$name, $detail] = array_pad(array_map(trim(...), explode(',', $teil, 2)), 2, null);
-            $entries[]       = ['role' => $role, 'name' => $name, 'detail' => $detail, 'text' => $teil];
+            [$name, $detail] = array_pad(array_map(trim(...), explode(',', $part, 2)), 2, null);
+            $entries[]       = ['role' => $role, 'name' => $name, 'detail' => $detail, 'text' => $part];
         }
 
         return $entries;
@@ -844,7 +834,7 @@ trait JsonBuilders
      */
     private function sourceSummary(Source $source): array
     {
-        $attr = static fn (string $tag): string => GedcomText::ersterWert($source->gedcom(), 1, $tag);
+        $attr = static fn (string $tag): string => GedcomText::firstValue($source->gedcom(), 1, $tag);
         $repo = $this->sourceRepositories($source)[0] ?? null;
 
         return [
@@ -869,13 +859,13 @@ trait JsonBuilders
     {
         $data = [];
 
-        foreach (GedcomText::unterzeilen("\n" . $source->gedcom(), 1, 'REPO') as [$wert, $unter]) {
-            if (preg_match('/^@([^@]+)@$/', trim($wert), $m) !== 1) {
+        foreach (GedcomText::subrecords("\n" . $source->gedcom(), 1, 'REPO') as [$value, $sub]) {
+            if (preg_match('/^@([^@]+)@$/', trim($value), $m) !== 1) {
                 continue;
             }
             $repo = Registry::repositoryFactory()->make($m[1], $source->tree());
             if ($repo instanceof Repository && $repo->canShow()) {
-                $data[] = ['xref' => $m[1], 'name' => $this->plain($repo->fullName()), 'callNumber' => GedcomText::unterzeilen($unter, 2, 'CALN')[0][0] ?? ''];
+                $data[] = ['xref' => $m[1], 'name' => $this->plain($repo->fullName()), 'callNumber' => GedcomText::subrecords($sub, 2, 'CALN')[0][0] ?? ''];
             }
         }
 
@@ -891,8 +881,8 @@ trait JsonBuilders
     {
         // Ein allgemeiner Verweis am Datensatz ("1 SOUR @S1@" mit 2 PAGE ...) ist selbst der Verweis
         if ($this->shortTag($fact->tag()) === 'SOUR') {
-            [$kopf, $rest] = array_pad(explode("\n", $fact->gedcom(), 2), 2, '');
-            $citation      = $this->citationJson($fact->value(), $rest === '' ? '' : "\n" . $rest, 1, $tree);
+            [, $rest] = array_pad(explode("\n", $fact->gedcom(), 2), 2, '');
+            $citation = $this->citationJson($fact->value(), $rest === '' ? '' : "\n" . $rest, 1, $tree);
 
             return $citation === null ? [] : [$citation];
         }
@@ -905,12 +895,12 @@ trait JsonBuilders
      *
      * @return array<int,array<string,mixed>>
      */
-    private function sourcesFromBlock(string $block, int $ebene, Tree $tree): array
+    private function sourcesFromBlock(string $block, int $level, Tree $tree): array
     {
         $sources = [];
 
-        foreach (GedcomText::unterzeilen($block, $ebene, 'SOUR') as [$wert, $unter]) {
-            $citation = $this->citationJson($wert, $unter, $ebene, $tree);
+        foreach (GedcomText::subrecords($block, $level, 'SOUR') as [$value, $sub]) {
+            $citation = $this->citationJson($value, $sub, $level, $tree);
 
             if ($citation !== null) {
                 $sources[] = $citation;
@@ -927,11 +917,11 @@ trait JsonBuilders
      *
      * @return array<string,mixed>|null
      */
-    private function citationJson(string $wert, string $unter, int $ebene, Tree $tree): array|null
+    private function citationJson(string $value, string $sub, int $level, Tree $tree): array|null
     {
-        $u = $ebene + 1;
+        $sub_level = $level + 1;
 
-        if (preg_match('/^@([^@]+)@$/', trim($wert), $match) === 1) {
+        if (preg_match('/^@([^@]+)@$/', trim($value), $match) === 1) {
             $source = Registry::sourceFactory()->make($match[1], $tree);
 
             if ($source === null || !$source->canShow()) {
@@ -942,28 +932,28 @@ trait JsonBuilders
             $title = $this->plain($source->fullName());
         } else {
             $xref  = '';
-            $title = GedcomText::mitFortsetzung($wert, $unter, $ebene);
+            $title = GedcomText::withContinuations($value, $sub, $level);
         }
 
-        $eins  = static fn (string $tag): array|null => GedcomText::unterzeilen($unter, $u, $tag)[0] ?? null;
-        $page  = $eins('PAGE');
-        $quay  = $eins('QUAY');
-        $data  = $eins('DATA');
-        $datum = $data !== null ? (GedcomText::unterzeilen($data[1], $u + 1, 'DATE')[0][0] ?? '') : '';
-        $texte = $data !== null ? array_map(static fn (array $t): string => GedcomText::mitFortsetzung($t[0], $t[1], $u + 1),
-            GedcomText::unterzeilen($data[1], $u + 1, 'TEXT')) : [];
+        $first  = static fn (string $tag): array|null => GedcomText::subrecords($sub, $sub_level, $tag)[0] ?? null;
+        $page  = $first('PAGE');
+        $quay  = $first('QUAY');
+        $data  = $first('DATA');
+        $date_gedcom = $data !== null ? (GedcomText::subrecords($data[1], $sub_level + 1, 'DATE')[0][0] ?? '') : '';
+        $texts = $data !== null ? array_map(static fn (array $t): string => GedcomText::withContinuations($t[0], $t[1], $sub_level + 1),
+            GedcomText::subrecords($data[1], $sub_level + 1, 'TEXT')) : [];
         // Eine Text-Quelle darf ihren Text auch direkt unter sich tragen (3 TEXT statt 3 DATA / 4 TEXT)
         if ($xref === '') {
-            $texte = [...$texte, ...array_map(static fn (array $t): string => GedcomText::mitFortsetzung($t[0], $t[1], $u),
-                GedcomText::unterzeilen($unter, $u, 'TEXT'))];
+            $texts = [...$texts, ...array_map(static fn (array $t): string => GedcomText::withContinuations($t[0], $t[1], $sub_level),
+                GedcomText::subrecords($sub, $sub_level, 'TEXT'))];
         }
 
-        $notes = $this->notesFromBlock($unter, $u, $tree);
+        $notes = $this->notesFromBlock($sub, $sub_level, $tree);
 
         $media = [];
-        foreach (GedcomText::unterzeilen($unter, $u, 'OBJE') as [$o]) {
-            if (preg_match('/^@([^@]+)@$/', trim($o), $om) === 1) {
-                $medium = Registry::mediaFactory()->make($om[1], $tree);
+        foreach (GedcomText::subrecords($sub, $sub_level, 'OBJE') as [$obje]) {
+            if (preg_match('/^@([^@]+)@$/', trim($obje), $obje_match) === 1) {
+                $medium = Registry::mediaFactory()->make($obje_match[1], $tree);
                 if ($medium instanceof Media && $medium->canShow()) {
                     $media = [...$media, ...$this->mediaFilesJson($medium)];
                 }
@@ -973,10 +963,10 @@ trait JsonBuilders
         return [
             'xref'    => $xref,
             'title'   => $title,
-            'page'    => $page !== null ? GedcomText::mitFortsetzung($page[0], $page[1], $u) : '',
+            'page'    => $page !== null ? GedcomText::withContinuations($page[0], $page[1], $sub_level) : '',
             'quality' => $quay !== null && preg_match('/^[0-3]$/', trim($quay[0])) === 1 ? (int) trim($quay[0]) : null,
-            'date'    => $datum !== '' ? $this->dateJson(new Date($datum), $datum) : null,
-            'text'    => implode("\n\n", $texte),
+            'date'    => $date_gedcom !== '' ? $this->dateJson(new Date($date_gedcom), $date_gedcom) : null,
+            'text'    => implode("\n\n", $texts),
             'notes'   => $notes,
             'media'   => $media,
         ];

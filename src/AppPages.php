@@ -8,18 +8,18 @@ use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\Contracts\UserInterface;
 use Fisharebest\Webtrees\DB;
 use Fisharebest\Webtrees\FlashMessages;
-use Fisharebest\Webtrees\Http\Exceptions\HttpTooManyRequestsException;
 use Fisharebest\Webtrees\I18N;
 use Fisharebest\Webtrees\Log;
 use Fisharebest\Webtrees\Registry;
-use Fisharebest\Webtrees\Services\RateLimitService;
-use Fisharebest\Webtrees\Services\RegistrationService;
 use Fisharebest\Webtrees\Services\TreeService;
 use Fisharebest\Webtrees\Services\UserService;
 use Fisharebest\Webtrees\Tree;
 use Fisharebest\Webtrees\Validator;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Fisharebest\Webtrees\Http\Exceptions\HttpTooManyRequestsException;
+use Fisharebest\Webtrees\Services\RateLimitService;
+use Fisharebest\Webtrees\Services\RegistrationService;
 use Throwable;
 
 use function bin2hex;
@@ -40,12 +40,12 @@ use function random_bytes;
 use function redirect;
 use function response;
 use function str_starts_with;
-use function strlen;
 use function strtolower;
 use function strtoupper;
 use function substr;
 use function time;
 use function trim;
+use function strlen;
 
 use const PHP_URL_HOST;
 
@@ -95,11 +95,12 @@ trait AppPages
             'download_url' => $download,
             'download_qr'  => $this->qrSvg($download),
             'apps'         => $apps,
+            'icons'        => $this->iconUrls($apps),
             'device_names' => self::deviceNames(),
             'version'      => $this->customModuleVersion(),
             'api'          => self::API_VERSION,
             'https'        => str_starts_with($base_url, 'https://'),
-            'home'         => !str_starts_with($base_url, 'https://') && self::homeNetwork((string) parse_url($base_url, PHP_URL_HOST)),
+            'home'         => self::homeNetworkUrl($base_url),
             'max_upload'   => $this->maxUploadBytes(),
         ]);
     }
@@ -144,20 +145,19 @@ trait AppPages
         $tree     = $tree instanceof Tree ? $tree : null;
         $user     = Auth::user();
         $base_url = Validator::attributes($request)->string('base_url');
-        $host     = (string) parse_url($base_url, PHP_URL_HOST);
 
         // Der Einmal-Code ist so gut wie ein Passwort - er darf nur verschluesselt reisen. Ausnahme: das Heimnetz
-        // (nas4webtrees unter http://192.168.x.y:8095, 26.09.2026) - dieselbe Regel, nach der die Apps http:// zulassen.
-        $home   = !str_starts_with($base_url, 'https://') && self::homeNetwork($host);
+        // (etwa eine NAS, die nur per http:// erreichbar ist) - dieselbe Regel, nach der die Apps http:// zulassen.
+        $home   = self::homeNetworkUrl($base_url);
         $secure = str_starts_with($base_url, 'https://') || $home;
 
-        $device      = self::device($request->getHeaderLine('User-Agent'));
+        $device      = self::requestDevice($request);
         $apps        = Apps::forDevice($this->apps(), $device);
         $connect_url = '';
         $deep        = [];
 
         if (Auth::check() && $secure) {
-            $code = bin2hex(random_bytes(24));
+            $code = bin2hex(random_bytes(self::PAIR_CODE_BYTES));
             $user->setPreference(self::PAIR_SETTING, hash('sha256', $code) . '|' . (time() + self::PAIR_SECONDS) . '|' . ($tree?->name() ?? ''));
 
             $params      = ['code' => $code, 'tree' => $tree?->name() ?? '', 'user' => $user->userName()];
@@ -177,6 +177,8 @@ trait AppPages
 
         $qr = [];
 
+        // Der QR-Code wird mit dem Handy gescannt: bei einer App fuer Android und iOS zeigt er den Android-Download,
+        // sonst den einzigen, den es gibt.
         foreach ($apps as $app) {
             if ($app['kind'] === 'phone') {
                 $qr[$app['id']] = $this->qrSvg(Apps::download($app, 'android'));
@@ -194,6 +196,7 @@ trait AppPages
             'apps'         => $apps,
             'device_names' => self::deviceNames(),
             'badges'       => $this->badgeUrls($apps),
+            'icons'        => $this->iconUrls($apps),
             'download_qr'  => $qr,
             'connect_url'  => $connect_url,
             'connect_qr'   => $connect_url === '' ? '' : $this->qrSvg($connect_url),
@@ -208,7 +211,7 @@ trait AppPages
     public function postHintOffAction(ServerRequestInterface $request): ResponseInterface
     {
         if (Auth::check()) {
-            Auth::user()->setPreference(self::hintKey($request->getHeaderLine('User-Agent')), 'dismissed');
+            Auth::user()->setPreference(self::hintKey($request), self::HINT_DISMISSED);
         }
 
         return redirect(Validator::parsedBody($request)->isLocalUrl()->string('url', $this->actionUrl('App', null)));
@@ -221,7 +224,7 @@ trait AppPages
      */
     public function getConnectAction(ServerRequestInterface $request): ResponseInterface
     {
-        $device = self::device($request->getHeaderLine('User-Agent'));
+        $device = self::requestDevice($request);
         $apps   = Apps::forDevice(Apps::kind($this->apps(), 'phone'), $device);
 
         return $this->viewResponse($this->name() . '::connect', [
@@ -231,6 +234,7 @@ trait AppPages
             'device'   => $device,
             'apps'     => $apps,
             'badges'   => $this->badgeUrls($apps),
+            'icons'    => $this->iconUrls($apps),
         ]);
     }
 
@@ -242,7 +246,7 @@ trait AppPages
     {
         $code = $this->str($this->body($request), 'code');
 
-        if (preg_match('/^[0-9a-f]{48}$/', $code) !== 1) {
+        if (preg_match('/^[0-9a-f]{' . (2 * self::PAIR_CODE_BYTES) . '}$/', $code) !== 1) {
             return $this->error(400, 'pair-invalid');
         }
 
@@ -273,9 +277,220 @@ trait AppPages
         Auth::login($user);
         Log::addAuthenticationLog('Login (App, Einmal-Code): ' . $user->userName() . '/' . $user->realName());
         $user->setPreference(UserInterface::PREF_TIMESTAMP_ACTIVE, (string) time());
-        $user->setPreference(self::hintKey($request->getHeaderLine('User-Agent')), 'connected');
+        $user->setPreference(self::hintKey($request), self::HINT_CONNECTED);
 
         return response(['ok' => true, 'tree' => $tree_name, 'user' => $user->userName()]);
+    }
+
+    /**
+     * Heimnetz wie in den Apps (Heimnetz.kt): private, Loopback- und Link-Local-Adressen (IPv4 10/8, 172.16/12,
+     * 192.168/16, 127/8, 169.254/16; IPv6 ::1, fc00::/7, fe80::/10), Namen ohne Punkt ("diskstation") und die
+     * Endungen .local, .lan, .home, .home.arpa, .internal, .fritz.box, .box. Der Server loest keine Namen auf.
+     */
+    /** Laeuft diese Installation unverschluesselt im Heimnetz (etwa eine NAS unter http://)? */
+    private static function homeNetworkUrl(string $base_url): bool
+    {
+        return !str_starts_with($base_url, 'https://') && self::homeNetwork((string) parse_url($base_url, PHP_URL_HOST));
+    }
+
+    public static function homeNetwork(string $host): bool
+    {
+        $host = strtolower(rtrim(trim($host, '[]'), '.'));
+
+        if ($host === '') {
+            return false;
+        }
+
+        $packed = filter_var($host, FILTER_VALIDATE_IP) !== false ? inet_pton($host) : false;
+
+        if ($packed !== false) {
+            $b = array_values(unpack('C*', $packed));
+
+            if (count($b) === 4) {
+                return $b[0] === 10 || $b[0] === 127 || ($b[0] === 172 && $b[1] >= 16 && $b[1] <= 31)
+                    || ($b[0] === 192 && $b[1] === 168) || ($b[0] === 169 && $b[1] === 254);
+            }
+
+            return $packed === inet_pton('::1') || ($b[0] & 0xFE) === 0xFC || ($b[0] === 0xFE && ($b[1] & 0xC0) === 0x80);
+        }
+
+        if (!str_contains($host, '.') && !str_contains($host, ':')) {
+            return true;
+        }
+
+        foreach (['.local', '.lan', '.home', '.home.arpa', '.internal', '.fritz.box', '.box'] as $suffix) {
+            if (str_ends_with($host, $suffix)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Welches Geraet ruft die Seite auf? Nur fuer die Reihenfolge auf der Seite "App" - das Passende zuerst.
+     * Android meldet sich auch als "Linux", darum zuerst. Mac (auch iPads im Desktop-Modus melden sich so) bekommt einen
+     * eigenen Hinweis - fuer Apple gibt es noch kein Programm; ChromeOS und Unbekanntes die Handy-Ansicht.
+     */
+    public static function device(string $user_agent): string
+    {
+        $ua = strtolower($user_agent);
+
+        return match (true) {
+            str_contains($ua, 'android')                  => 'android',
+            preg_match('/iphone|ipad|ipod/', $ua) === 1   => 'ios',
+            str_contains($ua, 'macintosh')                => 'mac',
+            str_contains($ua, 'windows')                  => 'windows',
+            str_contains($ua, 'cros')                     => 'other',
+            str_contains($ua, 'linux')                    => 'linux',
+            default                                       => 'other',
+        };
+    }
+
+    /**
+     * Der Hinweis nach dem Anmelden merkt sich Handy und PC getrennt: wer wtAnd verbunden hat, soll trotzdem von wtWin
+     * erfahren (und umgekehrt). Die Apps melden sich mit wtAnd/…, wtWin/… (Windows) bzw. wtTux/… (Linux).
+     */
+    private static function hintKey(ServerRequestInterface $request): string
+    {
+        return in_array(self::requestDevice($request), ['windows', 'linux'], true) ? self::HINT_DESK_SETTING : self::HINT_SETTING;
+    }
+
+    /** Das Geraet, von dem diese Anfrage kommt - siehe device(). */
+    private static function requestDevice(ServerRequestInterface $request): string
+    {
+        return self::device($request->getHeaderLine('User-Agent'));
+    }
+
+    /**
+     * @param array<string,string> $params
+     */
+    private function deepLink(string $scheme, string $base_url, array $params): string
+    {
+        return $scheme . '://connect?' . http_build_query(['url' => $base_url] + $params);
+    }
+
+    /**
+     * Kennungen der Apps, die der Verwalter abgeschaltet hat.
+     *
+     * @return list<string>
+     */
+    private function appsOff(): array
+    {
+        $setting = trim($this->getPreference(self::APPS_OFF_SETTING));
+
+        return $setting === '' ? [] : explode(',', $setting);
+    }
+
+    /**
+     * Geraetenamen fuer die Seiten, in der Sprache des Benutzers.
+     *
+     * @return array<string,string>
+     */
+    private static function deviceNames(): array
+    {
+        return [
+            'android' => I18N::translate('Android-Handy und -Tablet'),
+            'ios'     => I18N::translate('iPhone und iPad'),
+            'windows' => I18N::translate('Windows-PC'),
+            'linux'   => I18N::translate('Linux-PC'),
+            'mac'     => I18N::translate('Mac'),
+        ];
+    }
+
+    /**
+     * Adressen der Store-Badges je App und Geraet (Dateien unter resources/img).
+     *
+     * @param list<array<string,mixed>> $apps
+     *
+     * @return array<string,array<string,string>>
+     */
+    private function badgeUrls(array $apps): array
+    {
+        $urls = [];
+
+        foreach ($apps as $app) {
+            foreach ($app['badge'] as $device => $file) {
+                $urls[$app['id']][$device] = $this->assetUrl('img/' . $file);
+            }
+        }
+
+        return $urls;
+    }
+
+    /**
+     * Adressen der App-Logos (Dateien unter resources/img), nur fuer Apps, die eines haben.
+     *
+     * @param list<array<string,mixed>> $apps
+     *
+     * @return array<string,string> App-Kennung => Adresse
+     */
+    private function iconUrls(array $apps): array
+    {
+        $urls = [];
+
+        foreach ($apps as $app) {
+            if ($app['icon'] !== '') {
+                $urls[$app['id']] = $this->assetUrl('img/' . $app['icon']);
+            }
+        }
+
+        return $urls;
+    }
+
+    /**
+     * Die Apps, die dieses webtrees zeigt: alle aus src/Apps.php ausser den abgeschalteten.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function apps(): array
+    {
+        return Apps::enabled($this->appsOff());
+    }
+
+    /**
+     * QR-Code als SVG. webtrees 2.2 bringt dafuer TCPDF mit, 2.3 tc-lib-barcode; fehlt beides, bleibt es beim Link.
+     */
+    private function qrSvg(string $data): string
+    {
+        try {
+            // 5 Pixel je Modul (Kaestchen); tc-lib-barcode versteht negative Masse als Modulgroesse statt Gesamtgroesse.
+            if (class_exists('TCPDF2DBarcode')) {
+                return (new \TCPDF2DBarcode($data, 'QRCODE,M'))->getBarcodeSVGcode(5, 5, 'black');
+            }
+
+            if (class_exists('Com\\Tecnick\\Barcode\\Barcode')) {
+                return (new \Com\Tecnick\Barcode\Barcode())->getBarcodeObj('QRCODE,M', $data, -5, -5, 'black')->getSvgCode();
+            }
+        } catch (Throwable) {
+            // dann eben ohne Bild
+        }
+
+        return '';
+    }
+
+    /**
+     * Kleinster der PHP-Werte upload_max_filesize und post_max_size in Bytes ("2M" -> 2097152). 0 = unbekannt.
+     */
+    private function maxUploadBytes(): int
+    {
+        $limits = [];
+
+        foreach (['upload_max_filesize', 'post_max_size'] as $setting) {
+            $value = trim((string) ini_get($setting));
+
+            if ($value === '' || $value === '0' || $value === '-1') {
+                continue;
+            }
+
+            $number = (float) $value;
+            $unit   = strtoupper(substr($value, -1));
+            $factor = ['K' => 1024, 'M' => 1024 ** 2, 'G' => 1024 ** 3][$unit] ?? 1;
+
+            $limits[] = (int) ($number * $factor);
+        }
+
+        return $limits === [] ? 0 : min($limits);
     }
 
     /**
@@ -342,183 +557,5 @@ trait AppPages
         );
 
         return response(['ok' => true]);
-    }
-
-    /**
-     * @param array<string,string> $params
-     */
-    /**
-     * Heimnetz wie in den Apps (Heimnetz.kt): private, Loopback- und Link-Local-Adressen (IPv4 10/8, 172.16/12,
-     * 192.168/16, 127/8, 169.254/16; IPv6 ::1, fc00::/7, fe80::/10), Namen ohne Punkt ("diskstation") und die
-     * Endungen .local, .lan, .home, .home.arpa, .internal, .fritz.box, .box. Der Server loest keine Namen auf.
-     */
-    public static function homeNetwork(string $host): bool
-    {
-        $host = strtolower(rtrim(trim($host, '[]'), '.'));
-
-        if ($host === '') {
-            return false;
-        }
-
-        $packed = filter_var($host, FILTER_VALIDATE_IP) !== false ? inet_pton($host) : false;
-
-        if ($packed !== false) {
-            $b = array_values(unpack('C*', $packed));
-
-            if (count($b) === 4) {
-                return $b[0] === 10 || $b[0] === 127 || ($b[0] === 172 && $b[1] >= 16 && $b[1] <= 31)
-                    || ($b[0] === 192 && $b[1] === 168) || ($b[0] === 169 && $b[1] === 254);
-            }
-
-            return $packed === inet_pton('::1') || ($b[0] & 0xFE) === 0xFC || ($b[0] === 0xFE && ($b[1] & 0xC0) === 0x80);
-        }
-
-        if (!str_contains($host, '.') && !str_contains($host, ':')) {
-            return true;
-        }
-
-        foreach (['.local', '.lan', '.home', '.home.arpa', '.internal', '.fritz.box', '.box'] as $suffix) {
-            if (str_ends_with($host, $suffix)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Welches Geraet ruft die Seite auf? Nur fuer die Reihenfolge auf der Seite "App" - das Passende zuerst.
-     * Android meldet sich auch als "Linux", darum zuerst. Mac (auch iPads im Desktop-Modus melden sich so) bekommt einen
-     * eigenen Hinweis - fuer Apple gibt es noch kein Programm; ChromeOS und Unbekanntes die Handy-Ansicht.
-     */
-    public static function device(string $user_agent): string
-    {
-        $ua = strtolower($user_agent);
-
-        return match (true) {
-            str_contains($ua, 'android')                  => 'android',
-            preg_match('/iphone|ipad|ipod/', $ua) === 1   => 'ios',
-            str_contains($ua, 'macintosh')                => 'mac',
-            str_contains($ua, 'windows')                  => 'windows',
-            str_contains($ua, 'cros')                     => 'other',
-            str_contains($ua, 'linux')                    => 'linux',
-            default                                       => 'other',
-        };
-    }
-
-    /**
-     * Der Hinweis nach dem Anmelden merkt sich Handy und PC getrennt: wer wtAnd verbunden hat, soll trotzdem von wtWin
-     * erfahren (und umgekehrt). Die Apps melden sich mit wtAnd/…, wtWin/… (Windows) bzw. wtTux/… (Linux).
-     */
-    private static function hintKey(string $user_agent): string
-    {
-        return in_array(self::device($user_agent), ['windows', 'linux'], true) ? self::HINT_DESK_SETTING : self::HINT_SETTING;
-    }
-
-    private function deepLink(string $scheme, string $base_url, array $params): string
-    {
-        return $scheme . '://connect?' . http_build_query(['url' => $base_url] + $params);
-    }
-
-    /**
-     * Kennungen der Apps, die der Verwalter abgeschaltet hat.
-     *
-     * @return list<string>
-     */
-    private function appsOff(): array
-    {
-        $setting = trim($this->getPreference(self::APPS_OFF_SETTING));
-
-        return $setting === '' ? [] : explode(',', $setting);
-    }
-
-    /**
-     * Geraetenamen fuer die Seiten, in der Sprache des Benutzers.
-     *
-     * @return array<string,string>
-     */
-    private static function deviceNames(): array
-    {
-        return [
-            'android' => I18N::translate('Android-Handy und -Tablet'),
-            'ios'     => I18N::translate('iPhone und iPad'),
-            'windows' => I18N::translate('Windows-PC'),
-            'linux'   => I18N::translate('Linux-PC'),
-            'mac'     => I18N::translate('Mac'),
-        ];
-    }
-
-    /**
-     * Adressen der Store-Badges je App und Geraet (Dateien unter resources/img).
-     *
-     * @param list<array<string,mixed>> $apps
-     *
-     * @return array<string,array<string,string>>
-     */
-    private function badgeUrls(array $apps): array
-    {
-        $urls = [];
-
-        foreach ($apps as $app) {
-            foreach ($app['badge'] as $device => $file) {
-                $urls[$app['id']][$device] = $this->assetUrl('img/' . $file);
-            }
-        }
-
-        return $urls;
-    }
-
-    /**
-     * Die Apps, die dieses webtrees zeigt: alle aus src/Apps.php ausser den abgeschalteten.
-     *
-     * @return list<array<string,mixed>>
-     */
-    private function apps(): array
-    {
-        return Apps::enabled($this->appsOff());
-    }
-
-    /**
-     * QR-Code als SVG. webtrees 2.2 bringt dafuer TCPDF mit, 2.3 tc-lib-barcode; fehlt beides, bleibt es beim Link.
-     */
-    private function qrSvg(string $data): string
-    {
-        try {
-            if (class_exists('TCPDF2DBarcode')) {
-                return (new \TCPDF2DBarcode($data, 'QRCODE,M'))->getBarcodeSVGcode(5, 5, 'black');
-            }
-
-            if (class_exists('Com\\Tecnick\\Barcode\\Barcode')) {
-                return (new \Com\Tecnick\Barcode\Barcode())->getBarcodeObj('QRCODE,M', $data, -5, -5, 'black')->getSvgCode();
-            }
-        } catch (Throwable) {
-            // dann eben ohne Bild
-        }
-
-        return '';
-    }
-
-    /**
-     * Kleinster der PHP-Werte upload_max_filesize und post_max_size in Bytes ("2M" -> 2097152). 0 = unbekannt.
-     */
-    private function maxUploadBytes(): int
-    {
-        $limits = [];
-
-        foreach (['upload_max_filesize', 'post_max_size'] as $setting) {
-            $value = trim((string) ini_get($setting));
-
-            if ($value === '' || $value === '0' || $value === '-1') {
-                continue;
-            }
-
-            $number = (float) $value;
-            $unit   = strtoupper(substr($value, -1));
-            $factor = ['K' => 1024, 'M' => 1024 ** 2, 'G' => 1024 ** 3][$unit] ?? 1;
-
-            $limits[] = (int) ($number * $factor);
-        }
-
-        return $limits === [] ? 0 : min($limits);
     }
 }

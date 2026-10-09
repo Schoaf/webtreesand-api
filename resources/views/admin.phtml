@@ -13,6 +13,7 @@ use Fisharebest\Webtrees\I18N;
  * @var string                                                                  $download_url
  * @var string                                                                  $download_qr
  * @var list<array<string,mixed>>                                               $apps          aus src/Apps.php, je App 'enabled'
+ * @var array<string,string>                                                    $icons         App-Kennung => Logo (nur Apps mit Logo)
  * @var array<string,string>                                                    $device_names  android => "Android-Handy und -Tablet" ...
  * @var string                                                                  $version
  * @var int                                                                     $api
@@ -82,7 +83,7 @@ use Fisharebest\Webtrees\I18N;
                 <td>
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="apps[]" value="<?= e($app['id']) ?>" id="app-<?= e($app['id']) ?>" <?= $app['enabled'] ? 'checked' : '' ?>>
-                        <label class="form-check-label" for="app-<?= e($app['id']) ?>"><strong><?= e($app['name']) ?></strong></label>
+                        <label class="form-check-label" for="app-<?= e($app['id']) ?>"><?php if (isset($icons[$app['id']])) : ?><img src="<?= e($icons[$app['id']]) ?>" alt="" class="me-2" style="height: 1.75rem; vertical-align: middle; border-radius: 0.35rem;"><?php endif ?><strong><?= e($app['name']) ?></strong></label>
                     </div>
                 </td>
                 <td><?= e(implode(', ', array_map(static fn (string $d): string => $device_names[$d] ?? $d, $app['devices']))) ?></td>

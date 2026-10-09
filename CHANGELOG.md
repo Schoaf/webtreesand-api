@@ -1,5 +1,96 @@
 # Changelog
 
+## Unreleased
+**API level 31.** `Info.trees[].availableModules`: the names of the enabled modules the user can use in the tree – modules
+with an access level only when it allows the user (as webtrees' `ModuleService::findByComponent()`). Clients can offer
+features of optional modules (privacy policy, Sammlungen, …) only when they are there.
+
+## 1.18.1 – 2026-10-07
+- **Place type with GOV type number.** `Places?list=1`, `Place` and its `children` now carry `govType`: the GOV type number
+  from `2 _GOVTYPE` under the `_LOC` record's `1 TYPE` (GEDCOM-L addendum; 24 farm, 87 mill, 55 village …, list at
+  gov.genealogy.net/type/list). Clients can classify houses, farms and higher levels by the number instead of the free text.
+- `type` is the last of several dated `1 TYPE` lines (the current one), not the first.
+- `POST Place` with `type` changes only the value of the latest TYPE line; its `_GOVTYPE`, date and sources and older
+  dated TYPE lines stay. Before, the whole TYPE block was replaced.
+- API level stays 30; the field is additive.
+
+## 1.18.0 – 2026-10-06
+**API level 30: the interface is complete.** With this release every route needed for everyday genealogy work is there:
+individuals, families, events, names, sources and citations, media, places and location records, godparents, merging with
+undo, and now research tasks, ordering, change history and favourites. **From here on releases will be rare.** Changes
+and fixes are collected and published together; pull requests are merged without an immediate release, so clients built
+on this API are not served a new version every few days. Everything is additive; older clients keep working.
+- **Bookmarks → webtrees favourites.** `GET/POST Bookmarks` now use webtrees' own `favorite` table, so the bookmarks appear
+  in the browser under “My page › My favourites” and survive any client. `data` are the user's, `treeFavorites` the
+  tree's (managers set them with `forTree: true`), each person with a `note`. Bookmarks from the old user setting are
+  taken over once, automatically.
+- **Research tasks.** `GET Tasks` lists webtrees' `_TODO` facts of the tree (text, date, user, note; `?open=1` only the
+  ones due); `POST Task` adds or changes one (date defaults to today, user to the signed-in one); deleting with
+  `DeleteFact` means done. `Individual` and `Family` answer with `tasks`. Nothing proprietary: `_TODO` is what the
+  webtrees module “Research tasks” writes and shows.
+- **Ordering.** `POST Reorder` sorts children, partnerships, names or media – like the “Re-order” pages in webtrees,
+  only the order of the GEDCOM lines changes.
+- **Change history.** `GET Changes` lists who created, changed or deleted which record and when (webtrees' change table,
+  pending changes included), `?xref=` for one record; `Individual` and `Family` answer with `lastChange` (CHAN).
+- Tests: `StufeDreissig` (favourites with migration, tasks, ordering, history); the documentation is generated again.
+
+## 1.17.2 – 2026-10-06
+**Merge preview: contained facts.** No API change; API level stays 29.
+- A fact that is contained in a fact of the other individual – same first line, every further line present there too, but
+  the other version has more lines (birth with date only next to birth with date and place) – is now reported as `same`
+  and not suggested for keeping; the more complete version stays, whichever individual it belongs to. Before, both
+  births would have been kept.
+- Test `Zusammenfuehren` covers it.
+
+## 1.17.1 – 2026-10-06
+**Shorter “App” page.** No API change.
+- Only the app for the visitor's device is open; every other app is one folded line below (before: wtWin and wtAnd
+  were always open, which made the page long on every device). wtWin now comes first in the list, since most people
+  open the page at a PC.
+
+## 1.17.0 – 2026-10-06
+**Logos on the “App” page, readable code.** No API change; API level stays 29.
+- The “App” and “Connect” pages show an app's logo before its name (new optional field `icon` in `src/Apps.php`, file
+  under `resources/img`; the tests check that the file exists). The four apps of the module author share one logo; a
+  third-party app adds its own with its pull request. Under the author's apps a short note says why they come first:
+  app and interface are developed together. The order of the apps is unchanged.
+- The code was reworked for readability, with no change in behaviour: named constants instead of bare numbers,
+  helpers instead of repeated blocks (visibility check, fact lookup with rights, pending changes, GEDCOM sub-record
+  replacement), English identifiers throughout, the longest actions split into named steps, misplaced comments fixed.
+  The API level history now lives in `docs/API.md` and this file only.
+
+## 1.16.0 – 2026-10-05
+**API level 29: merging individuals, with undo.** Everything is additive; older clients keep working.
+- **`POST Merge`** merges two individuals the way webtrees' own merge does: `xref2` is absorbed into `xref1`, everything
+  that pointed to it (families, source citations, notes, media, associations) points to `xref1` afterwards, duplicate
+  links are dropped, `xref2` is deleted. Which facts stay is up to the client (`keep1`, `keep2`); links (FAMC, FAMS,
+  OBJE) always stay from both. `preview: true` changes nothing and answers with both persons, their facts with a
+  suggestion (`keep`: all of the first, from the second only what the first does not have word for word; a bare
+  `1 DEAT Y` gives way to a dated death), the records linking to `xref2` and `suggestions` – further pairs that are
+  probably duplicates too (father, mother, spouses and children with the same name). Only managers of the tree, as in
+  webtrees. Without automatic acceptance the changes are pending as usual.
+- **`POST MergeUndo`** takes a merge back. webtrees keeps every change with the old and the new text; the module
+  remembers which changes belong to a merge (module setting per tree, last 200) and replays the old texts in reverse
+  order – the deleted individual comes back under its old identifier. Only if none of the records was edited since,
+  otherwise `changed-since` with the records and nothing changes. Pending changes of the merge are rejected instead.
+- **`GET Merges`**: the log of the tree's merges, newest first, with `undone`.
+- Tests: `Zusammenfuehren` (merge, undo, changed-since, rights, manager without automatic acceptance); the
+  documentation is generated again.
+
+## 1.15.0 – 2026-10-05
+**API levels 27 and 28: houses and farms as places, pending facts.** Everything is additive; older clients keep working.
+- **Level 27 – the whole GEDCOM-L `_LOC` record.** Houses and farms are location records of their own with a type and a
+  superior place (`1 TYPE Hof`, `1 _LOC @L1@`), as GEDCOM-L and local heritage books with farm lists use them.
+  `GET Place` now gives the `_LOC` record's `type`, its `parents` (the hierarchy pointers with their type and date) and
+  its `events` (`1 EVEN` at the place – fire, rebuilding, sale … with type, date, notes and sources). `children` are
+  merged from webtrees' place table and the `_LOC` hierarchy, each with `location` and `type`. A place that exists only
+  as a `_LOC` in the hierarchy (a farm without recorded residents) is listed by `Places?list=1` and answered by `Place`
+  with 0 events instead of `not-found`. `POST Place` takes `type` and `parent`; with `parent` a place without events can
+  be created. Renaming a place takes its farms along.
+- **Level 28 – pending facts.** Facts carry `pending: true` while a change waits for approval (only users who see
+  pending changes get `true`). `sex` is everywhere what the facts show the user, also while a change of sex is pending.
+- Tests: `test_hof`, the test tree has two farms; the documentation is generated again.
+
 ## 1.14.0 – 2026-10-05
 **API levels 25 and 26, both from Andreas Scharf for his app webtrees mobile.** Everything is additive; older clients keep working.
 - **Level 25 – `POST MyAccount`.** The signed-in user changes their own display name, as under “My account” in the

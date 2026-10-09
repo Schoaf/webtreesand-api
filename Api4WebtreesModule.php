@@ -7,6 +7,7 @@ namespace Api4Webtrees;
 use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\DB;
 use Fisharebest\Webtrees\Gedcom;
+use Fisharebest\Webtrees\GedcomRecord;
 use Fisharebest\Webtrees\Http\RequestHandlers\ModuleAction;
 use Fisharebest\Webtrees\I18N;
 use Fisharebest\Webtrees\Module\AbstractModule;
@@ -19,6 +20,7 @@ use Fisharebest\Webtrees\Registry;
 use Fisharebest\Webtrees\Tree;
 use Fisharebest\Webtrees\Validator;
 use Fisharebest\Webtrees\View;
+use Illuminate\Database\Query\Builder;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
@@ -51,7 +53,10 @@ use function strtolower;
  *   src/AppPages.php      Einstellungen, Seite "App", Koppeln per Einmal-Code
  *   src/ReadActions.php   lesende JSON-Endpunkte (GET)
  *   src/WriteActions.php  schreibende JSON-Endpunkte (POST)
+ *   src/PlaceActions.php  Orte: Ortsliste, ein Ort, Ortsdaten (_LOC) schreiben, Orte umbenennen und zusammenfuehren
  *   src/JsonBuilders.php  Bausteine der JSON-Antworten
+ *   src/MergeActions.php  Personen zusammenfuehren mit Vorschau, Protokoll und Rueckgaengig
+ *   src/TaskActions.php   Forschungsaufgaben, Reihenfolge, Aenderungsverlauf (Stufe 30)
  *   src/GedcomText.php    reine GEDCOM-Textfunktionen (bauen, pruefen, entschaerfen)
  */
 class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface, ModuleConfigInterface, ModuleFooterInterface, MiddlewareInterface
@@ -64,45 +69,16 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     use WriteActions;
     use JsonBuilders;
     use PlaceActions;
+    use MergeActions;
+    use TaskActions;
 
 
     // webtrees benennt ein eigenes Modul nach seinem Ordner ("_api4webtrees_") - was setName() im Modul sagt,
     // ueberschreibt ModuleService::customModules() gleich nach dem Laden. Bis 1.2 hiess der Ordner webtreesand-api;
     // unter diesem Namen liegen bei Bestandsinstallationen noch die Einstellungen (siehe boot()).
     public const string OLD_MODULE_NAME = '_webtreesand-api_';
-    // 8: Places (Ortsvorschlaege), facts[].date.gedcom, media[].factId/primary, UnlinkMedia, PrimaryMedia, Link,
-    //    AddIndividual.facts, Individuals?scope=all, Info.trees[].lastChange
-    // 7: Verwalter legt fest, welche Stammbaeume die App erreicht (Fehler tree-disabled)
-    // 6: Koppeln per Einmal-Code (Seiten App/Connect, Aktion Pair)
-    // 5: Info.maxUpload, Moderation (Pending, Accept, Reject), trees[].canModerate/pending
-    // 4: Anniversaries, DeleteRecord, Unlink; Ortskoordinaten auch aus der webtrees-Ortstabelle
-    // 3: ?lang=<Sprache> fuer Beschriftungen und Datumsangaben der Antwort
-    // 2: MediaList, Individual.relationship (relativeTo), Info.trees[].individuals, Pedigree.ancestors[].hasParents
-    // 11: Bookmarks (Merkliste je Benutzer und Baum, Benutzereinstellung), given/surname je Person
-    // 12: Individual.stepFamilies (Familien der Eltern mit anderen Partnern = Halbgeschwister), hasParents/partnersCount/
-    //     childrenCount fuer die Person und alle Personen ihrer Familien in der Individual-Antwort
-    // 13: Relationship (Verwandtschaftswege zweier Personen wie im Diagramm "Verwandtschaft")
-    // 14: call, chr, buri, occupation je Person (Kurzfassung)
-    // 15: Pedigree?siblings=1 - je Vorfahr die Geschwister
-    // 16: Pedigree bis 12 Generationen (war 7)
-    // 17: Export - der ganze sichtbare Baum seitenweise (Personen, Familien, Fakten, Medien)
-    // 18: Quellen - Sources, Source; Quellenverweise vollstaendig (Seite, Qualitaet, Datum, Text, Notizen, Medien, Text-Quellen)
-    // 19: Paten und Trauzeugen lesen - je Fakt associates (2 _ASSO, 1 ASSO), freeAssociates (Notizen "Paten: ..."),
-    //     noteKinds, typeLabel (MARR:TYPE uebersetzt); Individual.associatedIn (Gegenrichtung); NOTE/TEXT mit CONC
-    // 20: Paten und Trauzeugen schreiben - POST Association (verknuepfte als 2 _ASSO + RELA, freie als 2 _GODP/_WITN,
-    //     1 ASSO in die Taufe verschieben); Fact.type (Art des Ereignisses, MARR in webtrees-Form CIVIL/RELIGIOUS ...)
-    // 21: Orte - Places?list=1 (alle Orte mit Zahlen, Koordinaten, _LOC), Place (ein Ort: Personen und Familien mit
-    //     ihren Ereignissen dort, Unterorte, _LOC mit GOV, Koordinaten, Notizen, Quellen, Medien)
-    // 22: Orte schreiben - POST Place (GOV-Kennung, Koordinaten, Notiz in den _LOC; legt ihn an, Verweise bei
-    //     mehrdeutigem Blattnamen; mapData: auch in die Geografischen Daten, nur Administratoren)
-    // 23: Orte umbenennen und zusammenfuehren - POST PlaceRename (mit Vorschau; Orte darunter wandern mit, _LOC werden
-    //     zusammengelegt); MediaObject (Titel und Art eines Medienobjekts); Medien mit type/format
-    // 24: Startperson - Info je Baum mit startXref (wie webtrees sie bestimmt) und treeDefaultXref; POST StartPerson
-    //     (eigene Standardperson, fuer Verwalter auch die des Stammbaums)
-    // 25: POST MyAccount - eigenen angezeigten Namen aendern
-    // 27: Info.trees[].availableModules - Module, die der Benutzer im Baum nutzen kann
-    // 26: Info.loginForm - Begruessungstext, Selbstregistrierung erlaubt, Bedingungen (Einstellungen der Anmeldeseite)
-    public const int    API_VERSION = 27;
+    // Was welche Stufe gebracht hat, steht in docs/API.md (Spalte "since") und in CHANGELOG.md.
+    public const int    API_VERSION = 31;
 
     /** Benutzereinstellung je Baum: die Merkliste als Liste von Personenkennungen. */
     private const string BOOKMARKS_PREF = 'api4webtrees_bookmarks';
@@ -120,9 +96,17 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     // Moduleinstellung: fuer welche Stammbaeume die App freigegeben ist. '*' (Standard) = alle, sonst Namen mit Komma.
     private const string TREES_SETTING      = 'app_trees';
 
-    // Benutzereinstellung: Hinweis auf die App nicht mehr zeigen - 'connected' (App verbunden) oder 'dismissed'.
+    // Benutzereinstellung: Hinweis auf die App nicht mehr zeigen - HINT_CONNECTED (App verbunden) oder HINT_DISMISSED.
     private const string HINT_SETTING       = 'webtreesand_hint';
     private const string HINT_DESK_SETTING  = 'wtdesk_hint';
+    private const string HINT_CONNECTED     = 'connected';
+    private const string HINT_DISMISSED     = 'dismissed';
+
+    // Moduleinstellung: gesetzt, sobald die Einstellungen des alten Modulnamens uebernommen sind (takeOverOldSettings).
+    private const string SETTINGS_FROM_SETTING = 'settings_from';
+
+    // Koppeln: so viele Zufallsbytes hat der Einmal-Code, als Hex also doppelt so viele Zeichen.
+    private const int    PAIR_CODE_BYTES    = 24;
 
     // Moduleinstellung: Apps aus src/Apps.php, die der Verwalter abgeschaltet hat (Kennungen mit Komma). Leer = alle an.
     private const string APPS_OFF_SETTING   = 'apps_off';
@@ -138,9 +122,29 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
     private const int MAX_RELATIONSHIP_PATHS = 5;
     // Export: Datensaetze je Seite (Personen und Familien zusammen)
     private const int EXPORT_PAGE_SIZE = 250;
+    // Source und Place: so viele Personen bzw. Familien hoechstens je Antwort ("more..." nennt den Rest)
+    private const int LINKED_RECORDS_LIMIT = 1000;
+    // Anniversaries: ?days hoechstens und Standard; runde Jahrestage (25, 50, 75 ...) kommen vor den uebrigen
+    private const int ANNIV_MAX_DAYS          = 60;
+    private const int ANNIV_DEFAULT_DAYS      = 14;
+    private const int ROUND_ANNIVERSARY_YEARS = 25;
+    // MediaList: so viele verknuepfte Personen je Medium (Namen fuer die Fotouebersicht)
+    private const int MEDIA_LIST_PEOPLE = 3;
+    // Merkliste: so viele Personen hoechstens je Benutzer und Baum (aelteste fallen heraus)
+    private const int BOOKMARKS_MAX = 500;
+    // Spalte user.real_name in webtrees; laenger gaebe unter MySQL einen Serverfehler
+    private const int REAL_NAME_MAX_LENGTH = 64;
+    // acceptTree() von webtrees will eine Hoechstzahl - "alle" heisst hier: mehr, als ein Baum an ausstehenden Aenderungen hat
+    private const int ACCEPT_ALL_LIMIT = 10000;
+    // Bilder: Vorschau in Listen (quadratisch zugeschnitten) und in der Medienansicht (eingepasst), Kantenlaenge in Pixeln
+    private const int THUMB_SIZE   = 200;
+    private const int PREVIEW_SIZE = 400;
+    // Art eines Mediums (OBJE:FILE:FORM:TYPE), wie webtrees sie zur Auswahl stellt
+    private const array MEDIA_TYPES = ['photo', 'document', 'certificate', 'book', 'newspaper', 'card', 'map', 'tombstone', 'audio', 'video', 'electronic', 'film', 'fiche', 'magazine', 'manuscript', 'painting', 'other'];
 
-    // Diese Tags sind Verknuepfungen oder Verwaltungsdaten, keine Ereignisse.
-    // (HUSB/WIFE/CHIL sind die Verknuepfungen innerhalb eines Familien-Datensatzes.)
+    // Diese Tags sind Verknuepfungen oder Verwaltungsdaten, keine Ereignisse - sie fehlen in facts[] der Antworten.
+    // (HUSB/WIFE/CHIL sind die Verknuepfungen innerhalb eines Familien-Datensatzes.) Verwandt, aber anders gemeint:
+    // GedcomText::LINK_TAGS (was der Fakten-Editor nicht anfassen darf) und MERGE_LINK_TAGS (was beim Zusammenfuehren bleibt).
     private const array SKIP_FACTS = ['FAMS', 'FAMC', 'HUSB', 'WIFE', 'CHIL', 'OBJE', 'CHAN', '_UID', '_TODO', '_WT_OBJE_SORT'];
 
     private const array ADDABLE_TAGS = [
@@ -184,8 +188,8 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
             }
 
             // Auch bei einer Neuinstallation: ab jetzt gibt es einen Eintrag, die Pruefung oben faellt kuenftig kurz aus.
-            if ($this->getPreference('settings_from') === '') {
-                $this->setPreference('settings_from', self::OLD_MODULE_NAME);
+            if ($this->getPreference(self::SETTINGS_FROM_SETTING) === '') {
+                $this->setPreference(self::SETTINGS_FROM_SETTING, self::OLD_MODULE_NAME);
             }
         } catch (Throwable) {
             // Dann eben ohne die alten Einstellungen; der Verwalter setzt sie neu.
@@ -241,7 +245,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
 
     public function customModuleVersion(): string
     {
-        return '1.14.0';
+        return '1.18.1';
     }
 
     public function customModuleLatestVersionUrl(): string
@@ -279,7 +283,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
         }
 
         $action = (string) $request->getAttribute('action');
-        $device = self::device($request->getHeaderLine('User-Agent'));
+        $device = self::requestDevice($request);
         $apps   = $this->apps();
         // Der Hinweis wirbt fuer die App, die zum Geraet passt - gibt es keine (Mac, iPhone ohne passende App), keinen Hinweis.
         $hint_app = Apps::matching($apps, $device)[0] ?? ($device === 'other' ? Apps::kind($apps, 'phone')[0] ?? null : null);
@@ -287,7 +291,7 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
         return view($this->name() . '::footer', [
             'app_url'   => $this->actionUrl('App', $tree->name()),
             'hint'      => $hint_app !== null
-                && Auth::user()->getPreference(self::hintKey($request->getHeaderLine('User-Agent'))) === '' && $action !== 'App' && $action !== 'Connect',
+                && Auth::user()->getPreference(self::hintKey($request)) === '' && $action !== 'App' && $action !== 'Connect',
             'hint_app'  => $hint_app,
             'hint_url'  => $this->actionUrl('HintOff', $tree->name()),
             'page_url'  => (string) $request->getUri(),
@@ -412,19 +416,53 @@ class Api4WebtreesModule extends AbstractModule implements ModuleCustomInterface
         return Validator::queryParams($request)->isXref()->string('xref');
     }
 
-    /**
-     * Fachliche Fehler kommen bewusst mit HTTP 200: viele Webserver (z. B. Synology Web Station,
-     * nginx mit fastcgi_intercept_errors) ersetzen bei 4xx/5xx den Antwortinhalt durch ihre eigene
-     * Fehlerseite - der Fehlercode kaeme nie in der App an. "status" nennt den gemeinten Code.
-     */
     /** Wie xref(), aber leer, wenn der Parameter fehlt - fuer Routen, die ohne Kennung etwas Neues anlegen. */
     private function xrefOptional(ServerRequestInterface $request): string
     {
         return Validator::queryParams($request)->string('xref', '') === '' ? '' : $this->xref($request);
     }
 
+    /**
+     * Fachliche Fehler kommen bewusst mit HTTP 200: viele Webserver (z. B. Synology Web Station,
+     * nginx mit fastcgi_intercept_errors) ersetzen bei 4xx/5xx den Antwortinhalt durch ihre eigene
+     * Fehlerseite - der Fehlercode kaeme nie in der App an. "status" nennt den gemeinten Code.
+     */
     private function error(int $status, string $code): ResponseInterface
     {
         return response(['ok' => false, 'error' => $code, 'status' => $status]);
+    }
+
+    /**
+     * Fehlerantwort, wenn es den Datensatz nicht gibt (404) oder der Benutzer ihn nicht sehen darf (403) - sonst null.
+     */
+    private function denyShow(GedcomRecord|null $record): ResponseInterface|null
+    {
+        if ($record === null) {
+            return $this->error(404, 'not-found');
+        }
+
+        if (!$record->canShow()) {
+            return $this->error(403, 'private');
+        }
+
+        return null;
+    }
+
+    /**
+     * Die ausstehenden Aenderungen dieses Baums (Tabelle change) als Abfrage - die Aufrufer schraenken weiter ein.
+     */
+    private function pendingChanges(Tree $tree): Builder
+    {
+        return DB::table('change')->where('gedcom_id', '=', $tree->id())->where('status', '=', 'pending');
+    }
+
+    /**
+     * Nummer der letzten Aenderung im Baum (auch ausstehende, angenommene, verworfene). Ein anderer Wert als beim
+     * letzten Mal heisst: neu laden. Nur auf Gleichheit vergleichen - ein neuer GEDCOM-Import loescht die
+     * Aenderungsliste, dann wird die Zahl kleiner.
+     */
+    private function lastChangeId(Tree $tree): int
+    {
+        return (int) DB::table('change')->where('gedcom_id', '=', $tree->id())->max('change_id');
     }
 }

@@ -79,6 +79,11 @@ def leseaufrufe(baum="testbaum"):
         ("Places", baum, {"q": ""}),
         ("Places", baum, {"q": "Marker"}),
         ("Places", baum, {"list": 1}),
+        ("Merges", baum, {}),
+        ("Tasks", baum, {}),
+        ("Tasks", baum, {"open": 1}),
+        ("Changes", baum, {"limit": 20}),
+        ("Changes", baum, {"xref": "I1"}),
     ]
     for ort in ["Offenbach", "Bieber, Offenbach", "Markerlebendort", "Markerkonfidenzort", "Gibtesnicht"]:
         aufrufe.append(("Place", baum, {"name": ort}))
@@ -244,19 +249,23 @@ class Orte(unittest.TestCase):
 
     def test_ortsliste(self):
         orte = {o["name"]: o for o in U.sitzung("verwalter").get("Places", "testbaum", list=1).json["places"]}
-        self.assertEqual(["Bieber, Gelnhausen", "Bieber, Offenbach", "Markerkonfidenzort", "Markerlebendort", "Offenbach"], sorted(orte))
+        self.assertEqual(["Bieber, Gelnhausen", "Bieber, Offenbach", "Hof Nr. 1, Offenbach", "Hof Nr. 2, Offenbach", "Markerkonfidenzort", "Markerlebendort", "Offenbach"], sorted(orte))
         off = orte["Offenbach"]
-        self.assertEqual((3, 2, 0, "L1", "OFFACHJO40BC", "location"), (off["events"], off["individuals"], off["families"], off["location"], off["gov"], off["coordSource"]))
+        self.assertEqual((3, 2, 0, "L1", "OFFACHJO40BC", "location", None), (off["events"], off["individuals"], off["families"], off["location"], off["gov"], off["coordSource"], off["type"]))
         self.assertAlmostEqual(50.1, off["lat"])
         self.assertIsNone(orte["Bieber, Offenbach"]["location"], "Blattname Bieber hat keinen _LOC")
         self.assertEqual("L2", orte["Markerkonfidenzort"]["location"], "Blattname eindeutig: _LOC gefunden")
+        # Stufe 27: Hof mit Bewohner ueber 3 _LOC, Hof ohne Ereignis nur ueber die _LOC-Hierarchie
+        self.assertEqual((1, 1, "L3", "Hof", 50.11), tuple(orte["Hof Nr. 1, Offenbach"][k] for k in ("events", "individuals", "location", "type", "lat")))
+        self.assertEqual((0, 0, "L4", "farm", None), tuple(orte["Hof Nr. 2, Offenbach"][k] for k in ("events", "individuals", "location", "type", "lat")))
         gast = [o["name"] for o in U.sitzung().get("Places", "testbaum", list=1).json["places"]]
-        self.assertEqual(["Bieber, Offenbach", "Offenbach"], gast, "Orte verborgener Personen fehlen (F2 hat ein lebendes Kind)")
+        self.assertEqual(["Bieber, Offenbach", "Hof Nr. 1, Offenbach", "Hof Nr. 2, Offenbach", "Offenbach"], gast, "Orte verborgener Personen fehlen (F2 hat ein lebendes Kind)")
 
     def test_ein_ort(self):
         o = U.sitzung("verwalter").get("Place", "testbaum", name="offenbach").json
         self.assertEqual(("Offenbach", ["Offenbach"], None, 3), (o["name"], o["levels"], o["parent"], o["events"]))
-        self.assertEqual([{"name": "Bieber, Offenbach"}], o["children"])
+        self.assertEqual([("Bieber, Offenbach", None, None, None), ("Hof Nr. 1, Offenbach", "L3", "Hof", "24"), ("Hof Nr. 2, Offenbach", "L4", "farm", "24")],
+                         [(c["name"], c["location"], c["type"], c["govType"]) for c in o["children"]], "Unterorte aus Ortstabelle und _LOC-Hierarchie, Art mit GOV-Typnummer")
         self.assertEqual({"birth": 1, "marriage": 0, "death": 0, "other": 2}, o["eventCounts"], "Geburt I1; Taufe I1 und Wohnort I2")
         self.assertEqual(["I2", "I1"], [p["xref"] for p in o["individuals"]], "nach Namen: Anna vor Theodor")
         self.assertEqual(["BIRT", "CHR"], [f["tag"] for f in o["individuals"][1]["facts"]])
@@ -268,6 +277,25 @@ class Orte(unittest.TestCase):
         self.assertAlmostEqual(8.766667, loc["lng"], places=5)
         b = U.sitzung("verwalter").get("Place", "testbaum", name="Bieber, Offenbach").json
         self.assertEqual(("Offenbach", ["I4"], None), (b["parent"], [p["xref"] for p in b["individuals"]], b["location"]))
+
+    def test_hof(self):
+        """Stufe 27: _LOC-Hierarchie (1 _LOC), Art (TYPE) und Ereignisse am Ort (EVEN) - Hoefe fuer Ortsfamilienbuecher."""
+        h = U.sitzung("verwalter").get("Place", "testbaum", name="Hof Nr. 1, Offenbach").json
+        self.assertEqual(("Offenbach", 1, ["I4"], "L3"), (h["parent"], h["events"], [p["xref"] for p in h["individuals"]], h["location"]["xref"]))
+        loc = h["location"]
+        # zwei Arten (GEDCOM-L: 1 TYPE mehrfach mit Datum): die letzte gilt, dazu die GOV-Typnummer aus 2 _GOVTYPE (24 = Hof)
+        self.assertEqual(("Hof", "24"), (loc["type"], loc["govType"]))
+        self.assertEqual([("L1", "Offenbach", "Offenbach", "POLI", 1800)], [(p["xref"], p["name"], p["fullName"], p["type"], p["date"]["year"]) for p in loc["parents"]])
+        self.assertEqual(1, len(loc["events"]))
+        e = loc["events"][0]
+        self.assertEqual(("Brand", 1734, ["Scheune abgebrannt"], [("S1", "Ortschronik S. 12")]), (e["type"], e["date"]["year"], e["notes"], [(q["xref"], q["page"]) for q in e["sources"]]))
+        self.assertAlmostEqual(50.11, h["lat"])
+        # Hof ohne Ereignis: nur ueber die Hierarchie, Ereignisse 0, kein not-found
+        h2 = U.sitzung().get("Place", "testbaum", name="hof nr. 2, offenbach").json
+        self.assertEqual(("Hof Nr. 2, Offenbach", 0, [], "L4", "farm", "24", []), (h2["name"], h2["events"], h2["individuals"], h2["location"]["xref"], h2["location"]["type"], h2["location"]["govType"], h2["location"]["events"]))
+        liste = {o["name"]: o for o in U.sitzung("verwalter").get("Places", "testbaum", list=1).json["places"]}
+        self.assertEqual([("Hof", "24"), ("farm", "24"), (None, None)], [(liste[n]["type"], liste[n]["govType"]) for n in ("Hof Nr. 1, Offenbach", "Hof Nr. 2, Offenbach", "Bieber, Offenbach")])
+        self.assertEqual([], h2["children"])
 
     def test_unbekannt_und_verborgen(self):
         self.assertEqual("not-found", U.sitzung().get("Place", "testbaum", name="Markerlebendort").json["error"])
@@ -283,6 +311,20 @@ class Orte(unittest.TestCase):
         self.assertEqual((True, "L1", 0), (a.json["ok"], a.json["xref"], a.json["linked"]), a)
         loc = s.get("Place", "testbaum", name="Offenbach").json["location"]
         self.assertEqual(("OFFACHJO40BD", ["Stadt am Main"], 2, 50.1), (loc["gov"], loc["notes"], len(loc["sources"]), loc["lat"]))
+        # Art aendern: Unterzeilen der juengsten Art (2 _GOVTYPE, 2 SOUR) und die aeltere Art mit Datum bleiben (1.18.1)
+        a = s.post("Place", "testbaum", {"name": "Hof Nr. 1, Offenbach", "type": "Bauernhof"})
+        self.assertEqual((True, "L3"), (a.json["ok"], a.json["xref"]), a)
+        g = umgebung.sql("SELECT o_gedcom FROM wt_other WHERE o_id = 'L3'")[0][0]
+        self.assertIn("\n1 TYPE Mühle\n2 DATE TO 1799\n1 TYPE Bauernhof\n2 _GOVTYPE 24\n2 SOUR @S1@\n3 PAGE Ortschronik S. 3", g)
+        self.assertEqual(1, g.count("1 TYPE Bauernhof"))
+        loc = s.get("Place", "testbaum", name="Hof Nr. 1, Offenbach").json["location"]
+        self.assertEqual(("Bauernhof", "24"), (loc["type"], loc["govType"]))
+        # leer entfernt alle Arten; dann neu setzen ohne Unterzeilen
+        s.post("Place", "testbaum", {"name": "Hof Nr. 1, Offenbach", "type": ""})
+        self.assertNotIn("1 TYPE", umgebung.sql("SELECT o_gedcom FROM wt_other WHERE o_id = 'L3'")[0][0])
+        s.post("Place", "testbaum", {"name": "Hof Nr. 1, Offenbach", "type": "Hof"})
+        loc = s.get("Place", "testbaum", name="Hof Nr. 1, Offenbach").json["location"]
+        self.assertEqual(("Hof", None), (loc["type"], loc["govType"]))
         # Koordinaten und Notiz ersetzen, auch in die Geografischen Daten (Admin)
         a = s.post("Place", "testbaum", {"name": "Offenbach", "lat": 50.104444, "lng": -8.766, "note": "Stadt am Main\nzweite Zeile", "mapData": True})
         self.assertEqual((True, True), (a.json["ok"], a.json["mapData"]), a)
@@ -344,6 +386,20 @@ class Orte(unittest.TestCase):
         self.assertEqual((True, True), (a.json["ok"], a.json["pending"]), a)
         a2 = b.post("Place", "testbaum", {"name": "Bieber, Gelnhausen", "gov": "BIEBERJO40AA"})
         self.assertEqual(a.json["xref"], a2.json["xref"], "kein zweiter _LOC vor der Freigabe")
+        # Stufe 27: Art und uebergeordneter Ort; neuer Hof ohne Ereignis nur mit parent
+        self.assertEqual(True, s.post("Place", "testbaum", {"name": "Hof Nr. 2, Offenbach", "type": "Haus", "note": "Altenteil"}).json["ok"])
+        self.assertEqual("1 TYPE Haus", [z for z in umgebung.sql("SELECT o_gedcom FROM wt_other WHERE o_id = 'L4'")[0][0].split("\n") if z.startswith("1 TYPE")][0])
+        self.assertEqual(("Haus", ["Altenteil"]), tuple(s.get("Place", "testbaum", name="Hof Nr. 2, Offenbach").json["location"][k] for k in ("type", "notes")))
+        neu = s.post("Place", "testbaum", {"name": "Hof Nr. 3, Offenbach", "type": "Hof", "parent": "L1"})
+        self.assertEqual((True, 201), (neu.json["ok"], neu.status), neu)
+        h3 = s.get("Place", "testbaum", name="Hof Nr. 3, Offenbach").json
+        self.assertEqual(("Hof", ["L1"], 0), (h3["location"]["type"], [p["xref"] for p in h3["location"]["parents"]], h3["events"]))
+        self.assertIn("Hof Nr. 3, Offenbach", [c["name"] for c in s.get("Place", "testbaum", name="Offenbach").json["children"]])
+        self.assertEqual("not-found", s.post("Place", "testbaum", {"name": "Hof Nr. 4, Offenbach", "type": "Hof"}).json["error"], "ohne parent kein Ort ohne Ereignis")
+        self.assertEqual("invalid-parent", s.post("Place", "testbaum", {"name": "Hof Nr. 3, Offenbach", "parent": "L99"}).json["error"])
+        self.assertEqual("invalid-parent", s.post("Place", "testbaum", {"name": "Hof Nr. 3, Offenbach", "parent": neu.json["xref"]}).json["error"], "nicht sein eigener Oberort")
+        s.post("Place", "testbaum", {"name": "Hof Nr. 3, Offenbach", "parent": None})
+        self.assertNotIn("1 _LOC", umgebung.sql("SELECT o_gedcom FROM wt_other WHERE o_id = ?", neu.json["xref"])[0][0])
         # Fehler und Rechte
         self.assertEqual("not-editable", U.sitzung("mitglied").post("Place", "testbaum", {"name": "Offenbach", "gov": "X"}).json["error"])
         self.assertEqual("invalid-coordinates", s.post("Place", "testbaum", {"name": "Offenbach", "lat": 95, "lng": 1}).json["error"])
@@ -356,22 +412,22 @@ class Orte(unittest.TestCase):
         s = U.sitzung("admin")
         # Vorschau: Offenbach -> Offenbach am Main, mit dem Ort darunter; aendert nichts
         v = s.post("PlaceRename", "testbaum", {"from": "Offenbach", "to": "Offenbach am Main", "preview": True}).json
-        self.assertEqual((True, False, 3, 4, 1, 0, "L1"), (v["preview"], v["merge"], v["records"], v["events"], v["subPlaces"], v["skipped"], v["location"]["from"]), v)
+        self.assertEqual((True, False, 3, 5, 2, 0, "L1"), (v["preview"], v["merge"], v["records"], v["events"], v["subPlaces"], v["skipped"], v["location"]["from"]), v)
         self.assertEqual(True, s.get("Place", "testbaum", name="Offenbach").json.get("ok", True))
         # Ausfuehren
         a = s.post("PlaceRename", "testbaum", {"from": "Offenbach", "to": "Offenbach am Main"}).json
-        self.assertEqual((True, False, 4), (a["ok"], a["preview"], a["events"]), a)
+        self.assertEqual((True, False, 5), (a["ok"], a["preview"], a["events"]), a)
         self.assertEqual("not-found", s.get("Place", "testbaum", name="Offenbach").json["error"])
         o = s.get("Place", "testbaum", name="Offenbach am Main").json
         self.assertEqual(("L1", "Offenbach am Main", 3), (o["location"]["xref"], o["location"]["name"], o["events"]))
-        self.assertEqual(["Bieber, Offenbach am Main"], [c["name"] for c in o["children"]])
+        self.assertEqual(["Bieber, Offenbach am Main", "Hof Nr. 1, Offenbach am Main", "Hof Nr. 2, Offenbach am Main"], [c["name"] for c in o["children"]], "Hoefe wandern ueber die _LOC-Hierarchie mit")
         ged = umgebung.sql("SELECT i_gedcom FROM wt_individuals WHERE i_id = 'I1'")[0][0]
         self.assertEqual(2, ged.count("2 PLAC Offenbach am Main\n3 _LOC @L1@"), "Geburt und Taufe zeigen auf den _LOC")
         # Hin und zurueck: der alte Name steht noch in der Ortstabelle von webtrees, ist aber kein Zusammenfuehren
         self.assertEqual(False, s.post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": "Offenbach", "preview": True}).json["merge"])
         # Bearbeiter: das gesperrte Ereignis (RESI von I2) bleibt
         v = U.sitzung("bearbeiter").post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": "Offenbach a. M.", "preview": True}).json
-        self.assertEqual((3, 1), (v["events"], v["skipped"]), v)
+        self.assertEqual((4, 1), (v["events"], v["skipped"]), v)
         # Zusammenfuehren: Bieber unter Offenbach am Main -> Bieber, Gelnhausen (beide mit _LOC, GOV weicht ab)
         von = s.get("Place", "testbaum", name="Bieber, Offenbach am Main").json["location"]["xref"]
         nach = s.get("Place", "testbaum", name="Bieber, Gelnhausen").json["location"]["xref"]
@@ -388,6 +444,189 @@ class Orte(unittest.TestCase):
         self.assertEqual("not-editable", U.sitzung("mitglied").post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": "X"}).json["error"])
         self.assertEqual("not-found", U.sitzung("bearbeiter").post("PlaceRename", "testbaum", {"from": "Markerkonfidenzort", "to": "X"}).json["error"])
         self.assertEqual("name-missing", s.post("PlaceRename", "testbaum", {"from": "Offenbach am Main", "to": " , "}).json["error"])
+
+class StufeDreissig(unittest.TestCase):
+    """Stufe 30: Merkliste in den Favoriten, Forschungsaufgaben (_TODO), Reihenfolge, Aenderungsverlauf."""
+
+    def test_merkliste_in_favoriten(self):
+        m = U.sitzung("mitglied")
+        uid = umgebung.sql("SELECT user_id FROM wt_user WHERE user_name = 'mitglied'")[0][0]
+        gid = umgebung.sql("SELECT gedcom_id FROM wt_gedcom WHERE gedcom_name = 'testbaum'")[0][0]
+        umgebung.sql("DELETE FROM wt_favorite WHERE gedcom_id = ? AND user_id = ?", gid, uid)
+        # Alte Einstellung (bis Stufe 29) wird einmalig uebernommen
+        umgebung.sql("INSERT OR REPLACE INTO wt_user_gedcom_setting (user_id, gedcom_id, setting_name, setting_value) VALUES (?, ?, 'api4webtrees_bookmarks', 'I1,I2')", uid, gid)
+        b = m.get("Bookmarks", "testbaum").json
+        self.assertEqual(["I1", "I2"], [p["xref"] for p in b["data"]], b)
+        self.assertEqual("", umgebung.sql("SELECT setting_value FROM wt_user_gedcom_setting WHERE user_id = ? AND gedcom_id = ? AND setting_name = 'api4webtrees_bookmarks'", uid, gid)[0][0], "Einstellung geleert")
+        self.assertEqual(2, umgebung.sql("SELECT COUNT(*) FROM wt_favorite WHERE gedcom_id = ? AND user_id = ? AND favorite_type = 'INDI'", gid, uid)[0][0])
+        # Hinzufuegen mit Notiz, Entfernen
+        b = m.post("Bookmarks", "testbaum", {"xref": "I4", "add": True, "note": "Taufe pruefen"}).json
+        self.assertEqual(("I4", "Taufe pruefen"), (b["data"][-1]["xref"], b["data"][-1]["note"]))
+        b = m.post("Bookmarks", "testbaum", {"xref": "I1", "add": False}).json
+        self.assertEqual(["I2", "I4"], [p["xref"] for p in b["data"]])
+        # Favoriten des Stammbaums: nur Verwalter
+        self.assertEqual("not-manager", m.post("Bookmarks", "testbaum", {"xref": "I1", "add": True, "forTree": True}).json["error"])
+        v = U.sitzung("verwalter")
+        b = v.post("Bookmarks", "testbaum", {"xref": "I1", "add": True, "forTree": True, "note": "Stammvater"}).json
+        self.assertEqual([("I1", "Stammvater")], [(p["xref"], p["note"]) for p in b["treeFavorites"]])
+        self.assertEqual(["I1"], [p["xref"] for p in m.get("Bookmarks", "testbaum").json["treeFavorites"]], "Mitglied sieht die Stammbaum-Favoriten")
+        v.post("Bookmarks", "testbaum", {"xref": "I1", "add": False, "forTree": True})
+        self.assertEqual("not-logged-in", U.sitzung().get("Bookmarks", "testbaum").json["error"])
+
+    def test_aufgaben(self):
+        s = U.sitzung("admin")
+        a = s.post("Task", "testbaum", {"text": "Taufe in Offenbach suchen", "note": "Kirchenbuch\nzweite Zeile"}, xref="I4").json
+        self.assertEqual((True, False), (a["ok"], a["pending"]), a)
+        t = s.get("Tasks", "testbaum").json
+        meine = [x for x in t["tasks"] if x["record"] == "I4"]
+        self.assertEqual(1, len(meine), t)
+        self.assertEqual(("Taufe in Offenbach suchen", "admin", "Kirchenbuch\nzweite Zeile", a["factId"]), (meine[0]["text"], meine[0]["user"], meine[0]["note"], meine[0]["factId"]))
+        self.assertIsNotNone(meine[0]["date"], "ohne Datum wird heute eingetragen")
+        self.assertEqual(1, len(s.get("Individual", "testbaum", xref="I4").json["tasks"]), "auch in der Personenantwort")
+        self.assertEqual(0, len([f for f in s.get("Individual", "testbaum", xref="I4").json["facts"] if f["tag"] == "_TODO"]), "nicht in den Ereignissen")
+        # Aendern mit Wiedervorlage in der Zukunft: faellt aus ?open=1 heraus
+        b = s.post("Task", "testbaum", {"factId": a["factId"], "text": "Taufe suchen", "date": "1 JAN 2099"}, xref="I4").json
+        self.assertEqual(True, b["ok"], b)
+        self.assertEqual([], [x for x in s.get("Tasks", "testbaum", open=1).json["tasks"] if x["record"] == "I4"])
+        self.assertEqual(["Taufe suchen"], [x["text"] for x in s.get("Tasks", "testbaum").json["tasks"] if x["record"] == "I4"])
+        # Fehler, dann erledigt = geloescht
+        self.assertEqual("text-missing", s.post("Task", "testbaum", {"text": "  "}, xref="I4").json["error"])
+        self.assertEqual("not-editable", U.sitzung("mitglied").post("Task", "testbaum", {"text": "x"}, xref="I4").json["error"])
+        self.assertEqual(True, s.post("DeleteFact", "testbaum", {"factId": b["factId"]}, xref="I4").json["ok"])
+        self.assertEqual([], [x for x in s.get("Tasks", "testbaum").json["tasks"] if x["record"] == "I4"])
+        # Bearbeiter ohne Sofortfreigabe: ausstehend
+        e = U.sitzung("bearbeiter").post("Task", "testbaum", {"text": "Wartet"}, xref="I4").json
+        try:
+            self.assertEqual(True, e["pending"], e)
+        finally:
+            s.post("Reject", "testbaum", {}, xref="I4")
+
+    def test_reihenfolge(self):
+        s = U.sitzung("admin")
+        vorher = [c["xref"] for c in s.get("Family", "testbaum", xref="F1").json["children"]]
+        self.assertEqual(["I4", "I5"], vorher)
+        r = s.post("Reorder", "testbaum", {"type": "children", "order": ["I5"]}, xref="F1").json
+        self.assertEqual((True, ["I5", "I4"]), (r["ok"], r["order"]), r)
+        self.assertEqual(["I5", "I4"], [c["xref"] for c in s.get("Family", "testbaum", xref="F1").json["children"]])
+        ged = umgebung.sql("SELECT f_gedcom FROM wt_families WHERE f_id = 'F1'")[0][0]
+        self.assertIn("1 CHIL @I5@\n1 CHIL @I4@", ged, "nur die Reihenfolge der Zeilen aendert sich")
+        self.assertIn("1 HUSB @I1@", ged)
+        s.post("Reorder", "testbaum", {"type": "children", "order": ["I4", "I5"]}, xref="F1")
+        self.assertEqual("invalid-value", s.post("Reorder", "testbaum", {"type": "children", "order": []}, xref="I1").json["error"], "Kinder nur an der Familie")
+        self.assertIn(U.sitzung("mitglied").post("Reorder", "testbaum", {"type": "children", "order": []}, xref="F1").json["error"], ("not-editable", "private"))
+
+    def test_aenderungsverlauf(self):
+        s = U.sitzung("admin")
+        s.post("Fact", "testbaum", {"tag": "OCCU", "value": "Verlaufsberuf"}, xref="I4")
+        c = s.get("Changes", "testbaum", limit=5).json
+        self.assertEqual(True, c["ok"], c)
+        self.assertTrue(1 <= len(c["changes"]) <= 5)
+        e = c["changes"][0]
+        self.assertEqual(("I4", "INDI", "updated", False), (e["xref"], e["type"], e["action"], e["pending"]), e)
+        self.assertTrue(e["time"].startswith("20") and e["user"])
+        nur = s.get("Changes", "testbaum", xref="I4").json["changes"]
+        self.assertTrue(all(x["xref"] == "I4" for x in nur) and nur)
+        lc = s.get("Individual", "testbaum", xref="I4").json["lastChange"]
+        self.assertTrue(lc and lc["time"].startswith("20"), lc)
+        self.assertEqual("not-logged-in", U.sitzung().get("Changes", "testbaum").json["error"])
+        self.assertTrue(len(U.sitzung("mitglied").get("Changes", "testbaum").json["changes"]) >= 1, "Mitglieder sehen den Verlauf sichtbarer Datensaetze")
+
+
+class Zusammenfuehren(unittest.TestCase):
+    """Stufe 29: POST Merge mit Vorschau, GET Merges, POST MergeUndo - nur Verwalter."""
+
+    def person(self, s, **felder):
+        a = s.post("AddIndividual", "testbaum", {"relation": "none", "given": "Doppel", "surname": "Testfall", "sex": "M", "dead": True} | felder)
+        self.assertEqual(True, a.json["ok"], a)
+        return a.json["xref"]
+
+    def test_zzz_zusammenfuehren_und_rueckgaengig(self):
+        s = U.sitzung("admin")
+        p1 = self.person(s, birthDate="1850")
+        p2 = self.person(s, birthDate="1850", deathDate="1900")
+        s.post("Fact", "testbaum", {"tag": "OCCU", "value": "Schmied"}, xref=p1)
+        s.post("Fact", "testbaum", {"tag": "OCCU", "value": "Schmied"}, xref=p2)
+        s.post("Fact", "testbaum", {"tag": "RESI", "place": "Offenbach am Main"}, xref=p2)
+        # Geburt von p2 um den Ort ergaenzen: die Geburt von p1 (nur Datum) ist darin enthalten
+        geb2 = [f for f in s.get("Individual", "testbaum", xref=p2).json["facts"] if f["tag"] == "BIRT"][0]["id"]
+        s.post("Fact", "testbaum", {"factId": geb2, "tag": "BIRT", "date": "1850", "place": "Offenbach am Main"}, xref=p2)
+        # p2 ist Partner von I4 (neue Familie) und wird an einer Quelle zitiert
+        fam = s.post("Link", "testbaum", {"individual": p2, "relation": "spouse", "relativeTo": "I4"}).json["family"]
+        # Vorschau: alle Fakten von p1, von p2 nur Tod und Wohnort (Name, Geschlecht, Geburt, Beruf sind wortgleich)
+        v = s.post("Merge", "testbaum", {"xref1": p1, "xref2": p2, "preview": True}).json
+        self.assertEqual((True, True, p1, p2), (v["ok"], v["preview"], v["person1"]["xref"], v["person2"]["xref"]), v)
+        # p1 hat "1 DEAT Y" (verstorben ohne Datum) - der Tod mit Datum von p2 ersetzt ihn
+        # p1 hat "1 DEAT Y" (verstorben ohne Datum) und eine Geburt nur mit Datum - beides ist in p2 vollstaendiger enthalten
+        self.assertEqual({"NAME": True, "SEX": True, "BIRT": False, "OCCU": True, "DEAT": False}, {f["tag"]: f["keep"] for f in v["facts1"]}, v["facts1"])
+        behalten2 = {f["tag"]: f["keep"] for f in v["facts2"] if not f["link"]}
+        self.assertEqual({"NAME": False, "SEX": False, "BIRT": True, "OCCU": False, "DEAT": True, "RESI": True}, behalten2, v["facts2"])
+        self.assertTrue([f for f in v["facts1"] if f["tag"] == "BIRT"][0]["same"], "die Geburt von p1 gilt als enthalten")
+        self.assertEqual([("FAMS", True)], [(f["tag"], f["keep"]) for f in v["facts2"] if f["link"]], "die Familie bleibt immer")
+        self.assertEqual([fam], [l["xref"] for l in v["links"]], v["links"])
+        self.assertEqual([], v["suggestions"])
+        self.assertEqual(p2, s.get("Individual", "testbaum", xref=p2).json["person"]["xref"], "die Vorschau aendert nichts")
+        # Zusammenfuehren mit dem Vorschlag
+        a = s.post("Merge", "testbaum", {"xref1": p1, "xref2": p2}).json
+        self.assertEqual((True, False, p1, p2, False), (a["ok"], a["preview"], a["xref"], a["removed"], a["pending"]), a)
+        self.assertTrue(a["mergeId"])
+        self.assertEqual("not-found", s.get("Individual", "testbaum", xref=p2).json["error"], "p2 ist weg")
+        rest = s.get("Individual", "testbaum", xref=p1).json
+        tags = sorted(f["tag"] for f in rest["facts"])
+        self.assertEqual(["BIRT", "DEAT", "NAME", "OCCU", "RESI", "SEX"], tags, "Tod und Wohnort kamen dazu, nichts doppelt")
+        self.assertEqual("Offenbach am Main", [f for f in rest["facts"] if f["tag"] == "BIRT"][0]["place"]["name"], "die vollstaendigere Geburt blieb")
+        self.assertEqual([fam], [f["xref"] for f in rest["spouseFamilies"]], "p1 steht jetzt in der Familie")
+        paar = s.get("Family", "testbaum", xref=fam).json
+        self.assertEqual({"I4", p1}, {paar["husband"]["xref"], paar["wife"]["xref"]}, "die Familie zeigt auf p1")
+        # Protokoll
+        m = s.get("Merges", "testbaum").json["merges"]
+        self.assertEqual((a["mergeId"], p1, p2, None), (m[0]["id"], m[0]["xref"], m[0]["removed"], m[0]["undone"]), m[0])
+        self.assertEqual("not-manager", U.sitzung("bearbeiter").get("Merges", "testbaum").json["error"])
+        # Rueckgaengig: Vorschau, dann wirklich
+        u = s.post("MergeUndo", "testbaum", {"id": a["mergeId"], "preview": True}).json
+        self.assertEqual((True, True, p2), (u["ok"], u["preview"], u["removed"]), u)
+        u = s.post("MergeUndo", "testbaum", {"id": a["mergeId"]}).json
+        self.assertEqual((True, False), (u["ok"], u["preview"]), u)
+        zurueck = s.get("Individual", "testbaum", xref=p2).json
+        self.assertEqual(["BIRT", "DEAT", "NAME", "OCCU", "RESI", "SEX"], sorted(f["tag"] for f in zurueck["facts"]), "p2 ist wieder da, mit allem")
+        self.assertEqual([fam], [f["xref"] for f in zurueck["spouseFamilies"]])
+        self.assertEqual(["BIRT", "DEAT", "NAME", "OCCU", "SEX"], sorted(f["tag"] for f in s.get("Individual", "testbaum", xref=p1).json["facts"]), "p1 wie vorher (mit DEAT Y)")
+        paar = s.get("Family", "testbaum", xref=fam).json
+        self.assertEqual({"I4", p2}, {paar["husband"]["xref"], paar["wife"]["xref"]}, "die Familie zeigt wieder auf p2")
+        self.assertIsNotNone(s.get("Merges", "testbaum").json["merges"][0]["undone"])
+        self.assertEqual("already-undone", s.post("MergeUndo", "testbaum", {"id": a["mergeId"]}).json["error"])
+        # Noch einmal zusammenfuehren, dann p1 aendern: Rueckgaengig lehnt ab und aendert nichts
+        b = s.post("Merge", "testbaum", {"xref1": p1, "xref2": p2}).json
+        self.assertEqual(True, b["ok"], b)
+        s.post("Fact", "testbaum", {"tag": "OCCU", "value": "Baecker"}, xref=p1)
+        u = s.post("MergeUndo", "testbaum", {"id": b["mergeId"]}).json
+        self.assertEqual(("changed-since", [p1]), (u["error"], [c["xref"] for c in u["changed"]]), u)
+        self.assertEqual("not-found", s.get("Individual", "testbaum", xref=p2).json["error"], "nichts zurueckgedreht")
+        # Fehler und Rechte
+        self.assertEqual("same-record", s.post("Merge", "testbaum", {"xref1": p1, "xref2": p1}).json["error"])
+        self.assertEqual("not-found", s.post("Merge", "testbaum", {"xref1": p1, "xref2": "I999"}).json["error"])
+        self.assertEqual("xref-missing", s.post("Merge", "testbaum", {"xref1": p1}).json["error"])
+        self.assertEqual("not-manager", U.sitzung("bearbeiter").post("Merge", "testbaum", {"xref1": "I1", "xref2": "I2", "preview": True}).json["error"])
+        self.assertEqual("not-manager", U.sitzung("mitglied").post("MergeUndo", "testbaum", {"id": b["mergeId"]}).json["error"])
+        self.assertEqual("not-found", s.post("MergeUndo", "testbaum", {"id": "gibtesnicht"}).json["error"])
+
+    def test_zzz_verwalter_ohne_sofortfreigabe(self):
+        """Ein Verwalter ohne auto_accept: Zusammenfuehren und Rueckgaengig sind ausstehende Aenderungen."""
+        adm = U.sitzung("admin")
+        p1 = self.person(adm, given="Ausstehend")
+        p2 = self.person(adm, given="Ausstehend", deathDate="1901")
+        v = U.sitzung("verwalter")
+        try:
+            a = v.post("Merge", "testbaum", {"xref1": p1, "xref2": p2}).json
+            self.assertEqual((True, True), (a["ok"], a["pending"]), a)
+            self.assertEqual(True, adm.get("Individual", "testbaum", xref=p2).json.get("ok", True), "p2 noch da (Loeschung wartet)")
+            u = v.post("MergeUndo", "testbaum", {"id": a["mergeId"]}).json
+            self.assertEqual(True, u["ok"], u)
+            self.assertEqual([], umgebung.sql("SELECT change_id FROM wt_change WHERE status = 'pending' AND xref IN (?, ?)", p1, p2), "alles verworfen")
+            self.assertEqual(True, adm.get("Individual", "testbaum", xref=p2).json.get("ok", True), "p2 bleibt")
+            self.assertEqual("already-undone", v.post("MergeUndo", "testbaum", {"id": a["mergeId"]}).json["error"])
+        finally:
+            adm.post("Reject", "testbaum", {})
+
 
 class Schreiben(unittest.TestCase):
     def fakten(self, s, xref):
@@ -474,7 +713,7 @@ class Schreiben(unittest.TestCase):
         liste = s.get("Sources", "testbaum").json
         self.assertEqual(["S1"], [x["xref"] for x in liste["sources"]])  # S2 ist vertraulich
         s1 = liste["sources"][0]
-        self.assertEqual(("Pfarramt Offenbach", "Offenbach, 1790–1830", "Bistumsarchiv Mainz", "KB 12", 3),
+        self.assertEqual(("Pfarramt Offenbach", "Offenbach, 1790–1830", "Bistumsarchiv Mainz", "KB 12", 4),
                          (s1["author"], s1["publication"], s1["repository"], s1["callNumber"], s1["uses"]))
         einzeln = s.get("Source", "testbaum", xref="S1").json
         self.assertEqual("Taufen, Trauungen, Begräbnisse", einzeln["text"])
@@ -716,7 +955,7 @@ class Schreiben(unittest.TestCase):
         self.assertEqual(True, s.post("DeleteFact", "testbaum", {"factId": neu[0]["id"]}, xref="I2").json["ok"])
 
     def test_verfuegbare_module(self):
-        """Stufe 27: Info nennt je Baum die Module, die der Benutzer dort nutzen kann - ein abgeschaltetes fehlt."""
+        """Stufe 31: Info nennt je Baum die Module, die der Benutzer dort nutzen kann - ein abgeschaltetes fehlt."""
         def module(sitzung):
             return next(b for b in sitzung.info()["trees"] if b["name"] == "testbaum")["availableModules"]
         m = U.sitzung("mitglied")
@@ -764,12 +1003,37 @@ class Schreiben(unittest.TestCase):
         self.assertEqual("Anna Bauer", m.info()["user"]["realName"])
         m.post("MyAccount", None, {"realName": alt})
 
+    def test_ausstehendes_geschlecht(self):
+        """Stufe 28: Eine ausstehende Aenderung des Geschlechts zeigt der Bearbeiter in person.sex wie im SEX-Fakt und
+        mit pending; Mitglieder sehen weiter den freigegebenen Wert, ohne pending."""
+        ed, mi, adm = U.sitzung("bearbeiter"), U.sitzung("mitglied"), U.sitzung("admin")
+
+        def ansicht(s):
+            p = s.get("Individual", "testbaum", xref="I1").json
+            return p["person"]["sex"], [(f["value"], f["pending"]) for f in p["facts"] if f["tag"] == "SEX"]
+
+        self.assertEqual(("M", [("männlich", False)]), ansicht(ed))
+        fid = next(f["id"] for f in ed.get("Individual", "testbaum", xref="I1").json["facts"] if f["tag"] == "SEX")
+        try:
+            r = ed.post("Fact", "testbaum", {"factId": fid, "tag": "SEX", "value": "F"}, xref="I1")
+            self.assertEqual((True, True), (r.json["ok"], r.json["pending"]), r)
+            self.assertEqual(("F", [("weiblich", True)]), ansicht(ed))
+            self.assertEqual(("M", [("männlich", False)]), ansicht(mi))
+            liste = ed.get("Individuals", "testbaum", q="Theodor").json["data"]
+            self.assertEqual({"F"}, {e["sex"] for e in liste if e["xref"] == "I1"})
+            alle = ed.get("Individual", "testbaum", xref="I1").json["facts"]
+            self.assertEqual(1, sum(1 for f in alle if f["pending"]))
+            self.assertFalse(any(f["pending"] for f in mi.get("Individual", "testbaum", xref="I1").json["facts"]))
+        finally:
+            adm.post("Reject", "testbaum", {}, xref="I1")
+        self.assertEqual(("M", [("männlich", False)]), ansicht(ed))
+
     def test_anmeldeseite_in_info(self):
         """Stufe 26: Info.loginForm nennt Begruessungstext, Selbstregistrierung und Bedingungen - auch Gaesten."""
         def form():
             return U.sitzung().info()["loginForm"]
         f = form()
-        self.assertEqual({"welcomeMessage", "isSelfRegistrationAllowed", "registrationTerms"}, set(f))
+        self.assertEqual({"welcomeMessage", "isSelfRegistrationAllowed", "isInAppRegistrationSupported", "registrationTerms"}, set(f))
         self.assertTrue(f["welcomeMessage"])
         self.assertIsNone(f["registrationTerms"])
         self.assertGreaterEqual(U.sitzung().info()["api"], 26)
@@ -823,7 +1087,7 @@ class Schreiben(unittest.TestCase):
         code = 'require "src/Apps.php"; echo json_encode([Api4Webtrees\\Apps::check(), array_keys(Api4Webtrees\\Apps::ALL)]);'
         fehler, kennungen = json.loads(subprocess.check_output(["php", "-r", code], cwd=modul, text=True))
         self.assertEqual([], fehler)
-        self.assertEqual(["wtand", "wtwin", "wttux", "wtmac"], kennungen[:4])
+        self.assertEqual(["wtwin", "wtand", "wttux", "wtmac"], kennungen[:4])
 
     def test_seite_app_je_geraet(self):
         """Die Seite App zeigt die Apps fuer das Geraet des Besuchers zuerst; ein Geraet ohne passende App bekommt den Browser-Hinweis."""
@@ -836,6 +1100,9 @@ class Schreiben(unittest.TestCase):
 
         android = seite("Mozilla/5.0 (Linux; Android 14) Mobile")
         self.assertLess(android.index("wtAnd"), android.index("wtWin"))
+        # Logo und Satz des Modulautors bei den eigenen Apps (Apps.php: icon, forDevice: own)
+        self.assertIn("wt-apps.png", android)
+        self.assertIn("App und Schnittstelle werden gemeinsam entwickelt", android)
         self.assertLess(android.index("wtWin"), android.index("wtTux"))
         self.assertIn("webtreesand://connect?", android)
         self.assertNotIn("noch kein eigenes Programm", android)
@@ -850,6 +1117,8 @@ class Schreiben(unittest.TestCase):
         self.assertIn("webtreesmobile://connect?", iphone)
         self.assertIn("app-store.svg", iphone)
         self.assertLess(iphone.index("webtrees mobile"), iphone.index("wtAnd"))
+        # Die fremde App hat kein Logo und nicht den Satz des Modulautors - der steht erst bei wtAnd darunter
+        self.assertLess(iphone.index("webtrees mobile"), iphone.index("gemeinsam entwickelt"))
 
         mac = seite("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)")
         self.assertNotIn("noch kein eigenes Programm", mac)
@@ -859,6 +1128,7 @@ class Schreiben(unittest.TestCase):
         # Verbinden-Seite (Ziel des QR-Codes): ein Knopf je Handy-App mit Schema, Download je App.
         verbinden = s._senden(urllib.request.Request(s.url("/module/_api4webtrees_/Connect"))).text
         self.assertIn('data-scheme="webtreesand"', verbinden)
+        self.assertIn("wt-apps.png", verbinden)
         self.assertIn("wtAnd herunterladen", verbinden)
         self.assertNotIn("wtWin", verbinden)
 
